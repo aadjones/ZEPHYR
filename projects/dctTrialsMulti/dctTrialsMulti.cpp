@@ -122,11 +122,11 @@ MatrixXd g_U(g_numRows, g_numCols);
     */  
 
     // write a binary file for each scalar field component
-    /* 
+     
     for (int component = 0; component < 3; component++) {
       CompressAndWriteMatrixComponent(filename, g_U, component, compression_data);
     }
-    */
+    
     
     short* allDataX;
     short* allDataY;
