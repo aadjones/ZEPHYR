@@ -1,0 +1,139 @@
+g++ -v -c -Wall -I../../src/integrators -I../../src/linearalgebra -I../../src/geometry -I../../src/util -I../../src/glvu -DDO_PNG_OUT=0 -I./ -I/usr/local/include -I../../ -I../../src/Eigen/ -O3 -DNO_FFT -fopenmp -msse2 -lstdc++ -O3 fieldViewer3D.cpp -o fieldViewer3D.o
+Apple LLVM version 5.1 (clang-503.0.40) (based on LLVM 3.4svn)
+Target: x86_64-apple-darwin13.3.0
+Thread model: posix
+clang: warning: -Z-reserved-lib-stdc++: 'linker' input unused
+clang: warning: argument unused during compilation: '-fopenmp'
+ "/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/clang" -cc1 -triple x86_64-apple-macosx10.9.0 -emit-obj -disable-free -disable-llvm-verifier -main-file-name fieldViewer3D.cpp -mrelocation-model pic -pic-level 2 -mdisable-fp-elim -masm-verbose -munwind-tables -target-cpu core2 -target-feature +sse2 -target-linker-version 236.3 -v -coverage-file /Users/adj/Documents/Code/ZEPHYR/projects/fieldViewer3D/fieldViewer3D.o -resource-dir /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/../lib/clang/5.1 -D DO_PNG_OUT=0 -D NO_FFT -I ../../src/integrators -I ../../src/linearalgebra -I ../../src/geometry -I ../../src/util -I ../../src/glvu -I ./ -I /usr/local/include -I ../../ -I ../../src/Eigen/ -c-isystem /Users/adj/code/llvm/include -c-isystem /Users/adj/code/libomp_oss/exports/common/include -c-isystem . -cxx-isystem /Users/adj/code/llvm/include -cxx-isystem /Users/adj/code/libomp_oss/exports/common/include -cxx-isystem . -stdlib=libc++ -O3 -Wall -fdeprecated-macro -fdebug-compilation-dir /Users/adj/Documents/Code/ZEPHYR/projects/fieldViewer3D -ferror-limit 19 -fmessage-length 0 -stack-protector 1 -mstackrealign -fblocks -fobjc-runtime=macosx-10.9.0 -fencode-extended-block-signature -fcxx-exceptions -fexceptions -fdiagnostics-show-option -vectorize-loops -vectorize-slp -o fieldViewer3D.o -x c++ fieldViewer3D.cpp
+clang -cc1 version 5.1 based upon LLVM 3.4svn default target x86_64-apple-darwin13.3.0
+ignoring nonexistent directory "/usr/include/c++/v1"
+ignoring duplicate directory "."
+  as it is a non-system directory that duplicates a system directory
+ignoring duplicate directory "/usr/local/include"
+  as it is a non-system directory that duplicates a system directory
+#include "..." search starts here:
+#include <...> search starts here:
+ ../../src/integrators
+ ../../src/linearalgebra
+ ../../src/geometry
+ ../../src/util
+ ../../src/glvu
+ ../..
+ ../../src/Eigen
+ /Users/adj/code/llvm/include
+ /Users/adj/code/libomp_oss/exports/common/include
+ .
+ /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/../lib/c++/v1
+ /usr/local/include
+ /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/../lib/clang/5.1/include
+ /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/include
+ /usr/include
+ /System/Library/Frameworks (framework directory)
+ /Library/Frameworks (framework directory)
+End of search list.
+In file included from fieldViewer3D.cpp:1:
+In file included from ../../src/linearalgebra/EIGEN.h:21:
+In file included from ../../src/Eigen/Eigen/Dense:2:
+In file included from ../../src/Eigen/Eigen/LU:21:
+../../src/Eigen/Eigen/src/misc/Image.h:121:10: error: no member named 'cerr' in namespace 'std'
+    std::cerr << "writePng: could not "<<doing<<" !\n";
+    ~~~~~^
+In file included from fieldViewer3D.cpp:1:
+In file included from ../../src/linearalgebra/EIGEN.h:21:
+In file included from ../../src/Eigen/Eigen/Dense:2:
+In file included from ../../src/Eigen/Eigen/LU:22:
+../../src/Eigen/Eigen/src/LU/FullPivLU.h:626:3: error: C++ requires a type specifier for all declarations
+  EIGEN_MAKE_IMAGE_HELPERS(FullPivLU<_MatrixType>)
+  ^~~~~~~~~~~~~~~~~~~~~~~~
+../../src/Eigen/Eigen/src/LU/FullPivLU.h:626:51: error: expected ';' at end of declaration list
+  EIGEN_MAKE_IMAGE_HELPERS(FullPivLU<_MatrixType>)
+                                                  ^
+                                                  ;
+../../src/Eigen/Eigen/src/LU/FullPivLU.h:635:8: error: use of undeclared identifier 'rank'; did you mean 'rand'?
+    if(rank() == 0)
+       ^~~~
+       rand
+/usr/include/stdlib.h:159:6: note: 'rand' declared here
+int      rand(void);
+         ^
+In file included from fieldViewer3D.cpp:1:
+In file included from ../../src/linearalgebra/EIGEN.h:21:
+In file included from ../../src/Eigen/Eigen/Dense:2:
+In file included from ../../src/Eigen/Eigen/LU:22:
+../../src/Eigen/Eigen/src/LU/FullPivLU.h:644:12: error: use of undeclared identifier 'Index'; did you mean 'index'?
+    Matrix<Index, Dynamic, 1, 0, MaxSmallDimAtCompileTime, 1> pivots(rank());
+           ^~~~~
+           index
+/usr/include/strings.h:73:7: note: 'index' declared here
+char    *index(const char *, int) __POSIX_C_DEPRECATED(200112L);
+         ^
+In file included from fieldViewer3D.cpp:1:
+In file included from ../../src/linearalgebra/EIGEN.h:21:
+In file included from ../../src/Eigen/Eigen/Dense:2:
+In file included from ../../src/Eigen/Eigen/LU:22:
+../../src/Eigen/Eigen/src/LU/FullPivLU.h:644:34: error: use of undeclared identifier 'MaxSmallDimAtCompileTime'
+    Matrix<Index, Dynamic, 1, 0, MaxSmallDimAtCompileTime, 1> pivots(rank());
+                                 ^
+../../src/Eigen/Eigen/src/LU/FullPivLU.h:645:5: error: unknown type name 'RealScalar'; did you mean 'scalar_fuzzy_impl<bool>::RealScalar'?
+    RealScalar premultiplied_threshold = dec().maxPivot() * dec().threshold();
+    ^~~~~~~~~~
+    scalar_fuzzy_impl<bool>::RealScalar
+../../src/Eigen/Eigen/src/Core/MathFunctions.h:807:16: note: 'scalar_fuzzy_impl<bool>::RealScalar' declared here
+  typedef bool RealScalar;
+               ^
+In file included from fieldViewer3D.cpp:1:
+In file included from ../../src/linearalgebra/EIGEN.h:21:
+In file included from ../../src/Eigen/Eigen/Dense:2:
+In file included from ../../src/Eigen/Eigen/LU:22:
+../../src/Eigen/Eigen/src/LU/FullPivLU.h:645:42: error: use of undeclared identifier 'dec'
+    RealScalar premultiplied_threshold = dec().maxPivot() * dec().threshold();
+                                         ^
+../../src/Eigen/Eigen/src/LU/FullPivLU.h:645:61: error: use of undeclared identifier 'dec'
+    RealScalar premultiplied_threshold = dec().maxPivot() * dec().threshold();
+                                                            ^
+../../src/Eigen/Eigen/src/LU/FullPivLU.h:646:5: error: use of undeclared identifier 'Index'; did you mean 'index'?
+    Index p = 0;
+    ^~~~~
+    index
+/usr/include/strings.h:73:7: note: 'index' declared here
+char    *index(const char *, int) __POSIX_C_DEPRECATED(200112L);
+         ^
+In file included from fieldViewer3D.cpp:1:
+In file included from ../../src/linearalgebra/EIGEN.h:21:
+In file included from ../../src/Eigen/Eigen/Dense:2:
+In file included from ../../src/Eigen/Eigen/LU:22:
+../../src/Eigen/Eigen/src/LU/FullPivLU.h:646:10: error: expected ';' after expression
+    Index p = 0;
+         ^
+         ;
+../../src/Eigen/Eigen/src/LU/FullPivLU.h:646:11: error: use of undeclared identifier 'p'
+    Index p = 0;
+          ^
+../../src/Eigen/Eigen/src/LU/FullPivLU.h:647:9: error: unknown type name 'Index'
+    for(Index i = 0; i < dec().nonzeroPivots(); ++i)
+        ^
+../../src/Eigen/Eigen/src/LU/FullPivLU.h:647:26: error: use of undeclared identifier 'dec'
+    for(Index i = 0; i < dec().nonzeroPivots(); ++i)
+                         ^
+../../src/Eigen/Eigen/src/LU/FullPivLU.h:648:14: error: use of undeclared identifier 'dec'
+      if(abs(dec().matrixLU().coeff(i,i)) > premultiplied_threshold)
+             ^
+../../src/Eigen/Eigen/src/LU/FullPivLU.h:649:9: error: use of undeclared identifier 'pivots'
+        pivots.coeffRef(p++) = i;
+        ^
+../../src/Eigen/Eigen/src/LU/FullPivLU.h:649:25: error: use of undeclared identifier 'p'
+        pivots.coeffRef(p++) = i;
+                        ^
+../../src/Eigen/Eigen/src/LU/FullPivLU.h:652:9: error: unknown type name 'Index'
+    for(Index i = 0; i < rank(); ++i)
+        ^
+../../src/Eigen/Eigen/src/LU/FullPivLU.h:652:26: error: use of undeclared identifier 'rank'; did you mean 'rand'?
+    for(Index i = 0; i < rank(); ++i)
+                         ^~~~
+                         rand
+/usr/include/stdlib.h:159:6: note: 'rand' declared here
+int      rand(void);
+         ^
+fatal error: too many errors emitted, stopping now [-ferror-limit=]
+20 errors generated.
+make: *** [fieldViewer3D.o] Error 1

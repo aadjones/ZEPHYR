@@ -1,0 +1,33 @@
+!_TAG_FILE_FORMAT	2	/extended format; --format=1 will not append ;" to lines/
+!_TAG_FILE_SORTED	1	/0=unsorted, 1=sorted, 2=foldcase/
+!_TAG_PROGRAM_AUTHOR	Darren Hiebert	/dhiebert@users.sourceforge.net/
+!_TAG_PROGRAM_NAME	Exuberant Ctags	//
+!_TAG_PROGRAM_URL	http://ctags.sourceforge.net	/official site/
+!_TAG_PROGRAM_VERSION	5.8	//
+CC	Makefile	/^CC         = g++$/;"	m
+CFLAGS	Makefile	/^CFLAGS     = ${CFLAGS_COMMON}$/;"	m
+EXECUTABLE	Makefile	/^EXECUTABLE = ..\/..\/bin\/reducedStagedStam3D$/;"	m
+LDFLAGS	Makefile	/^LDFLAGS    = ${LDFLAGS_COMMON}$/;"	m
+OBJECTS	Makefile	/^OBJECTS    = $(SOURCES:.cpp=.o)$/;"	m
+SOURCES	Makefile	/^SOURCES    = reducedStagedStam3D.cpp \\$/;"	m
+animate	reducedStagedStam3D.cpp	/^bool animate = true;$/;"	v
+captureMovie	reducedStagedStam3D.cpp	/^bool captureMovie = true;$/;"	v
+clickZ	reducedStagedStam3D.cpp	/^float clickZ;$/;"	v
+drawAxes	reducedStagedStam3D.cpp	/^void drawAxes()$/;"	f
+fluid	reducedStagedStam3D.cpp	/^SUBSPACE_FLUID_3D_EIGEN* fluid = NULL;$/;"	v
+glutDisplay	reducedStagedStam3D.cpp	/^void glutDisplay()$/;"	f
+glutIdle	reducedStagedStam3D.cpp	/^void glutIdle()$/;"	f
+glutKeyboard	reducedStagedStam3D.cpp	/^void glutKeyboard(unsigned char key, int x, int y)$/;"	f
+glutMouseClick	reducedStagedStam3D.cpp	/^void glutMouseClick(int button, int state, int x, int y)$/;"	f
+glutMouseMotion	reducedStagedStam3D.cpp	/^void glutMouseMotion(int x, int y)$/;"	f
+glutSpecial	reducedStagedStam3D.cpp	/^void glutSpecial(int key, int x, int y)$/;"	f
+glvuWindow	reducedStagedStam3D.cpp	/^int glvuWindow()$/;"	f
+main	reducedStagedStam3D.cpp	/^int main(int argc, char *argv[])$/;"	f
+mouseClicked	reducedStagedStam3D.cpp	/^bool mouseClicked = false;$/;"	v
+movie	reducedStagedStam3D.cpp	/^QUICKTIME_MOVIE movie;$/;"	v
+previewReducedMovie	reducedStagedStam3D.cpp	/^string previewReducedMovie;$/;"	v
+runEverytime	reducedStagedStam3D.cpp	/^void runEverytime()$/;"	f
+simulationSnapshots	reducedStagedStam3D.cpp	/^int simulationSnapshots;$/;"	v
+snapshotPath	reducedStagedStam3D.cpp	/^string snapshotPath;$/;"	v
+snapshots	reducedStagedStam3D.cpp	/^vector<VECTOR> snapshots;$/;"	v
+unproject	reducedStagedStam3D.cpp	/^VEC3F unproject(float x, float y, float z)$/;"	f
