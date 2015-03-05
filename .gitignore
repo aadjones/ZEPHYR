@@ -39,4 +39,5 @@ Thumbs.db
 
 # User-specific #
 #################
-bin/* 
+tags
+movie.mov
