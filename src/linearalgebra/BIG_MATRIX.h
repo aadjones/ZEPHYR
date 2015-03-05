@@ -71,9 +71,6 @@ public:
   inline VECTOR& operator[](int col) { return _columns[col]; };
   inline const VECTOR& operator[](int col) const { return _columns[col]; };
 
-  // set a column directly
-  void setColumn(const VECTOR& V, int index);
-
   int& rows() { return _rows; };
   int& cols() { return _cols; };
   int rows() const { return _rows; };

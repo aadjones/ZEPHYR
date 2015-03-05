@@ -57,9 +57,8 @@ void verifyResults(string filenamePrefix, string finalU)
   //for (int x = 0; x < 25; x++)
   for (int x = 0; x < 10; x++)
   {
-    VectorXd column;
+    VectorXd column(U.rows());
     EIGEN::readRaw(file, U.rows(), column);
-
     VectorXd diff = column - U * (U.transpose() * column);
 
     cout << " Diff " << x << ": " << diff.norm() << endl;

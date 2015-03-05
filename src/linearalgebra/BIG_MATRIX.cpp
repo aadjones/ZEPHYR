@@ -51,7 +51,6 @@ BIG_MATRIX::BIG_MATRIX(const BIG_MATRIX& m)
     _columns.push_back(m._columns[x]);
 }
 
-
 BIG_MATRIX::BIG_MATRIX(const MATRIX& m)
 {
   _cols = m.cols();
@@ -94,14 +93,6 @@ ostream& operator<<(ostream &out, const BIG_MATRIX& matrix)
   return out;
 }
 
-//////////////////////////////////////////////////////////////////////
-// set a column from a passed in VECTOR
-//////////////////////////////////////////////////////////////////////
-void BIG_MATRIX::setColumn(const VECTOR& V, int index) {
-  assert(V.size() == _rows);
-
-  _columns[index] = V;
-}
 //////////////////////////////////////////////////////////////////////
 // do an out-of-core Gram-Schmidt QR factorization
 //////////////////////////////////////////////////////////////////////
@@ -504,28 +495,14 @@ void BIG_MATRIX::read(const string& filename)
   fread((void*)&_rows, sizeof(int), 1, file);
   fread((void*)&_cols, sizeof(int), 1, file);
   
-  cout << "Num rows: " << _rows << endl;
-  cout << "Num cols: " << _cols << endl;
-  
   _columns.resize(_cols);
 
+  // read in the columns 
+  for (int x = 0; x < _cols; x++)
+    _columns[x].read(file);
 
-  // resize the columns 
-  for (int x = 0; x < _cols; x++) {
-    _columns[x].resizeAndWipe(_rows);
-  }
-
-  // read in the columns
-  double dummy;
-  for (int x = 0; x < _rows; x++) {
-    for (int y = 0; y < _cols; y++) {
-      fread((void*) &dummy, sizeof(double), 1, file);
-      _columns[y][x] = dummy;
-    }
-  }
   fclose(file);
 
-  
   cout << " done." << endl;
 }
 
