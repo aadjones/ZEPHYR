@@ -41,3 +41,15 @@ Thumbs.db
 #################
 tags
 movie.mov
+bin/U.final.donotmodify.matrix.48
+bin/cubatureGeneratorStamStaged
+bin/dctTrialsMulti
+bin/fluidStam3D
+bin/reducedStagedStam3D
+bin/runLength.binX
+bin/runLength.binY
+bin/runLength.binZ
+bin/svdOutOfCoreMultiple
+data/
+scratch/
+
