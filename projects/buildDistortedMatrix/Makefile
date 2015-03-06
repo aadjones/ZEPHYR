@@ -4,9 +4,9 @@ include ../include.mk
 CC         = g++
 CFLAGS     = ${CFLAGS_COMMON} -I../../src/cubature -I../../src/Eigen/ -I../../src/compression
 LDFLAGS    = ${LDFLAGS_COMMON}
-EXECUTABLE = ../../bin/dctTrialsMulti
+EXECUTABLE = ../../bin/buildDistortedMatrix
 
-SOURCES    = dctTrialsMulti.cpp \
+SOURCES    = buildDistortedMatrix.cpp \
 						 ../../src/glvu/glvu.cpp \
 						 ../../src/util/TIMER.cpp \
 						 ../../src/util/SIMPLE_PARSER.cpp \
@@ -14,7 +14,6 @@ SOURCES    = dctTrialsMulti.cpp \
 						 ../../src/linearalgebra/SPARSE_MATRIX_ARRAY.cpp \
 						 ../../src/linearalgebra/VECTOR.cpp \
 						 ../../src/linearalgebra/MATRIX.cpp \
-						 ../../src/linearalgebra/BIG_MATRIX.cpp \
 						 ../../src/linearalgebra/MATRIX3.cpp \
 						 ../../src/linearalgebra/NNLS.cpp \
 						 ../../src/linearalgebra/EIGEN.cpp \
@@ -27,9 +26,8 @@ SOURCES    = dctTrialsMulti.cpp \
 						 ../../src/geometry/VECTOR3_FIELD_2D.cpp \
 						 ../../src/util/MIN_HEAP.cpp \
 						 ../../src/compression/COMPRESSION.cpp \
-						 ../../src/compression/COMPRESSION_DATA.cpp \
 						 ../../src/compression/COMPRESSION_UTILITIES.cpp \
-						 ../../src/compression/DECOMPRESSION_DATA.cpp \
+						 ../../src/compression/COMPRESSION_DATA.cpp \
 						 ../../src/geometry/INTEGER_FIELD_3D.cpp
 
 OBJECTS    = $(SOURCES:.cpp=.o)

@@ -25,7 +25,6 @@
 
 #include <iostream>
 #include <fftw3.h>
-#include "jo_jpeg.h"
 
 #include "EIGEN.h"
 #include "SUBSPACE_FLUID_3D_EIGEN.h"
@@ -35,7 +34,7 @@
 #include "BIG_MATRIX.h"
 #include "SIMPLE_PARSER.h"
 #include "COMPRESSION.h"
-#include "ARRAY_4D.h"
+#include "COMPRESSION_UTILITIES.h"
 #include <string>
 
 using std::vector;
@@ -78,77 +77,65 @@ MatrixXd g_U(g_numRows, g_numCols);
 // Main
 ////////////////////////////////////////////////////////
 
-  int main(int argc, char* argv[]) {
-    
-    
-    const int nBits = 16;        // don't exceed 16 if using 'short' in the compressor!
-    const double q = 1.0;        // change this to modify compression rate
-    const double power = 1.0;    // and especially this!
-    VEC3I dims(g_xRes, g_yRes, g_zRes);
-    COMPRESSION_DATA compression_data(dims, q, power, nBits);
-    compression_data.set_numCols(g_numCols);
+int main(int argc, char* argv[]) {
+  
+  
+  const int nBits = 16;        // don't exceed 16 if using 'short' in the compressor!
+  const double q = 1.0;        // change this to modify compression rate
+  const double power = 4.0;    // and especially this!
+  VEC3I dims(g_xRes, g_yRes, g_zRes);
+  COMPRESSION_DATA compression_data(dims, q, power, nBits);
+  compression_data.set_numCols(g_numCols);
 
-    // precompute the damping array
-    compression_data.set_dampingArray();
-    
-    EIGEN::read(path_to_U, g_U);
+  // precompute the damping array
+  compression_data.set_dampingArray();
+  
+  EIGEN::read(path_to_U, g_U);
+ 
+  int xPadding;
+  int yPadding;
+  int zPadding;
+  // fill in the appropriate paddings
+  GetPaddings(dims, xPadding, yPadding, zPadding);
+  // update to the padded resolutions
+  int xRes = g_xRes + xPadding;
+  int yRes = g_yRes + yPadding;
+  int zRes = g_zRes + zPadding;
+  // calculates number of blocks, assuming an 8 x 8 x 8 block size.
+  int numBlocks = xRes * yRes * zRes / (8 * 8 * 8);
+  compression_data.set_numBlocks(numBlocks);
+  
+  const char* filename = "runLength.bin";
    
-    int xPadding;
-    int yPadding;
-    int zPadding;
-    // fill in the appropriate paddings
-    GetPaddings(dims, xPadding, yPadding, zPadding);
-    // update to the padded resolutions
-    int xRes = g_xRes + xPadding;
-    int yRes = g_yRes + yPadding;
-    int zRes = g_zRes + zPadding;
-    // calculates number of blocks, assuming an 8 x 8 x 8 block size.
-    int numBlocks = xRes * yRes * zRes / (8 * 8 * 8);
-    compression_data.set_numBlocks(numBlocks);
-    
-    const char* filename = "runLength.bin";
-    /* 
-    MatrixXd compressedResult(g_numRows, g_numCols);
-    VECTOR3_FIELD_3D compressedV(g_xRes, g_yRes, g_zRes);
-
-    for (int col = 0; col < g_numCols; col++) {
-      
-      compressedV = BlockCompressVectorField(V, compression_data);
-      VECTOR flattenedV = compressedV.flattened();
-      VectorXd flattenedV_eigen = EIGEN::convert(flattenedV);
-      compressedResult.col(flattenedV_eigen);
-    }
-    EIGEN::write("newcompressedU.matrix", compressedResult);
-    */  
-
-    // write a binary file for each scalar field component
-     
-    for (int component = 0; component < 3; component++) {
-      CompressAndWriteMatrixComponent(filename, g_U, component, compression_data);
-    }
-    
-    
-    short* allDataX;
-    short* allDataY;
-    short* allDataZ;
-    DECOMPRESSION_DATA decompression_dataX;
-    DECOMPRESSION_DATA decompression_dataY;
-    DECOMPRESSION_DATA decompression_dataZ;
-    // fill allData and decompression_data
-    ReadBinaryFileToMemory("runLength.binX", allDataX, compression_data, decompression_dataX); 
-    ReadBinaryFileToMemory("runLength.binY", allDataY, compression_data, decompression_dataY);
-    ReadBinaryFileToMemory("runLength.binZ", allDataZ, compression_data, decompression_dataZ);
-    
-    // test the decompressor on a (row, col)    
-    int row = g_numRows - 1;
-    int col = g_numCols - 1;
-    // DecodeFromRowCol will print the decompressed value at (row, col) and return the entire decompressed block
-    FIELD_3D test_block = DecodeFromRowCol(row, col, allDataX, allDataY, allDataZ, compression_data, decompression_dataX, decompression_dataY, decompression_dataZ);
-    
-    double trueValue = g_U(row, col);
-    cout << "True value: " << trueValue << endl;
-    
-
-    return 0;
+  // write a binary file for each scalar field component
+   
+  for (int component = 0; component < 3; component++) {
+    CompressAndWriteMatrixComponent(filename, g_U, component, compression_data);
   }
+  
+  /*
+  short* allDataX;
+  short* allDataY;
+  short* allDataZ;
+  DECOMPRESSION_DATA decompression_dataX;
+  DECOMPRESSION_DATA decompression_dataY;
+  DECOMPRESSION_DATA decompression_dataZ;
+  // fill allData and decompression_data
+  ReadBinaryFileToMemory("runLength.binX", allDataX, compression_data, decompression_dataX); 
+  ReadBinaryFileToMemory("runLength.binY", allDataY, compression_data, decompression_dataY);
+  ReadBinaryFileToMemory("runLength.binZ", allDataZ, compression_data, decompression_dataZ);
+  
+  // test the decompressor on a (row, col)    
+  int row = g_numRows - 1;
+  int col = g_numCols - 1;
+  // DecodeFromRowCol will print the decompressed value at (row, col) and return the entire decompressed block
+  FIELD_3D test_block = DecodeFromRowCol(row, col, allDataX, allDataY, allDataZ, compression_data, decompression_dataX, decompression_dataY, decompression_dataZ);
+  
+  double trueValue = g_U(row, col);
+  cout << "True value: " << trueValue << endl;
+  
+  */
+  return EXIT_SUCCESS;
+
+}
 
