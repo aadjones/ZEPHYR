@@ -20,6 +20,21 @@
 // Function signatures
 ////////////////////////////////////////////////////////
 
+/////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+FIELD_3D DoSmartBlockCompression(FIELD_3D& F, COMPRESSION_DATA& data);
+
+void DoSmartBlockDCT(vector<FIELD_3D>& V, int direction);
+
+void DecodeBlockSmart();
+
+FIELD_3D DecodeBlockSmart(const INTEGER_FIELD_3D& intBlock, int blockNumber, COMPRESSION_DATA& data); 
+
+VECTOR3_FIELD_3D SmartBlockCompressVectorField(const VECTOR3_FIELD_3D& V, COMPRESSION_DATA& compression_data);
+
+/////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+
+
 // cast an array of doubles to VECTOR
 VECTOR CastToVector(double* data, int size);
 

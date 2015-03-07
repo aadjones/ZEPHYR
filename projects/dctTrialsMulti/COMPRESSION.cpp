@@ -292,6 +292,48 @@ FIELD_3D DCT(FIELD_3D& F) {
   return F_hat;
 }
 
+fftw_plan Create_DCT_Plan(double*& in, int direction) {
+  // direction is 1 for a forward transform, -1 for a backward transform
+  assert( direction == 1 || direction == -1 );
+
+  int xRes = 8;
+  int yRes = 8;
+  int zRes = 8;
+
+  fftw_plan plan;
+  fftw_r2r_kind kind;
+  if (direction == 1) {
+    kind = FFTW_REDFT10;
+  }
+  else {
+    kind = FFTW_REDFT01;
+  }
+  plan = fftw_plan_r2r_3d(zRes, yRes, xRes, in, in, kind, kind, kind, FFTW_MEASURE);
+  
+  return plan;
+} 
+
+
+void DCT_Smart(FIELD_3D& F, fftw_plan& plan, double*& in) {
+
+  int xRes = F.xRes();
+  int yRes = F.yRes();
+  int zRes = F.zRes();
+
+  VECTOR vector_in = F.flattened();
+  // fill the 'in' buffer
+  in = CastToDouble(vector_in, in);
+
+  fftw_execute(plan);
+  // 'in' is now overwritten to the result of the transform
+  FIELD_3D F_hat(in, xRes, yRes, zRes);
+ 
+  // Normalize symmetrically
+  F_hat *= sqrt(0.125 / (xRes * yRes * zRes));
+
+  // rewrite F
+  F = F_hat;
+}
 
 void DCT_in_place(FIELD_3D& F) {
   double* in;
@@ -353,6 +395,34 @@ FIELD_3D IDCT(FIELD_3D& F_hat) {
   return F;
 }
 
+VECTOR3_FIELD_3D SmartBlockCompressVectorField(const VECTOR3_FIELD_3D& V, COMPRESSION_DATA& compression_data) { 
+
+  const int xRes = V.xRes();
+  const int yRes = V.yRes();
+  const int zRes = V.zRes();
+
+  double* X_array = (double*) malloc(sizeof(double) * xRes * yRes * zRes);
+  double* Y_array = (double*) malloc(sizeof(double) * xRes * yRes * zRes);
+  double* Z_array = (double*) malloc(sizeof(double) * xRes * yRes * zRes);
+
+  for (int component = 0; component < 3; component++) {            
+    FIELD_3D scalarComponent = V.scalarField(component);
+    FIELD_3D scalarComponentCompressed = DoSmartBlockCompression(scalarComponent, compression_data);
+    VECTOR scalarComponentCompressedFlattened = scalarComponentCompressed.flattened();
+
+    if (component == 0)      X_array = CastToDouble(scalarComponentCompressedFlattened, X_array);
+    else if (component == 1) Y_array = CastToDouble(scalarComponentCompressedFlattened, Y_array);
+    else                     Z_array = CastToDouble(scalarComponentCompressedFlattened, Z_array);
+  }
+  
+  VECTOR3_FIELD_3D compressed_V(X_array, Y_array, Z_array, xRes, yRes, zRes);
+
+  free(X_array);
+  free(Y_array);
+  free(Z_array);
+
+  return compressed_V;
+}
 VECTOR3_FIELD_3D BlockCompressVectorField(const VECTOR3_FIELD_3D& V, COMPRESSION_DATA& compression_data) { 
 
   const int xRes = V.xRes();
@@ -382,7 +452,55 @@ VECTOR3_FIELD_3D BlockCompressVectorField(const VECTOR3_FIELD_3D& V, COMPRESSION
   return compressed_V;
 }
 
+FIELD_3D DoSmartBlockCompression(FIELD_3D& F, COMPRESSION_DATA& compression_data) {
 
+  int xRes = F.xRes();
+  int xResOriginal = xRes;
+  int yRes = F.yRes();
+  int yResOriginal = yRes;
+  int zRes = F.zRes();
+  int zResOriginal = zRes;
+  VEC3I dims(xRes, yRes, zRes);
+  
+  double q = compression_data.get_q();
+  double power = compression_data.get_power();
+  int nBits = compression_data.get_nBits();
+
+  // dummy initializations                                     
+  int xPadding = 0;
+  int yPadding = 0;
+  int zPadding = 0;
+  
+  // fill in the paddings
+  GetPaddings(dims, xPadding, yPadding, zPadding);
+  // update to the padded resolutions
+  xRes += xPadding;
+  yRes += yPadding;
+  zRes += zPadding;
+
+  // use this dummy to pass the dims into AssimilatedBlocks later on
+  FIELD_3D dummyF(xRes, yRes, zRes);                           
+
+  vector<FIELD_3D> blocks = GetBlocks(F);     
+  // 1-->forward transform
+  DoSmartBlockDCT(blocks, 1);
+
+  int blockNumber = 0;
+  for (auto itr = blocks.begin(); itr != blocks.end(); ++itr) {
+
+    // sList will be updated on each pass and modify compression_data
+    INTEGER_FIELD_3D V = EncodeBlock(*itr, blockNumber, compression_data); 
+    FIELD_3D compressedBlock = DecodeBlockSmart(V, blockNumber, compression_data); 
+    *itr = compressedBlock;
+    blockNumber++;
+  }
+  DoSmartBlockDCT(blocks, -1);
+  FIELD_3D F_compressed = AssimilateBlocks(dummyF, blocks);
+  // strip off the padding
+  FIELD_3D F_compressed_peeled = F_compressed.subfield(0, xResOriginal, 0, yResOriginal, 0, zResOriginal); 
+
+  return F_compressed_peeled;
+}
 
 FIELD_3D DoBlockCompression(FIELD_3D& F, COMPRESSION_DATA& compression_data) {
 
@@ -505,6 +623,22 @@ FIELD_3D AssimilateBlocks(const FIELD_3D& F, vector<FIELD_3D> V) {
 }
 
 
+void DoSmartBlockDCT(vector<FIELD_3D>& V, int direction) {
+  // direction determines whether it is DCT or IDCT
+
+  // initialize block buffer
+  double* in = (double*) fftw_malloc(8 * 8 * 8 * sizeof(double));
+
+  // make the appropriate plan
+  fftw_plan plan = Create_DCT_Plan(in, direction);
+  
+  for (auto itr = V.begin(); itr != V.end(); ++itr) {
+    // take the transform at *itr and overwrite its contents
+    DCT_Smart(*itr, plan, in);
+  }
+}
+
+
 void DoBlockDCT(vector<FIELD_3D>& V) {
   for (auto itr = V.begin(); itr != V.end(); ++itr) {
     DCT_in_place(*itr);
@@ -577,6 +711,33 @@ double s = sListMatrix(blockNumber, col);
   return dequantized_F_hat;    
 }
 
+// no IDCT in this one!
+FIELD_3D DecodeBlockSmart(const INTEGER_FIELD_3D& intBlock, int blockNumber, COMPRESSION_DATA& data) { 
+
+  int numBlocks = data.get_numBlocks();
+  // make sure we are not accessing an invalid block
+  assert( (blockNumber >= 0) && (blockNumber < numBlocks) );
+
+  // we use u, v, w rather than x, y , z to indicate the spatial frequency domain
+
+  const int uRes = intBlock.xRes();
+  const int vRes = intBlock.yRes();
+  const int wRes = intBlock.zRes();
+
+  // use the appropriate scale factor to decode
+  VECTOR sList = data.get_sList();
+  double s = sList[blockNumber];
+    
+  // dequantize by inverting the scaling by s and contracting by the damping array
+  FIELD_3D dampingArray = data.get_dampingArray();
+  FIELD_3D dequantized_F(uRes, vRes, wRes);
+  dequantized_F = CastIntFieldToDouble(intBlock);
+  dequantized_F *= (1.0 / s);
+  dequantized_F *= dampingArray;
+
+
+  return dequantized_F;    
+}
 
 FIELD_3D DecodeBlockOld(const INTEGER_FIELD_3D& intBlock, int blockNumber, COMPRESSION_DATA& data) { 
 

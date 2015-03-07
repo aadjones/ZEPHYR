@@ -107,27 +107,29 @@ MatrixXd g_U(g_numRows, g_numCols);
     compression_data.set_numBlocks(numBlocks);
     
     const char* filename = "runLength.bin";
-    /* 
-    MatrixXd compressedResult(g_numRows, g_numCols);
-    VECTOR3_FIELD_3D compressedV(g_xRes, g_yRes, g_zRes);
-
+     
+    vector<VectorXd> columnList;
     for (int col = 0; col < g_numCols; col++) {
-      
-      compressedV = BlockCompressVectorField(V, compression_data);
+      VectorXd v = g_U.col(col);
+      VECTOR v_vector = EIGEN::convert(v);
+      VECTOR3_FIELD_3D V(v_vector, g_xRes, g_yRes, g_zRes);
+      VECTOR3_FIELD_3D compressedV = SmartBlockCompressVectorField(V, compression_data);
       VECTOR flattenedV = compressedV.flattened();
       VectorXd flattenedV_eigen = EIGEN::convert(flattenedV);
-      compressedResult.col(flattenedV_eigen);
+      columnList.push_back(flattenedV_eigen);
     }
+    MatrixXd compressedResult = EIGEN::buildFromColumns(columnList);
     EIGEN::write("newcompressedU.matrix", compressedResult);
-    */  
+     
 
     // write a binary file for each scalar field component
-     
+    /* 
     for (int component = 0; component < 3; component++) {
       CompressAndWriteMatrixComponent(filename, g_U, component, compression_data);
     }
+    */
     
-    
+    /*
     short* allDataX;
     short* allDataY;
     short* allDataZ;
@@ -147,7 +149,7 @@ MatrixXd g_U(g_numRows, g_numCols);
     
     double trueValue = g_U(row, col);
     cout << "True value: " << trueValue << endl;
-    
+    */
 
     return 0;
   }
