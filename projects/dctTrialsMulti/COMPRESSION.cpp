@@ -139,6 +139,7 @@ VECTOR CastDoubleToVector(const vector<double>& V) {
   return result;
 }
 
+/*
 int RoundToInt(const double& x) {
   TIMER functionTimer(__FUNCTION__);
   int result = 0;
@@ -150,6 +151,7 @@ int RoundToInt(const double& x) {
   }
   return result;
 }
+*/
 
 INTEGER_FIELD_3D RoundFieldToInt(const FIELD_3D& F) {
   TIMER functionTimer(__FUNCTION__);
@@ -162,7 +164,7 @@ INTEGER_FIELD_3D RoundFieldToInt(const FIELD_3D& F) {
   for (int x = 0; x < xRes; x++) {
     for (int y = 0; y < yRes; y++) {
       for (int z = 0; z < zRes; z++) {
-        int rounded = RoundToInt(F(x, y, z));
+        int rounded = rint(F(x, y, z)); 
         result(x, y, z) = rounded;
       }
     }
@@ -755,22 +757,23 @@ return quantized;
 }
 
 
-FIELD_3D DecodeBlock(const INTEGER_FIELD_3D& intBlock, int blockNumber, int col, COMPRESSION_DATA& data, DECOMPRESSION_DATA& decompression_data) {
+FIELD_3D DecodeBlock(const INTEGER_FIELD_3D& intBlock, int blockNumber, int col, const COMPRESSION_DATA& data, const DECOMPRESSION_DATA& decompression_data) {
+
   TIMER functionTimer(__FUNCTION__);
 
-int numBlocks = data.get_numBlocks();
-// make sure we are not accessing an invalid block
-assert( (blockNumber >= 0) && (blockNumber < numBlocks) );
+  int numBlocks = data.get_numBlocks();
+  // make sure we are not accessing an invalid block
+  assert( (blockNumber >= 0) && (blockNumber < numBlocks) );
 
-// we use u, v, w rather than x, y , z to indicate the spatial frequency domain
+  // we use u, v, w rather than x, y , z to indicate the spatial frequency domain
 
-const int uRes = intBlock.xRes();
-const int vRes = intBlock.yRes();
-const int wRes = intBlock.zRes();
+  const int uRes = intBlock.xRes();
+  const int vRes = intBlock.yRes();
+  const int wRes = intBlock.zRes();
 
-// use the appropriate scale factor to decode
-MATRIX sListMatrix = decompression_data.get_sListMatrix();
-double s = sListMatrix(blockNumber, col);
+  // use the appropriate scale factor to decode
+  MATRIX sListMatrix = decompression_data.get_sListMatrix();
+  double s = sListMatrix(blockNumber, col);
   
   // dequantize by inverting the scaling by s and contracting by the damping array
   FIELD_3D dampingArray = data.get_dampingArray();
@@ -854,7 +857,9 @@ void RunLengthEncodeBinary(const char* filename, int blockNumber, int* zigzagged
   }
   else {
 
-    vector<short> dataList;            // a C++ vector container for our data (int16s)
+    // vector<short> dataList;            // a C++ vector container for our data (int16s)
+    vector<short> dataList(8 * 8 * 8 * 2);
+    auto itr = dataList.begin();
     short data;
     short runLength;
     int encodedLength = 0;             // variable used to keep track of how long our code is for the decoder
@@ -863,7 +868,8 @@ void RunLengthEncodeBinary(const char* filename, int blockNumber, int* zigzagged
     int length = 8 * 8 * 8;
     for (int i = 0; i < length; i++) {
       data = zigzaggedArray[i];
-      dataList.push_back(data);
+      // dataList.push_back(data);
+      *itr = data;
       encodedLength++;
 
       runLength = 1;
@@ -874,13 +880,19 @@ void RunLengthEncodeBinary(const char* filename, int blockNumber, int* zigzagged
       }
       if (runLength > 1) {
         // use a single repeated value as an 'escape' to indicate a run
-        dataList.push_back(data);
+        // dataList.push_back(data);
+        ++itr;
+        *itr = data;
+        
         encodedLength++;
 
         // push the runLength to the data vector
-        dataList.push_back(runLength);
+        // dataList.push_back(runLength);
+        ++itr; 
+        *itr = runLength;
         encodedLength++;
       }
+      ++itr;
     }
     // cout << "Encoded length is: " << encodedLength << endl;
     blockLengths[blockNumber] = encodedLength;
@@ -1098,19 +1110,19 @@ vector<short> RunLengthDecodeBinary(const short* allData, int blockNumber, VECTO
     // evil integer division!
     int index = row / 3;
     int z = index / (xRes * yRes);         // index = (xRes * yRes) * z + remainder1
-    cout << "z: " << z << endl;
+    // cout << "z: " << z << endl;
     int rem1 = index - (xRes * yRes * z);
     int y = rem1 / xRes;                   // rem1  = xRes * y          + remainder2 
-    cout << "y: " << y << endl;
+    // cout << "y: " << y << endl;
     int rem2 = rem1 - xRes * y;
     int x = rem2;
-    cout << "x: " << x << endl;
+    // cout << "x: " << x << endl;
 
     int u = x % 8;
     int v = y % 8;
     int w = z % 8;
     blockIndex = u + 8 * v + 8 * 8 *w;
-    cout << "block index: " << blockIndex << endl;
+    // cout << "block index: " << blockIndex << endl;
 
     assert(index == z * xRes * yRes + y * xRes + x);
 
@@ -1132,8 +1144,8 @@ vector<short> RunLengthDecodeBinary(const short* allData, int blockNumber, VECTO
   }
 
   
-  FIELD_3D DecodeFromRowCol(int row, int col, short* allDataX, short* allDataY, short* allDataZ, COMPRESSION_DATA& compression_data,
-      DECOMPRESSION_DATA& dataX, DECOMPRESSION_DATA& dataY, DECOMPRESSION_DATA& dataZ) {
+  double DecodeFromRowCol(int row, int col, short* const& allDataX, short* const& allDataY, short* const& allDataZ, const COMPRESSION_DATA& compression_data,
+      const DECOMPRESSION_DATA& dataX, const DECOMPRESSION_DATA& dataY, const DECOMPRESSION_DATA& dataZ) {
 
   TIMER functionTimer(__FUNCTION__);
     VEC3I dims = compression_data.get_dims();
@@ -1160,8 +1172,9 @@ vector<short> RunLengthDecodeBinary(const short* allData, int blockNumber, VECTO
       VECTOR decoded_runLengthVector = CastIntToVector(decoded_runLength);
       INTEGER_FIELD_3D unzigzagged = ZigzagUnflatten(decoded_runLengthVector);
       FIELD_3D decoded_block = DecodeBlock(unzigzagged, blockNumber, col, compression_data, dataX); 
-      cout << "desired value is: " << decoded_block[blockIndex] << endl;
-      return decoded_block;
+      // cout << "desired value is: " << decoded_block[blockIndex] << endl;
+      double result = decoded_block[blockIndex];
+      return result;
 
     }
 
@@ -1182,8 +1195,9 @@ vector<short> RunLengthDecodeBinary(const short* allData, int blockNumber, VECTO
       VECTOR decoded_runLengthVector = CastIntToVector(decoded_runLength);
       INTEGER_FIELD_3D unzigzagged = ZigzagUnflatten(decoded_runLengthVector);
       FIELD_3D decoded_block = DecodeBlock(unzigzagged, blockNumber, col, compression_data, dataY); 
-      cout << "desired value is: " << decoded_block[blockIndex] << endl;
-      return decoded_block;
+      // cout << "desired value is: " << decoded_block[blockIndex] << endl;
+      double result = decoded_block[blockIndex];
+      return result;
     
     }
 
@@ -1203,12 +1217,32 @@ vector<short> RunLengthDecodeBinary(const short* allData, int blockNumber, VECTO
       VECTOR decoded_runLengthVector = CastIntToVector(decoded_runLength);
       INTEGER_FIELD_3D unzigzagged = ZigzagUnflatten(decoded_runLengthVector);
       FIELD_3D decoded_block = DecodeBlock(unzigzagged, blockNumber, col, compression_data, dataZ);
-      cout << "desired value is: " << decoded_block[blockIndex] << endl;
-      return decoded_block;
+      // cout << "desired value is: " << decoded_block[blockIndex] << endl;
+      double result = decoded_block[blockIndex];
+      return result;
      
     }
   }
   
+  MATRIX GetSubmatrix(int startRow, int endRow, short* allDataX, short* allDataY, short* allDataZ, COMPRESSION_DATA& compression_data,
+      DECOMPRESSION_DATA& dataX, DECOMPRESSION_DATA& dataY, DECOMPRESSION_DATA& dataZ) {
+    
+    TIMER functionTimer(__FUNCTION__);
+
+    int numRows = endRow - startRow;
+    assert(numRows == 3);
+    int numCols = compression_data.get_numCols();
+    MATRIX result(numRows, numCols);
+
+    for (int col = 0; col < numCols; col++) {
+      for (int row = 0; row < numRows; row++) {
+        double value = DecodeFromRowCol(row + startRow, col, allDataX, allDataY, allDataZ, compression_data, dataX, dataY, dataZ);
+        cout << "  Value is: " << value << flush;
+        result(row, col) = value;
+      }
+    }
+    return result;
+  }
 
 
 

@@ -132,7 +132,7 @@ INTEGER_FIELD_3D EncodeBlock(FIELD_3D& F, int blockNumber, COMPRESSION_DATA& com
 // the encoding procedure by doing the appropriate scaling and IDCT.
 // It returns a scalar field which is a compressed version of the original
 // scalar field fed into EncodeBlock.
-FIELD_3D DecodeBlock(const INTEGER_FIELD_3D& intBlock, int blockNumber, int col, COMPRESSION_DATA& data, DECOMPRESSION_DATA& decompression_data); 
+FIELD_3D DecodeBlock(const INTEGER_FIELD_3D& intBlock, int blockNumber, int col, const COMPRESSION_DATA& data, const DECOMPRESSION_DATA& decompression_data); 
 
 FIELD_3D DecodeBlockOld(const INTEGER_FIELD_3D& intBlock, int blockNumber, COMPRESSION_DATA& data);
 
@@ -160,9 +160,13 @@ void CompressAndWriteField(const char* filename, const FIELD_3D& F, COMPRESSION_
 
 int ComputeBlockNumber(int row, int col, VEC3I dims, int& blockIndex);
 
-// Given a (row, col) entry of U.final.matrix, decode the corresponding block
-FIELD_3D DecodeFromRowCol(int row, int col, short* allDataX, short* allDataY, short* allDataZ, COMPRESSION_DATA& compression_data,
+// Given a (row, col) entry of U.final.matrix, decode the corresponding block and entry
+double DecodeFromRowCol(int row, int col, short* const& allDataX, short* const& allDataY, short* const& allDataZ, const COMPRESSION_DATA& compression_data,
+    const DECOMPRESSION_DATA& dataX, const DECOMPRESSION_DATA& dataY, const DECOMPRESSION_DATA& dataZ);
+
+MATRIX GetSubmatrix(int startRow, int endRow, short* allDataX, short* allDataY, short* allDataZ, COMPRESSION_DATA& compression_data,
     DECOMPRESSION_DATA& dataX, DECOMPRESSION_DATA& dataY, DECOMPRESSION_DATA& dataZ);
+
 
 void WriteMetaData(const char* filename, const MATRIX& sListMatrix, const MATRIX& blockLengths, const MATRIX& blockIndices);
 

@@ -26,7 +26,6 @@
 #include <iostream>
 #include <fftw3.h>
 #include "jo_jpeg.h"
-
 #include "EIGEN.h"
 #include "SUBSPACE_FLUID_3D_EIGEN.h"
 #include "FLUID_3D_MIC.h"
@@ -37,6 +36,9 @@
 #include "COMPRESSION.h"
 #include "ARRAY_4D.h"
 #include <string>
+#include <cmath>
+#include <cfenv>
+#include <climits>
 
 using std::vector;
 using std::string;
@@ -45,33 +47,32 @@ using std::string;
 // Globals
 ////////////////////////////////////////////////////////
 
-string path_to_U("/Users/aaron/Desktop/U.final.uncompressed.matrix");
-// string path_to_U("U.final.donotmodify.matrix.48");
+// string path_to_U("/Users/aaron/Desktop/U.final.uncompressed.matrix");
+// string path_to_U("/Volumes/DataDrive/data/reduced.stam.200.vorticity.1.5/U.preadvect.matrix");
+string path_to_U("U.final.donotmodify.matrix.48");
 
 // make sure the read-in matrix agrees with the dimensions specified!
 
-/*
+
 const int g_xRes =    46;
 const int g_yRes =    62;
 const int g_zRes =    46;
 const int g_numRows = 3 * g_xRes * g_yRes * g_zRes;
 const int g_numCols = 48;
-*/
 
-
+/*
 const int g_xRes = 198;
 const int g_yRes = 264;
 const int g_zRes = 198;
 const int g_numRows = 3 * g_xRes * g_yRes * g_zRes;
 const int g_numCols = 151;
-
+*/
 
 MatrixXd g_U(g_numRows, g_numCols);
 
 ///////////////////////////////////////////////////////
 // End Globals
 ////////////////////////////////////////////////////////
-
 
 
 ////////////////////////////////////////////////////////
@@ -81,6 +82,8 @@ MatrixXd g_U(g_numRows, g_numCols);
   int main(int argc, char* argv[]) {
     
   TIMER functionTimer(__FUNCTION__);
+
+    fesetround(FE_TONEAREST);
     
     const int nBits = 16;        // don't exceed 16 if using 'short' in the compressor!
     const double q = 1.0;        // change this to modify compression rate
@@ -122,24 +125,23 @@ MatrixXd g_U(g_numRows, g_numCols);
       columnList.push_back(flattenedV_eigen);
     }
     MatrixXd compressedResult = EIGEN::buildFromColumns(columnList);
-<<<<<<< HEAD
+
     EIGEN::write("newcompressedUhuge.matrix", compressedResult);
-     
-=======
-    EIGEN::write("newcompressedU.matrix", compressedResult);
     */
->>>>>>> ef5374c4b4eae085235e1b473bbce5c1afc5a901
+
 
     // write a binary file for each scalar field component
    
-    
+    /* 
     for (int component = 0; component < 3; component++) {
       cout << "Writing component: " << component << endl;
       CompressAndWriteMatrixComponent(filename, g_U, component, compression_data);
     }
+    */
     
+    // currently in debug mode so no compression damping is happening!
+   
     
-    /*
     short* allDataX;
     short* allDataY;
     short* allDataZ;
@@ -151,17 +153,23 @@ MatrixXd g_U(g_numRows, g_numCols);
     ReadBinaryFileToMemory("runLength.binY", allDataY, compression_data, decompression_dataY);
     ReadBinaryFileToMemory("runLength.binZ", allDataZ, compression_data, decompression_dataZ);
     
-    // test the decompressor on a (row, col)    
-    int row = 12;
-    int col = 23;
-    // DecodeFromRowCol will print the decompressed value at (row, col) and return the entire decompressed block
-    FIELD_3D test_block = DecodeFromRowCol(row, col, allDataX, allDataY, allDataZ, compression_data, decompression_dataX, decompression_dataY, decompression_dataZ);
-    
+    // test the decompressor on a (row, col)   
+     
+    int row = 23;
+    int col = 0;
+     
+    double testValue = DecodeFromRowCol(row, col, allDataX, allDataY, allDataZ, compression_data, decompression_dataX, decompression_dataY, decompression_dataZ);
+    cout << "Test value: " << testValue << endl;
     double trueValue = g_U(row, col);
     cout << "True value: " << trueValue << endl;
-    */
+    
+    
+    MATRIX subMatrix = GetSubmatrix(23, 26, allDataX, allDataY, allDataZ, compression_data, decompression_dataX, decompression_dataY, decompression_dataZ);
+    // EIGEN::write("sub23.matrix", subMatrix);
+    subMatrix.write("sub23.matrix");
+   
+    
 
     TIMER::printTimings();
     return 0;
   }
-
