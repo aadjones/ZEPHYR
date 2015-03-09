@@ -417,6 +417,7 @@ FIELD_3D IDCT(FIELD_3D& F_hat) {
   fftw_destroy_plan(plan);
   fftw_free(in);
   fftw_free(out);
+  fftw_cleanup();
 
   return F;
 }
@@ -527,11 +528,23 @@ FIELD_3D DoSmartBlockCompression(FIELD_3D& F, COMPRESSION_DATA& compression_data
     FIELD_3D compressedBlock = DecodeBlockSmart(V, blockNumber, compression_data); 
     *itr = compressedBlock;
     blockNumber++;
-    percent = (int) ( 100 * ( blockNumber / ( (double) numBlocks ) ) );
-    if (percent % 25  == 0) {
-      cout << "    Percent complete: " << percent << flush;
+
+
+    percent = blockNumber / ( (double) numBlocks );
+    int checkPoint1 = (numBlocks - 1) / 4;
+    int checkPoint2 = (numBlocks - 1) / 2;
+    int checkPoint3 = (3 * (numBlocks - 1)) / 4;
+    int checkPoint4 = numBlocks - 1;
+
+    if (blockNumber == checkPoint1 || blockNumber == checkPoint2 || blockNumber == checkPoint3 || blockNumber == checkPoint4) {
+      cout << "      Percent complete: " << percent << flush;
+      if (blockNumber == checkPoint4) {
+        cout << endl;
+      }
+
     }
   }
+
   cout << "...done!" << endl;
   cout << "Doing block inverse transform..." << endl;
   DoSmartBlockDCT(blocks, -1);
@@ -731,6 +744,8 @@ double s = (pow(2.0, nBits - 1) - 1) / Fmax;                    // a scale facto
 sList[blockNumber] = s; 
 F_quantized = F * s;
 F_quantized /= dampingArray;
+
+// RoundFieldToInt is apparently a bit of a bottleneck!
 quantized = RoundFieldToInt(F_quantized);
 
 // update sList within compression data
@@ -993,7 +1008,45 @@ vector<short> RunLengthDecodeBinary(const short* allData, int blockNumber, VECTO
     }
     return;
   }
+ void CompressAndWriteFieldSmart(const char* filename, const FIELD_3D& F, COMPRESSION_DATA& compression_data) {
+  TIMER functionTimer(__FUNCTION__);
+  
+    int numBlocks = compression_data.get_numBlocks();
+    vector<FIELD_3D> blocks = GetBlocks(F);
 
+    // Initialize the relevant variables before looping through all the blocks
+    VECTOR blockLengths(numBlocks);
+    FIELD_3D block_i(8, 8, 8);
+    INTEGER_FIELD_3D intEncoded_i(8, 8, 8);
+    VECTOR zigzagged_i(8 * 8 * 8);
+    int* zigzagArray_i = (int*) malloc(sizeof(int) * 8 * 8 * 8);
+    if (zigzagArray_i == NULL) {
+      perror("Malloc failed to allocate zigzagArray_i!");
+      exit(1);
+    }
+   
+    // do the forward transform 
+    DoSmartBlockDCT(blocks, 1);
+    // loop through the blocks and apply the encoding procedure
+    for (int i = 0; i < numBlocks; i++) {
+      block_i = blocks[i];
+      // performs quantization and damping. updates sList
+      intEncoded_i = EncodeBlock(block_i, i, compression_data);
+      zigzagged_i = ZigzagFlatten(intEncoded_i);
+      zigzagArray_i = CastToInt(zigzagged_i, zigzagArray_i);
+      // performs run-length encoding. updates blockLengths
+      RunLengthEncodeBinary(filename, i, zigzagArray_i, blockLengths);  
+    }
+    
+    // update the compression data
+    compression_data.set_blockLengths(blockLengths);
+    VECTOR blockIndices = ModifiedCumSum(blockLengths);
+    compression_data.set_blockIndices(blockIndices);
+    free(zigzagArray_i);
+    return;
+  }
+
+  /*
   void CompressAndWriteField(const char* filename, const FIELD_3D& F, COMPRESSION_DATA& compression_data) {
   TIMER functionTimer(__FUNCTION__);
   
@@ -1030,7 +1083,8 @@ vector<short> RunLengthDecodeBinary(const short* allData, int blockNumber, VECTO
     free(zigzagArray_i);
     return;
   }
-  
+  */
+
   int ComputeBlockNumber(int row, int col, VEC3I dims, int& blockIndex) {
   TIMER functionTimer(__FUNCTION__);
     int xRes = dims[0];
@@ -1252,13 +1306,15 @@ void CompressAndWriteMatrixComponent(const char* filename, const MatrixXd& U, in
   // in append mode! 
   DeleteIfExists(filename);
 
+  double percent = 0.0;
   for (int col = 0; col < numCols; col++) {  
     VectorXd vXd = U.col(col);
     VECTOR v = EIGEN::convert(vXd);
     VECTOR3_FIELD_3D V(v, xRes, yRes, zRes);
     FIELD_3D F = V.scalarField(component);
     
-    CompressAndWriteField(filename, F, data); 
+    // CompressAndWriteField(filename, F, data); 
+    CompressAndWriteFieldSmart(filename, F, data);
 
     // update blockLengths and sList and push them to the appropriate column
     // of their respective matrices
@@ -1266,6 +1322,19 @@ void CompressAndWriteMatrixComponent(const char* filename, const MatrixXd& U, in
     VECTOR sList = data.get_sList();
     blockLengthsMatrix.setColumn(blockLengths, col);
     sListMatrix.setColumn(sList, col);
+
+    percent = col / (double) numCols;
+    int checkPoint1 = (numCols - 1) / 4;
+    int checkPoint2 = (numCols - 1) / 2;
+    int checkPoint3 = (3 * (numCols - 1)) / 4;
+    int checkPoint4 = numCols - 1;
+    if (col == checkPoint1 || col == checkPoint2 || col == checkPoint3 || col == checkPoint4) {
+      cout << "    Percent: " << percent << flush;
+      if (col == checkPoint4) {
+        cout << endl;
+      }
+    }
+       
     
   }
   
