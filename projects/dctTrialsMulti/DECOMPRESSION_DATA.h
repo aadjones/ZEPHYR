@@ -11,12 +11,13 @@ class DECOMPRESSION_DATA {
   public:
     DECOMPRESSION_DATA() {}
     DECOMPRESSION_DATA(int numBlocks, MATRIX blockLengthsMatrix, MATRIX blockIndicesMatrix, MATRIX sListMatrix);
+    ~DECOMPRESSION_DATA();
 
     // getters
     int get_numBlocks() const { return _numBlocks; }
-    MATRIX get_blockLengthsMatrix() const { return _blockLengthsMatrix; } 
-    MATRIX get_blockIndicesMatrix() const { return _blockIndicesMatrix; }
-    MATRIX get_sListMatrix() const { return _sListMatrix; }
+    const MATRIX& get_blockLengthsMatrix() const { return _blockLengthsMatrix; } 
+    const MATRIX& get_blockIndicesMatrix() const { return _blockIndicesMatrix; }
+    const MATRIX& get_sListMatrix() const { return _sListMatrix; }
 
     // setters
     void set_numBlocks(int numBlocks) { _numBlocks = numBlocks; }

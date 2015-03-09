@@ -15,20 +15,21 @@ using std::endl;
     public:
       COMPRESSION_DATA();
       COMPRESSION_DATA(VEC3I dims, double q, double power, int nBits);
+      ~COMPRESSION_DATA();
 
 
       // getters
-      VEC3I get_dims() const { return _dims; }
+      const VEC3I& get_dims() const { return _dims; }
       int get_numCols() const { return _numCols; }
       int get_numBlocks() const { return _numBlocks; }
       int get_currBlockNum() const { return _currBlockNum; }
       double get_q() const { return _q; }
       double get_power() const { return _power; }
       int get_nBits() const { return _nBits; } 
-      VECTOR get_blockLengths() const { return _blockLengths; }
-      VECTOR get_blockIndices() const { return _blockIndices; }
-      VECTOR get_sList() const { return _sList; }
-      FIELD_3D get_dampingArray() const { return _dampingArray; }
+      const VECTOR& get_blockLengths() const { return _blockLengths; }
+      const VECTOR& get_blockIndices() const { return _blockIndices; }
+      const VECTOR& get_sList() const { return _sList; }
+      const FIELD_3D& get_dampingArray() const { return _dampingArray; }
 
       // setters
       void set_dims(const VEC3I& dims) { _dims = dims; }

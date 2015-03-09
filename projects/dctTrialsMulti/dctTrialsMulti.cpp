@@ -45,26 +45,26 @@ using std::string;
 // Globals
 ////////////////////////////////////////////////////////
 
-// string path_to_U("/Users/aaron/Desktop/U.final.uncompressed.matrix");
-string path_to_U("U.final.donotmodify.matrix.48");
+string path_to_U("/Users/aaron/Desktop/U.final.uncompressed.matrix");
+// string path_to_U("U.final.donotmodify.matrix.48");
 
 // make sure the read-in matrix agrees with the dimensions specified!
 
-
+/*
 const int g_xRes =    46;
 const int g_yRes =    62;
 const int g_zRes =    46;
 const int g_numRows = 3 * g_xRes * g_yRes * g_zRes;
 const int g_numCols = 48;
+*/
 
 
-/*
 const int g_xRes = 198;
 const int g_yRes = 264;
 const int g_zRes = 198;
 const int g_numRows = 3 * g_xRes * g_yRes * g_zRes;
 const int g_numCols = 151;
-*/
+
 
 MatrixXd g_U(g_numRows, g_numCols);
 
@@ -84,7 +84,7 @@ MatrixXd g_U(g_numRows, g_numCols);
     
     const int nBits = 16;        // don't exceed 16 if using 'short' in the compressor!
     const double q = 1.0;        // change this to modify compression rate
-    const double power = 1.0;    // and especially this!
+    const double power = 4.0;    // and especially this!
     VEC3I dims(g_xRes, g_yRes, g_zRes);
     COMPRESSION_DATA compression_data(dims, q, power, nBits);
     compression_data.set_numCols(g_numCols);
@@ -121,7 +121,7 @@ MatrixXd g_U(g_numRows, g_numCols);
       columnList.push_back(flattenedV_eigen);
     }
     MatrixXd compressedResult = EIGEN::buildFromColumns(columnList);
-    EIGEN::write("newcompressedU.matrix", compressedResult);
+    EIGEN::write("newcompressedUhuge.matrix", compressedResult);
      
 
     // write a binary file for each scalar field component

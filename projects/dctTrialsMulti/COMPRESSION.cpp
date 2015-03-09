@@ -518,7 +518,7 @@ FIELD_3D DoSmartBlockCompression(FIELD_3D& F, COMPRESSION_DATA& compression_data
   DoSmartBlockDCT(blocks, 1);
   cout << "...done!" << endl;
   int blockNumber = 0;
-  double percent = 0.0;
+  int percent = 0;
   cout << "Doing quantization on each block..." << endl;
   for (auto itr = blocks.begin(); itr != blocks.end(); ++itr) {
 
@@ -527,9 +527,9 @@ FIELD_3D DoSmartBlockCompression(FIELD_3D& F, COMPRESSION_DATA& compression_data
     FIELD_3D compressedBlock = DecodeBlockSmart(V, blockNumber, compression_data); 
     *itr = compressedBlock;
     blockNumber++;
-    percent = blockNumber / ( (double) numBlocks );
-    if (blockNumber % 10 == 0) {
-      cout << "      Percent complete: " << percent << flush;
+    percent = (int) ( 100 * ( blockNumber / ( (double) numBlocks ) ) );
+    if (percent % 25  == 0) {
+      cout << "    Percent complete: " << percent << flush;
     }
   }
   cout << "...done!" << endl;
@@ -673,7 +673,11 @@ void DoSmartBlockDCT(vector<FIELD_3D>& V, int direction) {
   // direction determines whether it is DCT or IDCT
 
   // initialize block buffer
-  double* in = (double*) fftw_malloc(8 * 8 * 8 * sizeof(double));
+  // cout << "Calling fftw_malloc." << endl;
+  // double* in = (double*) fftw_malloc(8 * 8 * 8 * sizeof(double));
+
+  // double it just to be safe
+  double* in = (double*) malloc(8 * 8 * 8 * sizeof(double) * 2);
 
   // make the appropriate plan
   fftw_plan plan = Create_DCT_Plan(in, direction);
@@ -682,6 +686,11 @@ void DoSmartBlockDCT(vector<FIELD_3D>& V, int direction) {
     // take the transform at *itr and overwrite its contents
     DCT_Smart(*itr, plan, in);
   }
+  // cout << "Calling fftw_free." << endl;
+  // fftw_free(in);
+  free(in);
+  fftw_destroy_plan(plan);
+  fftw_cleanup();
 }
 
 
