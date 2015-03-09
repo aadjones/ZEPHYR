@@ -15,7 +15,7 @@ using std::endl;
     public:
       COMPRESSION_DATA();
       COMPRESSION_DATA(VEC3I dims, double q, double power, int nBits);
-      virtual ~COMPRESSION_DATA();
+      ~COMPRESSION_DATA();
 
 
       // getters

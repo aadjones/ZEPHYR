@@ -107,8 +107,9 @@ MatrixXd g_U(g_numRows, g_numCols);
     int numBlocks = xRes * yRes * zRes / (8 * 8 * 8);
     compression_data.set_numBlocks(numBlocks);
     
-    // const char* filename = "runLength.bin";
-     
+    const char* filename = "runLength.bin";
+    
+    /* 
     vector<VectorXd> columnList;
     for (int col = 0; col < g_numCols; col++) {
       cout << "Column: " << col << endl;
@@ -122,14 +123,16 @@ MatrixXd g_U(g_numRows, g_numCols);
     }
     MatrixXd compressedResult = EIGEN::buildFromColumns(columnList);
     EIGEN::write("newcompressedU.matrix", compressedResult);
-     
+    */
 
     // write a binary file for each scalar field component
-    /* 
+   
+    
     for (int component = 0; component < 3; component++) {
+      cout << "Writing component: " << component << endl;
       CompressAndWriteMatrixComponent(filename, g_U, component, compression_data);
     }
-    */
+    
     
     /*
     short* allDataX;
@@ -144,8 +147,8 @@ MatrixXd g_U(g_numRows, g_numCols);
     ReadBinaryFileToMemory("runLength.binZ", allDataZ, compression_data, decompression_dataZ);
     
     // test the decompressor on a (row, col)    
-    int row = g_numRows - 1;
-    int col = g_numCols - 1;
+    int row = 12;
+    int col = 23;
     // DecodeFromRowCol will print the decompressed value at (row, col) and return the entire decompressed block
     FIELD_3D test_block = DecodeFromRowCol(row, col, allDataX, allDataY, allDataZ, compression_data, decompression_dataX, decompression_dataY, decompression_dataZ);
     
