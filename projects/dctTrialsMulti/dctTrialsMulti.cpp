@@ -83,7 +83,7 @@ MatrixXd g_U(g_numRows, g_numCols);
     
     const int nBits = 16;        // don't exceed 16 if using 'short' in the compressor!
     const double q = 1.0;        // change this to modify compression rate
-    const double power = 1.0;    // and especially this!
+    const double power = 4.0;    // and especially this!
     VEC3I dims(g_xRes, g_yRes, g_zRes);
     COMPRESSION_DATA compression_data(dims, q, power, nBits);
     compression_data.set_numCols(g_numCols);

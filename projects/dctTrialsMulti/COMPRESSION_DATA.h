@@ -15,6 +15,7 @@ using std::endl;
     public:
       COMPRESSION_DATA();
       COMPRESSION_DATA(VEC3I dims, double q, double power, int nBits);
+      virtual ~COMPRESSION_DATA();
 
 
       // getters
@@ -76,7 +77,7 @@ using std::endl;
               r_uvw = pow(r_uvw, power);
               damp(u, v, w) = r_uvw;
               // for debugging!
-              damp(u, v, w) = 1.0;
+              // damp(u, v, w) = 1.0;
             }
           }
         }
