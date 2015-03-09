@@ -80,6 +80,7 @@ MatrixXd g_U(g_numRows, g_numCols);
 
   int main(int argc, char* argv[]) {
     
+  TIMER functionTimer(__FUNCTION__);
     
     const int nBits = 16;        // don't exceed 16 if using 'short' in the compressor!
     const double q = 1.0;        // change this to modify compression rate
@@ -106,10 +107,11 @@ MatrixXd g_U(g_numRows, g_numCols);
     int numBlocks = xRes * yRes * zRes / (8 * 8 * 8);
     compression_data.set_numBlocks(numBlocks);
     
-    const char* filename = "runLength.bin";
+    // const char* filename = "runLength.bin";
      
     vector<VectorXd> columnList;
     for (int col = 0; col < g_numCols; col++) {
+      cout << "Column: " << col << endl;
       VectorXd v = g_U.col(col);
       VECTOR v_vector = EIGEN::convert(v);
       VECTOR3_FIELD_3D V(v_vector, g_xRes, g_yRes, g_zRes);
@@ -151,6 +153,7 @@ MatrixXd g_U(g_numRows, g_numCols);
     cout << "True value: " << trueValue << endl;
     */
 
+    TIMER::printTimings();
     return 0;
   }
 
