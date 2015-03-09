@@ -25,6 +25,7 @@ using std::endl;
 ////////////////////////////////////////////////////////
 
 VECTOR CastToVector(double* data, int size) {
+  TIMER functionTimer(__FUNCTION__);
   VECTOR x(size);
   for (int i = 0; i < size; i++) {
     x[i] = data[i];
@@ -33,6 +34,7 @@ VECTOR CastToVector(double* data, int size) {
 }
 
 VECTOR CastToVector(int* data, int size) {
+  TIMER functionTimer(__FUNCTION__);
   VECTOR x(size);
   for (int i = 0; i < size; i++) {
     x[i] = data[i];
@@ -41,6 +43,7 @@ VECTOR CastToVector(int* data, int size) {
 }
 
 VECTOR CastToVector(short* data, int size) {
+  TIMER functionTimer(__FUNCTION__);
   VECTOR x(size);
   for (int i = 0; i < size; i++) {
     x[i] = data[i];
@@ -49,6 +52,7 @@ VECTOR CastToVector(short* data, int size) {
 }
 
 double* CastToDouble(const VECTOR& x, double* array) {
+  TIMER functionTimer(__FUNCTION__);
   for (int i = 0; i < x.size(); i++) {
     array[i] = x[i];
   }
@@ -56,6 +60,7 @@ double* CastToDouble(const VECTOR& x, double* array) {
 }
 
 int* CastToInt(const VECTOR& x, int* array) {
+  TIMER functionTimer(__FUNCTION__);
   for (int i = 0; i < x.size(); i++) {
     int data_i = (int) x[i];
     array[i] = data_i;
@@ -64,6 +69,7 @@ int* CastToInt(const VECTOR& x, int* array) {
 }
 
 short* CastToShort(const VECTOR& x, short* array) {
+  TIMER functionTimer(__FUNCTION__);
   for (int i = 0; i < x.size(); i++) {
     short data_i = (short) x[i];
     array[i] = data_i;
@@ -72,6 +78,7 @@ short* CastToShort(const VECTOR& x, short* array) {
 }
 
 long* CastToLong(const VECTOR& x, long* array) {
+  TIMER functionTimer(__FUNCTION__);
   for (int i = 0; i < x.size(); i++) {
     long data_i = (long) x[i];
     array[i] = data_i;
@@ -80,6 +87,7 @@ long* CastToLong(const VECTOR& x, long* array) {
 }
 
 VECTOR CastIntToVector(const vector<int>& V) {
+  TIMER functionTimer(__FUNCTION__);
   int length = V.size();
   VECTOR result(length);
 
@@ -90,6 +98,7 @@ VECTOR CastIntToVector(const vector<int>& V) {
 }
 
 vector<int> CastVectorToInt(const VECTOR& V) {
+  TIMER functionTimer(__FUNCTION__);
   int length = V.size();
   vector<int> result(length, 0);
   for (int i = 0; i < length; i++) {
@@ -99,6 +108,7 @@ vector<int> CastVectorToInt(const VECTOR& V) {
 }
 
 vector<double> CastVectorToDouble(const VECTOR& V) {
+  TIMER functionTimer(__FUNCTION__);
   int length = V.size();
   vector<double> result(length, 0.0);
   for (int i = 0; i < length; i++) {
@@ -108,6 +118,7 @@ vector<double> CastVectorToDouble(const VECTOR& V) {
 }
 
 VECTOR CastIntToVector(const vector<short>& V) {
+  TIMER functionTimer(__FUNCTION__);
   int length = V.size();
   VECTOR result(length);
 
@@ -118,6 +129,7 @@ VECTOR CastIntToVector(const vector<short>& V) {
 }
 
 VECTOR CastDoubleToVector(const vector<double>& V) {
+  TIMER functionTimer(__FUNCTION__);
   int length = V.size();
   VECTOR result(length);
 
@@ -128,6 +140,7 @@ VECTOR CastDoubleToVector(const vector<double>& V) {
 }
 
 int RoundToInt(const double& x) {
+  TIMER functionTimer(__FUNCTION__);
   int result = 0;
   if (x > 0.0) {
     result = (int) (x + 0.5);
@@ -139,6 +152,7 @@ int RoundToInt(const double& x) {
 }
 
 INTEGER_FIELD_3D RoundFieldToInt(const FIELD_3D& F) {
+  TIMER functionTimer(__FUNCTION__);
   int xRes = F.xRes();
   int yRes = F.yRes();
   int zRes = F.zRes();
@@ -157,6 +171,7 @@ INTEGER_FIELD_3D RoundFieldToInt(const FIELD_3D& F) {
 }
 
 FIELD_3D CastIntFieldToDouble(const INTEGER_FIELD_3D& F) {
+  TIMER functionTimer(__FUNCTION__);
   int xRes = F.xRes();
   int yRes = F.yRes();
   int zRes = F.zRes();
@@ -176,6 +191,7 @@ FIELD_3D CastIntFieldToDouble(const INTEGER_FIELD_3D& F) {
 
 vector<int> ModifiedCumSum(vector<int>& V) {
   // athough V is passed by reference, it will not be modified.
+  TIMER functionTimer(__FUNCTION__);
   int length = V.size();
   vector<int> result(length + 1);
   result[0] = 0;
@@ -191,6 +207,7 @@ vector<int> ModifiedCumSum(vector<int>& V) {
 }
 
 VECTOR ModifiedCumSum(const VECTOR& V) {
+  TIMER functionTimer(__FUNCTION__);
   vector<int> V_int = CastVectorToInt(V);
   vector<int> result_int = ModifiedCumSum(V_int);
   VECTOR result = CastIntToVector(result_int);
@@ -198,6 +215,7 @@ VECTOR ModifiedCumSum(const VECTOR& V) {
 }
 
 MATRIX ModifiedCumSum(const MATRIX& M) {
+  TIMER functionTimer(__FUNCTION__);
   int numRows = M.rows();
   int numCols = M.cols();
   VECTOR flattened = M.flattenedColumn();
@@ -210,12 +228,14 @@ MATRIX ModifiedCumSum(const MATRIX& M) {
 }
 
 void GetScalarFields(const VECTOR3_FIELD_3D& V, FIELD_3D& X, FIELD_3D& Y, FIELD_3D& Z) {
+  TIMER functionTimer(__FUNCTION__);
   X = V.scalarField(0);
   Y = V.scalarField(1);
   Z = V.scalarField(2);
 }
 
 VECTOR ZigzagFlatten(const INTEGER_FIELD_3D& F) {
+  TIMER functionTimer(__FUNCTION__);
   int xRes = F.xRes();
   int yRes = F.yRes();
   int zRes = F.zRes();
@@ -239,6 +259,7 @@ VECTOR ZigzagFlatten(const INTEGER_FIELD_3D& F) {
 }
 
 INTEGER_FIELD_3D ZigzagUnflatten(const VECTOR& V) {
+  TIMER functionTimer(__FUNCTION__);
   // assumes original dimensions were 8 x 8 x 8
   const int xRes = 8;
   const int yRes = 8;
@@ -262,6 +283,7 @@ INTEGER_FIELD_3D ZigzagUnflatten(const VECTOR& V) {
 }
 
 FIELD_3D DCT(FIELD_3D& F) {
+  TIMER functionTimer(__FUNCTION__);
   double* in;
   double* out;
   fftw_plan plan;
@@ -293,6 +315,7 @@ FIELD_3D DCT(FIELD_3D& F) {
 }
 
 fftw_plan Create_DCT_Plan(double*& in, int direction) {
+  TIMER functionTimer(__FUNCTION__);
   // direction is 1 for a forward transform, -1 for a backward transform
   assert( direction == 1 || direction == -1 );
 
@@ -315,6 +338,7 @@ fftw_plan Create_DCT_Plan(double*& in, int direction) {
 
 
 void DCT_Smart(FIELD_3D& F, fftw_plan& plan, double*& in) {
+  TIMER functionTimer(__FUNCTION__);
 
   int xRes = F.xRes();
   int yRes = F.yRes();
@@ -336,6 +360,7 @@ void DCT_Smart(FIELD_3D& F, fftw_plan& plan, double*& in) {
 }
 
 void DCT_in_place(FIELD_3D& F) {
+  TIMER functionTimer(__FUNCTION__);
   double* in;
   double* out;
   fftw_plan plan;
@@ -366,6 +391,7 @@ void DCT_in_place(FIELD_3D& F) {
 
 
 FIELD_3D IDCT(FIELD_3D& F_hat) {
+  TIMER functionTimer(__FUNCTION__);
   double* in;
   double* out;
   fftw_plan plan;
@@ -396,6 +422,7 @@ FIELD_3D IDCT(FIELD_3D& F_hat) {
 }
 
 VECTOR3_FIELD_3D SmartBlockCompressVectorField(const VECTOR3_FIELD_3D& V, COMPRESSION_DATA& compression_data) { 
+  TIMER functionTimer(__FUNCTION__);
 
   const int xRes = V.xRes();
   const int yRes = V.yRes();
@@ -406,6 +433,7 @@ VECTOR3_FIELD_3D SmartBlockCompressVectorField(const VECTOR3_FIELD_3D& V, COMPRE
   double* Z_array = (double*) malloc(sizeof(double) * xRes * yRes * zRes);
 
   for (int component = 0; component < 3; component++) {            
+    cout << "Component " << component << endl;
     FIELD_3D scalarComponent = V.scalarField(component);
     FIELD_3D scalarComponentCompressed = DoSmartBlockCompression(scalarComponent, compression_data);
     VECTOR scalarComponentCompressedFlattened = scalarComponentCompressed.flattened();
@@ -424,6 +452,7 @@ VECTOR3_FIELD_3D SmartBlockCompressVectorField(const VECTOR3_FIELD_3D& V, COMPRE
   return compressed_V;
 }
 VECTOR3_FIELD_3D BlockCompressVectorField(const VECTOR3_FIELD_3D& V, COMPRESSION_DATA& compression_data) { 
+  TIMER functionTimer(__FUNCTION__);
 
   const int xRes = V.xRes();
   const int yRes = V.yRes();
@@ -453,6 +482,7 @@ VECTOR3_FIELD_3D BlockCompressVectorField(const VECTOR3_FIELD_3D& V, COMPRESSION
 }
 
 FIELD_3D DoSmartBlockCompression(FIELD_3D& F, COMPRESSION_DATA& compression_data) {
+  TIMER functionTimer(__FUNCTION__);
 
   int xRes = F.xRes();
   int xResOriginal = xRes;
@@ -465,6 +495,7 @@ FIELD_3D DoSmartBlockCompression(FIELD_3D& F, COMPRESSION_DATA& compression_data
   double q = compression_data.get_q();
   double power = compression_data.get_power();
   int nBits = compression_data.get_nBits();
+  int numBlocks = compression_data.get_numBlocks();
 
   // dummy initializations                                     
   int xPadding = 0;
@@ -483,9 +514,12 @@ FIELD_3D DoSmartBlockCompression(FIELD_3D& F, COMPRESSION_DATA& compression_data
 
   vector<FIELD_3D> blocks = GetBlocks(F);     
   // 1-->forward transform
+  cout << "Doing block forward transform..." << endl;
   DoSmartBlockDCT(blocks, 1);
-
+  cout << "...done!" << endl;
   int blockNumber = 0;
+  double percent = 0.0;
+  cout << "Doing quantization on each block..." << endl;
   for (auto itr = blocks.begin(); itr != blocks.end(); ++itr) {
 
     // sList will be updated on each pass and modify compression_data
@@ -493,8 +527,15 @@ FIELD_3D DoSmartBlockCompression(FIELD_3D& F, COMPRESSION_DATA& compression_data
     FIELD_3D compressedBlock = DecodeBlockSmart(V, blockNumber, compression_data); 
     *itr = compressedBlock;
     blockNumber++;
+    percent = blockNumber / ( (double) numBlocks );
+    if (blockNumber % 10 == 0) {
+      cout << "      Percent complete: " << percent << flush;
+    }
   }
+  cout << "...done!" << endl;
+  cout << "Doing block inverse transform..." << endl;
   DoSmartBlockDCT(blocks, -1);
+  cout << "...done!" << endl;
   FIELD_3D F_compressed = AssimilateBlocks(dummyF, blocks);
   // strip off the padding
   FIELD_3D F_compressed_peeled = F_compressed.subfield(0, xResOriginal, 0, yResOriginal, 0, zResOriginal); 
@@ -503,6 +544,7 @@ FIELD_3D DoSmartBlockCompression(FIELD_3D& F, COMPRESSION_DATA& compression_data
 }
 
 FIELD_3D DoBlockCompression(FIELD_3D& F, COMPRESSION_DATA& compression_data) {
+  TIMER functionTimer(__FUNCTION__);
 
   int xRes = F.xRes();
   int xResOriginal = xRes;
@@ -552,6 +594,7 @@ FIELD_3D DoBlockCompression(FIELD_3D& F, COMPRESSION_DATA& compression_data) {
 
 
 void GetPaddings(VEC3I v, int& xPadding, int& yPadding, int& zPadding) {
+  TIMER functionTimer(__FUNCTION__);
   int xRes = v[0];
   int yRes = v[1];
   int zRes = v[2];
@@ -562,6 +605,7 @@ void GetPaddings(VEC3I v, int& xPadding, int& yPadding, int& zPadding) {
 }
 
 vector<FIELD_3D> GetBlocks(const FIELD_3D& F) {
+  TIMER functionTimer(__FUNCTION__);
   int xRes = F.xRes();
   int yRes = F.yRes();
   int zRes = F.zRes();
@@ -604,6 +648,7 @@ vector<FIELD_3D> GetBlocks(const FIELD_3D& F) {
 
 
 FIELD_3D AssimilateBlocks(const FIELD_3D& F, vector<FIELD_3D> V) {
+  TIMER functionTimer(__FUNCTION__);
   const int xRes = F.xRes();
   const int yRes = F.yRes();
   const int zRes = F.zRes();
@@ -624,6 +669,7 @@ FIELD_3D AssimilateBlocks(const FIELD_3D& F, vector<FIELD_3D> V) {
 
 
 void DoSmartBlockDCT(vector<FIELD_3D>& V, int direction) {
+  TIMER functionTimer(__FUNCTION__);
   // direction determines whether it is DCT or IDCT
 
   // initialize block buffer
@@ -640,12 +686,14 @@ void DoSmartBlockDCT(vector<FIELD_3D>& V, int direction) {
 
 
 void DoBlockDCT(vector<FIELD_3D>& V) {
+  TIMER functionTimer(__FUNCTION__);
   for (auto itr = V.begin(); itr != V.end(); ++itr) {
     DCT_in_place(*itr);
   }
 }
 
 INTEGER_FIELD_3D EncodeBlock(FIELD_3D& F, int blockNumber, COMPRESSION_DATA& compression_data) {
+  TIMER functionTimer(__FUNCTION__);
 
   const int uRes = F.xRes();
   const int vRes = F.yRes();
@@ -684,6 +732,7 @@ return quantized;
 
 
 FIELD_3D DecodeBlock(const INTEGER_FIELD_3D& intBlock, int blockNumber, int col, COMPRESSION_DATA& data, DECOMPRESSION_DATA& decompression_data) {
+  TIMER functionTimer(__FUNCTION__);
 
 int numBlocks = data.get_numBlocks();
 // make sure we are not accessing an invalid block
@@ -713,6 +762,7 @@ double s = sListMatrix(blockNumber, col);
 
 // no IDCT in this one!
 FIELD_3D DecodeBlockSmart(const INTEGER_FIELD_3D& intBlock, int blockNumber, COMPRESSION_DATA& data) { 
+  TIMER functionTimer(__FUNCTION__);
 
   int numBlocks = data.get_numBlocks();
   // make sure we are not accessing an invalid block
@@ -740,6 +790,7 @@ FIELD_3D DecodeBlockSmart(const INTEGER_FIELD_3D& intBlock, int blockNumber, COM
 }
 
 FIELD_3D DecodeBlockOld(const INTEGER_FIELD_3D& intBlock, int blockNumber, COMPRESSION_DATA& data) { 
+  TIMER functionTimer(__FUNCTION__);
 
   int numBlocks = data.get_numBlocks();
   // make sure we are not accessing an invalid block
@@ -768,6 +819,7 @@ FIELD_3D DecodeBlockOld(const INTEGER_FIELD_3D& intBlock, int blockNumber, COMPR
 }
 
 void RunLengthEncodeBinary(const char* filename, int blockNumber, int* zigzaggedArray, VECTOR& blockLengths) { 
+  TIMER functionTimer(__FUNCTION__);
   // blockLengths will be modified to keep track of how long
   // each block is for the decoder
 
@@ -818,6 +870,7 @@ void RunLengthEncodeBinary(const char* filename, int blockNumber, int* zigzagged
 }
 
 void ReadBinaryFileToMemory(const char* filename, short*& allData, COMPRESSION_DATA& compression_data, DECOMPRESSION_DATA& decompression_data) {
+  TIMER functionTimer(__FUNCTION__);
   // allData is passed by reference and will be modified, as will decompression_data
 
   FILE* pFile;
@@ -869,6 +922,7 @@ void ReadBinaryFileToMemory(const char* filename, short*& allData, COMPRESSION_D
 
 
 vector<short> RunLengthDecodeBinary(const short* allData, int blockNumber, VECTOR& blockLengths, VECTOR& blockIndices) {
+  TIMER functionTimer(__FUNCTION__);
   // although blockLengths and blockIndices are passed by reference,
   // they will not be modified.
     
@@ -912,6 +966,7 @@ vector<short> RunLengthDecodeBinary(const short* allData, int blockNumber, VECTO
   
 
   void DeleteIfExists(const char* filename) {
+  TIMER functionTimer(__FUNCTION__);
     struct stat buf;                   // dummy to pass in to stat()
     if (stat(filename, &buf) == 0) {   // if a file named 'filename' already exists
       cout << filename << " exists; deleting it first..." << endl;
@@ -931,6 +986,7 @@ vector<short> RunLengthDecodeBinary(const short* allData, int blockNumber, VECTO
   }
 
   void CompressAndWriteField(const char* filename, const FIELD_3D& F, COMPRESSION_DATA& compression_data) {
+  TIMER functionTimer(__FUNCTION__);
   
     int numBlocks = compression_data.get_numBlocks();
     vector<FIELD_3D> blocks = GetBlocks(F);
@@ -967,6 +1023,7 @@ vector<short> RunLengthDecodeBinary(const short* allData, int blockNumber, VECTO
   }
   
   int ComputeBlockNumber(int row, int col, VEC3I dims, int& blockIndex) {
+  TIMER functionTimer(__FUNCTION__);
     int xRes = dims[0];
     int yRes = dims[1];
     int zRes = dims[2];
@@ -1015,6 +1072,7 @@ vector<short> RunLengthDecodeBinary(const short* allData, int blockNumber, VECTO
   FIELD_3D DecodeFromRowCol(int row, int col, short* allDataX, short* allDataY, short* allDataZ, COMPRESSION_DATA& compression_data,
       DECOMPRESSION_DATA& dataX, DECOMPRESSION_DATA& dataY, DECOMPRESSION_DATA& dataZ) {
 
+  TIMER functionTimer(__FUNCTION__);
     VEC3I dims = compression_data.get_dims();
     double q = compression_data.get_q();
     double power = compression_data.get_power();
@@ -1094,6 +1152,7 @@ vector<short> RunLengthDecodeBinary(const short* allData, int blockNumber, VECTO
 
 
   void WriteMetaData(const char* filename, const MATRIX& sListMatrix, const MATRIX& blockLengthsMatrix, const MATRIX& blockIndicesMatrix) {
+  TIMER functionTimer(__FUNCTION__);
     FILE* pFile;
     pFile = fopen(filename, "wb");
     if (pFile == NULL) {
@@ -1133,12 +1192,14 @@ vector<short> RunLengthDecodeBinary(const short* allData, int blockNumber, VECTO
 
 
 void PrefixBinary(string prefix, string filename, string newFile) {
+  TIMER functionTimer(__FUNCTION__);
   string command = "cat " + prefix + ' ' + filename + "> " + newFile;
   const char* command_c = command.c_str();
   system(command_c);
 }
 
 void CleanUpPrefix(const char* prefix, const char* filename) {
+  TIMER functionTimer(__FUNCTION__);
   string prefix_string(prefix);
   string filename_string(filename);
   string command1 = "rm " + prefix_string;
@@ -1151,6 +1212,7 @@ void CleanUpPrefix(const char* prefix, const char* filename) {
 }
 
 void CompressAndWriteMatrixComponent(const char* filename, const MatrixXd& U, int component, COMPRESSION_DATA& data) {
+  TIMER functionTimer(__FUNCTION__);
 
   assert( component >= 0 && component < 3 );
 
