@@ -9,3 +9,4 @@ MATRIX_COMPRESSION_DATA::MATRIX_COMPRESSION_DATA(const COMPRESSION_DATA& data, s
   _decompression_dataX(decompression_dataX), _decompression_dataY(decompression_dataY), _decompression_dataZ(decompression_dataZ) {}
   
 
+MATRIX_COMPRESSION_DATA::~MATRIX_COMPRESSION_DATA() {}

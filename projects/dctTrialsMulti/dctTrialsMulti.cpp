@@ -87,7 +87,9 @@ void PreprocessEncoder(COMPRESSION_DATA& data);
 
 int main(int argc, char* argv[]) {
   
-TIMER functionTimer(__FUNCTION__);
+  TIMER functionTimer(__FUNCTION__);
+  
+  EIGEN::read(path_to_U, g_U);
 
   // Compression parameters    
   const int nBits = 16;
@@ -125,18 +127,18 @@ TIMER functionTimer(__FUNCTION__);
 
   // write a binary file for each scalar field component
 
-  EIGEN::read(path_to_U, g_U);
-  
+  /* 
   const char* filename = "runLength.bin";
   for (int component = 0; component < 3; component++) {
     cout << "Writing component: " << component << endl;
     CompressAndWriteMatrixComponent(filename, g_U, component, compression_data);
   }
-  
+  */
   //////////////////////////////////////////////////////////////////
   // currently in debug mode so no compression damping is happening!
   //////////////////////////////////////////////////////////////////
 
+  
   // preprocessing for the decoder
   short* allDataX;
   short* allDataY;
@@ -154,12 +156,16 @@ TIMER functionTimer(__FUNCTION__);
   MATRIX_COMPRESSION_DATA matrixData(compression_data, allDataX, allDataY, allDataZ, 
       decompression_dataX, decompression_dataY, decompression_dataZ);
 
+
+
+ 
   // test the decompressor on a (row, col)   
  
-  int row = 11;
-  int col = 47;
+  int row = 8;
+  int col = 32;
 
-  double testValue = DecodeFromRowCol(row, col, matrixData); 
+  double testValue = DecodeFromRowCol(row, col, matrixData);
+
   cout << "Test value: " << testValue << endl;
   double trueValue = g_U(row, col);
   cout << "True value: " << trueValue << endl;
@@ -175,6 +181,7 @@ TIMER functionTimer(__FUNCTION__);
   // EIGEN::write("sub23.matrix", subMatrix);
 
   subMatrix.write("sub23.matrix");
+  
   
   TIMER::printTimings();
 
@@ -196,6 +203,9 @@ void PreprocessEncoder(COMPRESSION_DATA& data) {
   // precompute and set the damping array.
   // this can only be executed after q and power are initialized!
   data.set_dampingArray();
+
+  // this can actually be executed at any time
+  data.set_zigzagArray();
    
   int xPadding;
   int yPadding;

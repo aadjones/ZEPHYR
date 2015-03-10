@@ -12,6 +12,8 @@ class MATRIX_COMPRESSION_DATA {
     MATRIX_COMPRESSION_DATA(const COMPRESSION_DATA& data, short* const& dataX, short* const& dataY, short* const& dataZ,
         const DECOMPRESSION_DATA& decompression_dataX, const DECOMPRESSION_DATA& decompression_dataY, const DECOMPRESSION_DATA& decompression_dataZ);
 
+    ~MATRIX_COMPRESSION_DATA();
+
    
     // getters
     

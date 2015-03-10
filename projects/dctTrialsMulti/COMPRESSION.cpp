@@ -237,6 +237,7 @@ void GetScalarFields(const VECTOR3_FIELD_3D& V, FIELD_3D& X, FIELD_3D& Y, FIELD_
   Z = V.scalarField(2);
 }
 
+/*
 VECTOR ZigzagFlatten(const INTEGER_FIELD_3D& F) {
   TIMER functionTimer(__FUNCTION__);
   int xRes = F.xRes();
@@ -260,7 +261,28 @@ VECTOR ZigzagFlatten(const INTEGER_FIELD_3D& F) {
   return result;
 
 }
+*/
 
+VECTOR ZigzagFlattenSmart(const INTEGER_FIELD_3D& F, const INTEGER_FIELD_3D& zigzagArray) {
+  TIMER functionTimer(__FUNCTION__);
+  int xRes = F.xRes();
+  int yRes = F.yRes();
+  int zRes = F.zRes();
+  assert(xRes == 8 && yRes == 8 && zRes == 8);
+
+  VECTOR result(xRes * yRes * zRes);
+  for (int z = 0; z < zRes; z++) {
+    for (int y = 0; y < yRes; y++) {
+      for (int x = 0; x < xRes; x++) {
+        int index = zigzagArray(x, y, z);
+        double data = F(x, y, z);
+        result[index] = data;
+      }
+    }
+  }
+  return result;
+}
+/*
 INTEGER_FIELD_3D ZigzagUnflatten(const VECTOR& V) {
   TIMER functionTimer(__FUNCTION__);
   // assumes original dimensions were 8 x 8 x 8
@@ -284,7 +306,24 @@ INTEGER_FIELD_3D ZigzagUnflatten(const VECTOR& V) {
   }
   return result;
 }
-
+*/
+INTEGER_FIELD_3D ZigzagUnflattenSmart(const VECTOR& V, const INTEGER_FIELD_3D& zigzagArray) {
+  TIMER functionTimer(__FUNCTION__);
+  // assumes original dimensions were 8 x 8 x 8
+  const int xRes = 8;
+  const int yRes = 8;
+  const int zRes = 8;
+  INTEGER_FIELD_3D result(xRes, yRes, zRes);
+  for (int z = 0; z < zRes; z++) {
+    for (int y = 0; y < yRes; y++) {
+      for (int x = 0; x < xRes; x++) {
+        int index = zigzagArray(x, y, z);
+        result(x, y, z) = V[index];
+      }
+    }
+  }
+  return result;
+}
 FIELD_3D DCT(FIELD_3D& F) {
   TIMER functionTimer(__FUNCTION__);
   double* in;
@@ -1025,6 +1064,7 @@ vector<short> RunLengthDecodeBinary(const short* allData, int blockNumber, VECTO
   TIMER functionTimer(__FUNCTION__);
   
     int numBlocks = compression_data.get_numBlocks();
+    INTEGER_FIELD_3D zigzagArray = compression_data.get_zigzagArray();
     vector<FIELD_3D> blocks = GetBlocks(F);
 
     // Initialize the relevant variables before looping through all the blocks
@@ -1045,7 +1085,8 @@ vector<short> RunLengthDecodeBinary(const short* allData, int blockNumber, VECTO
       block_i = blocks[i];
       // performs quantization and damping. updates sList
       intEncoded_i = EncodeBlock(block_i, i, compression_data);
-      zigzagged_i = ZigzagFlatten(intEncoded_i);
+      // zigzagged_i = ZigzagFlatten(intEncoded_i);
+      zigzagged_i = ZigzagFlattenSmart(intEncoded_i, zigzagArray);
       zigzagArray_i = CastToInt(zigzagged_i, zigzagArray_i);
       // performs run-length encoding. updates blockLengths
       RunLengthEncodeBinary(filename, i, zigzagArray_i, blockLengths);  
@@ -1151,23 +1192,23 @@ double DecodeFromRowCol(int row, int col, const MATRIX_COMPRESSION_DATA& data) {
 
   COMPRESSION_DATA compression_data = data.get_compression_data();
   VEC3I dims = compression_data.get_dims();
+  INTEGER_FIELD_3D zigzagArray = compression_data.get_zigzagArray();
   // double q = compression_data.get_q();
   // double power = compression_data.get_power();
   
   short* allDataX = data.get_dataX();
   short* allDataY = data.get_dataY();
   short* allDataZ = data.get_dataZ();
-
   DECOMPRESSION_DATA dataX = data.get_decompression_dataX();
   DECOMPRESSION_DATA dataY = data.get_decompression_dataY();
   DECOMPRESSION_DATA dataZ = data.get_decompression_dataZ();
+
 
   vector<short> decoded_runLength;
 
   // dummy initialization
   int blockIndex = 0;
   int blockNumber = ComputeBlockNumber(row, col, dims, blockIndex);
-
   if (row % 3 == 0) { // X coordinate
     MATRIX blockLengthsMatrix = dataX.get_blockLengthsMatrix();
     MATRIX blockIndicesMatrix = dataX.get_blockIndicesMatrix();
@@ -1177,11 +1218,10 @@ double DecodeFromRowCol(int row, int col, const MATRIX_COMPRESSION_DATA& data) {
     VECTOR blockLengths = blockLengthsMatrix.getColumn(col);
     VECTOR blockIndices = blockIndicesMatrix.getColumn(col);
     VECTOR sList = sListMatrix.getColumn(col);
-
     decoded_runLength = RunLengthDecodeBinary(allDataX, blockNumber, blockLengths, blockIndices); 
 
     VECTOR decoded_runLengthVector = CastIntToVector(decoded_runLength);
-    INTEGER_FIELD_3D unzigzagged = ZigzagUnflatten(decoded_runLengthVector);
+    INTEGER_FIELD_3D unzigzagged = ZigzagUnflattenSmart(decoded_runLengthVector, zigzagArray);
     FIELD_3D decoded_block = DecodeBlock(unzigzagged, blockNumber, col, compression_data, dataX); 
     // cout << "desired value is: " << decoded_block[blockIndex] << endl;
     double result = decoded_block[blockIndex];
@@ -1204,7 +1244,7 @@ double DecodeFromRowCol(int row, int col, const MATRIX_COMPRESSION_DATA& data) {
     decoded_runLength = RunLengthDecodeBinary(allDataY, blockNumber, blockLengths, blockIndices); 
 
     VECTOR decoded_runLengthVector = CastIntToVector(decoded_runLength);
-    INTEGER_FIELD_3D unzigzagged = ZigzagUnflatten(decoded_runLengthVector);
+    INTEGER_FIELD_3D unzigzagged = ZigzagUnflattenSmart(decoded_runLengthVector, zigzagArray);
     FIELD_3D decoded_block = DecodeBlock(unzigzagged, blockNumber, col, compression_data, dataY); 
     // cout << "desired value is: " << decoded_block[blockIndex] << endl;
     double result = decoded_block[blockIndex];
@@ -1226,7 +1266,7 @@ double DecodeFromRowCol(int row, int col, const MATRIX_COMPRESSION_DATA& data) {
     decoded_runLength = RunLengthDecodeBinary(allDataZ, blockNumber, blockLengths, blockIndices); 
 
     VECTOR decoded_runLengthVector = CastIntToVector(decoded_runLength);
-    INTEGER_FIELD_3D unzigzagged = ZigzagUnflatten(decoded_runLengthVector);
+    INTEGER_FIELD_3D unzigzagged = ZigzagUnflattenSmart(decoded_runLengthVector, zigzagArray);
     FIELD_3D decoded_block = DecodeBlock(unzigzagged, blockNumber, col, compression_data, dataZ);
     // cout << "desired value is: " << decoded_block[blockIndex] << endl;
     double result = decoded_block[blockIndex];
