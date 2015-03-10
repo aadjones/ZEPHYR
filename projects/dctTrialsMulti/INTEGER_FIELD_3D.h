@@ -35,10 +35,17 @@ class INTEGER_FIELD_3D {
     // Return a flattened VECTOR of the array contents
     VECTOR flattened() const;
     VECTOR flattenedRow() const;
+    
+    // set all entries to zero
+    void clear();
+
+    // Resize to the desired dimensions and set entries to zero
+    void resizeAndWipe(int xRes, int yRes, int zRes);
 
     // Overloaded operators
     
     INTEGER_FIELD_3D& operator*=(const double& alpha);
+    INTEGER_FIELD_3D& operator=(const INTEGER_FIELD_3D& A);
 
     // Get a subfield
     INTEGER_FIELD_3D subfield(const int xBegin, const int xEnd, 

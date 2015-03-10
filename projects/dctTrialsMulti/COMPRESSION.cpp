@@ -561,7 +561,7 @@ FIELD_3D DoSmartBlockCompression(FIELD_3D& F, COMPRESSION_DATA& compression_data
   DoSmartBlockDCT(blocks, 1);
   cout << "...done!" << endl;
   int blockNumber = 0;
-  int percent = 0;
+  double percent = 0.0;
   cout << "Doing quantization on each block..." << endl;
   for (auto itr = blocks.begin(); itr != blocks.end(); ++itr) {
 
@@ -578,7 +578,8 @@ FIELD_3D DoSmartBlockCompression(FIELD_3D& F, COMPRESSION_DATA& compression_data
     int checkPoint3 = (3 * (numBlocks - 1)) / 4;
     int checkPoint4 = numBlocks - 1;
 
-    if (blockNumber == checkPoint1 || blockNumber == checkPoint2 || blockNumber == checkPoint3 || blockNumber == checkPoint4) {
+    if ( (blockNumber == checkPoint1) || (blockNumber == checkPoint2) ||
+       ( blockNumber == checkPoint3) || (blockNumber == checkPoint4)) {
       cout << "      Percent complete: " << percent << flush;
       if (blockNumber == checkPoint4) {
         cout << endl;

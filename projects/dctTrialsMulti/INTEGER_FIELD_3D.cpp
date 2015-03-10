@@ -8,7 +8,11 @@ using std::cout;
 using std::endl;
 using std::vector;
 
-INTEGER_FIELD_3D::INTEGER_FIELD_3D() {}
+INTEGER_FIELD_3D::INTEGER_FIELD_3D() : 
+  _xRes(-1), _yRes(-1), _zRes(-1), _data(NULL)
+{
+}
+
 
 INTEGER_FIELD_3D::INTEGER_FIELD_3D(const int& xRes, const int& yRes, const int& zRes) :
   _xRes(xRes), _yRes(yRes), _zRes(zRes)
@@ -84,6 +88,49 @@ VECTOR INTEGER_FIELD_3D::flattenedRow() const {
   return final;
 }
 
+///////////////////////////////////////////////////////////////////////
+///////////////////////////////////////////////////////////////////////
+
+
+void INTEGER_FIELD_3D::clear()
+{
+  for (int x = 0; x < _totalCells; x++)
+    _data[x] = 0;
+}
+
+void INTEGER_FIELD_3D::resizeAndWipe(int xRes, int yRes, int zRes)
+{
+  if (_xRes == xRes && _yRes == yRes && _zRes == zRes)
+  {
+    clear();
+
+    return;
+  }
+
+  if (_data) delete[] _data;
+
+  _xRes = xRes;
+  _yRes = yRes;
+  _zRes = zRes;
+  _totalCells = _xRes * _yRes * _zRes;
+
+  try {
+    _data = new int[_totalCells];
+  }
+  catch(std::bad_alloc& exc)
+  {
+    cout << " Failed to allocate " << _xRes << " " << _yRes << " " << _zRes << " INTEGER_FIELD_3D!" << endl;
+    double bytes = _xRes * _yRes * _zRes * sizeof(int);
+    cout <<  bytes / pow(2.0,20.0) << " MB needed" << endl;
+    exit(0);
+  }
+
+  for (int x = 0; x < _totalCells; x++)
+    _data[x] = 0;
+}
+
+///////////////////////////////////////////////////////////////////////
+///////////////////////////////////////////////////////////////////////
 // Overloaded operators
 INTEGER_FIELD_3D& INTEGER_FIELD_3D::operator*=(const double& alpha)
 {
@@ -123,6 +170,18 @@ INTEGER_FIELD_3D INTEGER_FIELD_3D::subfield(const int xBegin, const int xEnd,
     }
   }
   return final;
+}
+
+///////////////////////////////////////////////////////////////////////
+///////////////////////////////////////////////////////////////////////
+INTEGER_FIELD_3D& INTEGER_FIELD_3D::operator=(const INTEGER_FIELD_3D& A)
+{
+  resizeAndWipe(A.xRes(), A.yRes(), A.zRes());
+
+  for (int x = 0; x < _totalCells; x++)
+    _data[x] = A[x];
+
+  return *this;
 }
 
 // Swap contents with annother 3d integer field

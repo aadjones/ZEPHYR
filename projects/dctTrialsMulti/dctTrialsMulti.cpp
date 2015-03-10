@@ -47,26 +47,27 @@ using std::string;
 ////////////////////////////////////////////////////////
 
 // string path_to_U("/Users/aaron/Desktop/U.final.uncompressed.matrix");
-// string path_to_U("/Volumes/DataDrive/data/reduced.stam.200.vorticity.1.5/U.preadvect.matrix");
-string path_to_U("U.final.donotmodify.matrix.48");
+string path_to_U("/Volumes/DataDrive/data/reduced.stam.200.vorticity.1.5/U.preadvect.matrix");
+// string path_to_U("U.final.donotmodify.matrix.48");
 
 // make sure the read-in matrix agrees with the dimensions specified!
 
-
+/*
 const int g_xRes =    46;
 const int g_yRes =    62;
 const int g_zRes =    46;
 const VEC3I g_dims(g_xRes, g_yRes, g_zRes);
 const int g_numRows = 3 * g_xRes * g_yRes * g_zRes;
 const int g_numCols = 48;
+*/
 
-/*
 const int g_xRes = 198;
 const int g_yRes = 264;
 const int g_zRes = 198;
+const VEC3I g_dims(g_xRes, g_yRes, g_zRes);
 const int g_numRows = 3 * g_xRes * g_yRes * g_zRes;
 const int g_numCols = 151;
-*/
+
 
 MatrixXd g_U(g_numRows, g_numCols);
 
@@ -105,7 +106,7 @@ int main(int argc, char* argv[]) {
   // Old version to get the distorted matrix. Currenty has memory leak problems
   // for huge matrices!!!
    
-  /*
+  
   vector<VectorXd> columnList;
   for (int col = 0; col < g_numCols; col++) {
     cout << "Column: " << col << endl;
@@ -119,8 +120,8 @@ int main(int argc, char* argv[]) {
   }
   MatrixXd compressedResult = EIGEN::buildFromColumns(columnList);
 
-  EIGEN::write("newcompressedUhuge.matrix", compressedResult);
-  */
+  EIGEN::write("newcompressedUhuge4preadvect.matrix", compressedResult);
+  
 
 
 
@@ -133,10 +134,7 @@ int main(int argc, char* argv[]) {
     cout << "Writing component: " << component << endl;
     CompressAndWriteMatrixComponent(filename, g_U, component, compression_data);
   }
-  */
-  //////////////////////////////////////////////////////////////////
-  // currently in debug mode so no compression damping is happening!
-  //////////////////////////////////////////////////////////////////
+  
 
   
   // preprocessing for the decoder
@@ -181,7 +179,7 @@ int main(int argc, char* argv[]) {
   // EIGEN::write("sub23.matrix", subMatrix);
 
   subMatrix.write("sub23.matrix");
-  
+  */ 
   
   TIMER::printTimings();
 
