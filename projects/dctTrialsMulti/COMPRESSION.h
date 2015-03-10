@@ -15,6 +15,7 @@
 #include "INTEGER_FIELD_3D.h"
 #include "COMPRESSION_DATA.h"
 #include "DECOMPRESSION_DATA.h"
+#include "MATRIX_COMPRESSION_DATA.h"
 
 //////////////////////////////////////////////////////// 
 // Function signatures
@@ -161,13 +162,10 @@ void CompressAndWriteField(const char* filename, const FIELD_3D& F, COMPRESSION_
 int ComputeBlockNumber(int row, int col, VEC3I dims, int& blockIndex);
 
 // Given a (row, col) entry of U.final.matrix, decode the corresponding block and entry
-double DecodeFromRowCol(int row, int col, short* const& allDataX, short* const& allDataY, short* const& allDataZ, const COMPRESSION_DATA& compression_data,
-    const DECOMPRESSION_DATA& dataX, const DECOMPRESSION_DATA& dataY, const DECOMPRESSION_DATA& dataZ);
+double DecodeFromRowCol(int row, int col, const MATRIX_COMPRESSION_DATA& data); 
 
-MATRIX GetSubmatrix(int startRow, int endRow, short* allDataX, short* allDataY, short* allDataZ, COMPRESSION_DATA& compression_data,
-    DECOMPRESSION_DATA& dataX, DECOMPRESSION_DATA& dataY, DECOMPRESSION_DATA& dataZ);
-
-
+MATRIX GetSubmatrix(int startRow, int numRows, const MATRIX_COMPRESSION_DATA& data);
+    
 void WriteMetaData(const char* filename, const MATRIX& sListMatrix, const MATRIX& blockLengths, const MATRIX& blockIndices);
 
 void PrefixBinary(string prefix, string filename, string newFile); 

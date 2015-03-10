@@ -34,7 +34,6 @@
 #include "BIG_MATRIX.h"
 #include "SIMPLE_PARSER.h"
 #include "COMPRESSION.h"
-#include "ARRAY_4D.h"
 #include <string>
 #include <cmath>
 #include <cfenv>
@@ -57,6 +56,7 @@ string path_to_U("U.final.donotmodify.matrix.48");
 const int g_xRes =    46;
 const int g_yRes =    62;
 const int g_zRes =    46;
+const VEC3I g_dims(g_xRes, g_yRes, g_zRes);
 const int g_numRows = 3 * g_xRes * g_yRes * g_zRes;
 const int g_numCols = 48;
 
@@ -70,106 +70,149 @@ const int g_numCols = 151;
 
 MatrixXd g_U(g_numRows, g_numCols);
 
-///////////////////////////////////////////////////////
+////////////////////////////////////////////////////////
 // End Globals
 ////////////////////////////////////////////////////////
 
+////////////////////////////////////////////////////////
+// Function Declarations
+////////////////////////////////////////////////////////
+
+// set the damping matrix and compute the number of blocks
+void PreprocessEncoder(COMPRESSION_DATA& data);
 
 ////////////////////////////////////////////////////////
 // Main
 ////////////////////////////////////////////////////////
 
-  int main(int argc, char* argv[]) {
-    
-  TIMER functionTimer(__FUNCTION__);
+int main(int argc, char* argv[]) {
+  
+TIMER functionTimer(__FUNCTION__);
 
-    fesetround(FE_TONEAREST);
-    
-    const int nBits = 16;        // don't exceed 16 if using 'short' in the compressor!
-    const double q = 1.0;        // change this to modify compression rate
-    const double power = 4.0;    // and especially this!
-    VEC3I dims(g_xRes, g_yRes, g_zRes);
-    COMPRESSION_DATA compression_data(dims, q, power, nBits);
-    compression_data.set_numCols(g_numCols);
+  // Compression parameters    
+  const int nBits = 16;
+  const double q = 1.0;
+  const double power = 4.0;
 
-    // precompute the damping array
-    compression_data.set_dampingArray();
-    
-    EIGEN::read(path_to_U, g_U);
+  // set the parameters in compression data
+  COMPRESSION_DATA compression_data(g_dims, g_numCols, q, power, nBits);
+
+  // compute some additional parameters for compression data
+  PreprocessEncoder(compression_data);
+
+  // Old version to get the distorted matrix. Currenty has memory leak problems
+  // for huge matrices!!!
    
-    int xPadding;
-    int yPadding;
-    int zPadding;
-    // fill in the appropriate paddings
-    GetPaddings(dims, xPadding, yPadding, zPadding);
-    // update to the padded resolutions
-    int xRes = g_xRes + xPadding;
-    int yRes = g_yRes + yPadding;
-    int zRes = g_zRes + zPadding;
-    // calculates number of blocks, assuming an 8 x 8 x 8 block size.
-    int numBlocks = xRes * yRes * zRes / (8 * 8 * 8);
-    compression_data.set_numBlocks(numBlocks);
-    
-    const char* filename = "runLength.bin";
-    
-    /* 
-    vector<VectorXd> columnList;
-    for (int col = 0; col < g_numCols; col++) {
-      cout << "Column: " << col << endl;
-      VectorXd v = g_U.col(col);
-      VECTOR v_vector = EIGEN::convert(v);
-      VECTOR3_FIELD_3D V(v_vector, g_xRes, g_yRes, g_zRes);
-      VECTOR3_FIELD_3D compressedV = SmartBlockCompressVectorField(V, compression_data);
-      VECTOR flattenedV = compressedV.flattened();
-      VectorXd flattenedV_eigen = EIGEN::convert(flattenedV);
-      columnList.push_back(flattenedV_eigen);
-    }
-    MatrixXd compressedResult = EIGEN::buildFromColumns(columnList);
-
-    EIGEN::write("newcompressedUhuge.matrix", compressedResult);
-    */
-
-
-    // write a binary file for each scalar field component
-   
-    /* 
-    for (int component = 0; component < 3; component++) {
-      cout << "Writing component: " << component << endl;
-      CompressAndWriteMatrixComponent(filename, g_U, component, compression_data);
-    }
-    */
-    
-    // currently in debug mode so no compression damping is happening!
-   
-    
-    short* allDataX;
-    short* allDataY;
-    short* allDataZ;
-    DECOMPRESSION_DATA decompression_dataX;
-    DECOMPRESSION_DATA decompression_dataY;
-    DECOMPRESSION_DATA decompression_dataZ;
-    // fill allData and decompression_data
-    ReadBinaryFileToMemory("runLength.binX", allDataX, compression_data, decompression_dataX); 
-    ReadBinaryFileToMemory("runLength.binY", allDataY, compression_data, decompression_dataY);
-    ReadBinaryFileToMemory("runLength.binZ", allDataZ, compression_data, decompression_dataZ);
-    
-    // test the decompressor on a (row, col)   
-     
-    int row = 23;
-    int col = 0;
-     
-    double testValue = DecodeFromRowCol(row, col, allDataX, allDataY, allDataZ, compression_data, decompression_dataX, decompression_dataY, decompression_dataZ);
-    cout << "Test value: " << testValue << endl;
-    double trueValue = g_U(row, col);
-    cout << "True value: " << trueValue << endl;
-    
-    
-    MATRIX subMatrix = GetSubmatrix(23, 26, allDataX, allDataY, allDataZ, compression_data, decompression_dataX, decompression_dataY, decompression_dataZ);
-    // EIGEN::write("sub23.matrix", subMatrix);
-    subMatrix.write("sub23.matrix");
-   
-    
-
-    TIMER::printTimings();
-    return 0;
+  /*
+  vector<VectorXd> columnList;
+  for (int col = 0; col < g_numCols; col++) {
+    cout << "Column: " << col << endl;
+    VectorXd v = g_U.col(col);
+    VECTOR v_vector = EIGEN::convert(v);
+    VECTOR3_FIELD_3D V(v_vector, g_xRes, g_yRes, g_zRes);
+    VECTOR3_FIELD_3D compressedV = SmartBlockCompressVectorField(V, compression_data);
+    VECTOR flattenedV = compressedV.flattened();
+    VectorXd flattenedV_eigen = EIGEN::convert(flattenedV);
+    columnList.push_back(flattenedV_eigen);
   }
+  MatrixXd compressedResult = EIGEN::buildFromColumns(columnList);
+
+  EIGEN::write("newcompressedUhuge.matrix", compressedResult);
+  */
+
+
+
+
+  // write a binary file for each scalar field component
+
+  EIGEN::read(path_to_U, g_U);
+  
+  const char* filename = "runLength.bin";
+  for (int component = 0; component < 3; component++) {
+    cout << "Writing component: " << component << endl;
+    CompressAndWriteMatrixComponent(filename, g_U, component, compression_data);
+  }
+  
+  //////////////////////////////////////////////////////////////////
+  // currently in debug mode so no compression damping is happening!
+  //////////////////////////////////////////////////////////////////
+
+  // preprocessing for the decoder
+  short* allDataX;
+  short* allDataY;
+  short* allDataZ;
+  DECOMPRESSION_DATA decompression_dataX;
+  DECOMPRESSION_DATA decompression_dataY;
+  DECOMPRESSION_DATA decompression_dataZ;
+
+  // fill allData and decompression_data
+  ReadBinaryFileToMemory("runLength.binX", allDataX, compression_data, decompression_dataX); 
+  ReadBinaryFileToMemory("runLength.binY", allDataY, compression_data, decompression_dataY);
+  ReadBinaryFileToMemory("runLength.binZ", allDataZ, compression_data, decompression_dataZ);
+
+  // set the entirety of the data for the decoder into one package
+  MATRIX_COMPRESSION_DATA matrixData(compression_data, allDataX, allDataY, allDataZ, 
+      decompression_dataX, decompression_dataY, decompression_dataZ);
+
+  // test the decompressor on a (row, col)   
+ 
+  int row = 11;
+  int col = 47;
+
+  double testValue = DecodeFromRowCol(row, col, matrixData); 
+  cout << "Test value: " << testValue << endl;
+  double trueValue = g_U(row, col);
+  cout << "True value: " << trueValue << endl;
+  
+  // use the decompressor to get a 3 x numCols submatrix of U
+  
+  int startRow = 23;
+  int numRows = 3;
+  MATRIX subMatrix = GetSubmatrix(startRow, numRows, matrixData); 
+  
+  // EIGEN is giving a bizarre malloc error, calling free on something that has already been freed
+  // (or never been allocated)
+  // EIGEN::write("sub23.matrix", subMatrix);
+
+  subMatrix.write("sub23.matrix");
+  
+  TIMER::printTimings();
+
+  return 0;
+}
+
+
+
+void PreprocessEncoder(COMPRESSION_DATA& data) {
+
+  // set integer rounding 'to nearest' 
+  fesetround(FE_TONEAREST);
+  
+  VEC3I dims = data.get_dims();
+  int xRes = dims[0];
+  int yRes = dims[1];
+  int zRes = dims[2];
+  
+  // precompute and set the damping array.
+  // this can only be executed after q and power are initialized!
+  data.set_dampingArray();
+   
+  int xPadding;
+  int yPadding;
+  int zPadding;
+
+  // fill in the appropriate paddings
+  GetPaddings(dims, xPadding, yPadding, zPadding);
+
+  // update to the padded resolutions
+  xRes += xPadding;
+  yRes += yPadding;
+  zRes += zPadding;
+
+  // calculates number of blocks, assuming an 8 x 8 x 8 block size.
+  int numBlocks = xRes * yRes * zRes / (8 * 8 * 8);
+  data.set_numBlocks(numBlocks);
+  
+}
+  
+

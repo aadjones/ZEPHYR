@@ -2,7 +2,7 @@ include ../include.mk
 
 # calls:
 CC         = g++
-CFLAGS     = ${CFLAGS_COMMON} -I../../src/cubature -I../../src/Eigen/
+CFLAGS     = ${CFLAGS_COMMON} -I../../src/cubature -I../../src/Eigen/ 
 LDFLAGS    = ${LDFLAGS_COMMON}
 EXECUTABLE = ../../bin/dctTrialsMulti
 
@@ -29,6 +29,7 @@ SOURCES    = dctTrialsMulti.cpp \
 						 COMPRESSION.cpp \
 						 COMPRESSION_DATA.cpp \
 						 DECOMPRESSION_DATA.cpp \
+						 MATRIX_COMPRESSION_DATA.cpp \
 						 INTEGER_FIELD_3D.cpp
 
 OBJECTS    = $(SOURCES:.cpp=.o)

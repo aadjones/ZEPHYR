@@ -13,6 +13,7 @@
 #include "INTEGER_FIELD_3D.h"
 #include "COMPRESSION_DATA.h"
 #include "DECOMPRESSION_DATA.h"
+#include "MATRIX_COMPRESSION_DATA.h"
 #include "FIELD_3D.h"
 
 using std::vector;
@@ -1144,100 +1145,109 @@ vector<short> RunLengthDecodeBinary(const short* allData, int blockNumber, VECTO
   }
 
   
-  double DecodeFromRowCol(int row, int col, short* const& allDataX, short* const& allDataY, short* const& allDataZ, const COMPRESSION_DATA& compression_data,
-      const DECOMPRESSION_DATA& dataX, const DECOMPRESSION_DATA& dataY, const DECOMPRESSION_DATA& dataZ) {
-
+double DecodeFromRowCol(int row, int col, const MATRIX_COMPRESSION_DATA& data) { 
+     
   TIMER functionTimer(__FUNCTION__);
-    VEC3I dims = compression_data.get_dims();
-    double q = compression_data.get_q();
-    double power = compression_data.get_power();
-    vector<short> decoded_runLength;
 
-    // dummy initialization
-    int blockIndex = 0;
-    int blockNumber = ComputeBlockNumber(row, col, dims, blockIndex);
-
-    if (row % 3 == 0) { // X coordinate
-      MATRIX blockLengthsMatrix = dataX.get_blockLengthsMatrix();
-      MATRIX blockIndicesMatrix = dataX.get_blockIndicesMatrix();
-      MATRIX sListMatrix = dataX.get_sListMatrix();
-          
-      
-      VECTOR blockLengths = blockLengthsMatrix.getColumn(col);
-      VECTOR blockIndices = blockIndicesMatrix.getColumn(col);
-      VECTOR sList = sListMatrix.getColumn(col);
- 
-      decoded_runLength = RunLengthDecodeBinary(allDataX, blockNumber, blockLengths, blockIndices); 
-
-      VECTOR decoded_runLengthVector = CastIntToVector(decoded_runLength);
-      INTEGER_FIELD_3D unzigzagged = ZigzagUnflatten(decoded_runLengthVector);
-      FIELD_3D decoded_block = DecodeBlock(unzigzagged, blockNumber, col, compression_data, dataX); 
-      // cout << "desired value is: " << decoded_block[blockIndex] << endl;
-      double result = decoded_block[blockIndex];
-      return result;
-
-    }
-
-    else if (row % 3 == 1) { // Y coordinate
-    
-      MATRIX blockLengthsMatrix = dataY.get_blockLengthsMatrix();
-      MATRIX blockIndicesMatrix = dataY.get_blockIndicesMatrix();
-      MATRIX sListMatrix = dataY.get_sListMatrix();
-
-
- 
-      VECTOR blockLengths = blockLengthsMatrix.getColumn(col);
-      VECTOR blockIndices = blockIndicesMatrix.getColumn(col);
-      VECTOR sList = sListMatrix.getColumn(col);
-
-      decoded_runLength = RunLengthDecodeBinary(allDataY, blockNumber, blockLengths, blockIndices); 
-
-      VECTOR decoded_runLengthVector = CastIntToVector(decoded_runLength);
-      INTEGER_FIELD_3D unzigzagged = ZigzagUnflatten(decoded_runLengthVector);
-      FIELD_3D decoded_block = DecodeBlock(unzigzagged, blockNumber, col, compression_data, dataY); 
-      // cout << "desired value is: " << decoded_block[blockIndex] << endl;
-      double result = decoded_block[blockIndex];
-      return result;
-    
-    }
-
-    else { // Z coordinate
-     
-      MATRIX blockLengthsMatrix = dataZ.get_blockLengthsMatrix();
-      MATRIX blockIndicesMatrix = dataZ.get_blockIndicesMatrix();
-      MATRIX sListMatrix = dataZ.get_sListMatrix();
-
-
-      VECTOR blockLengths = blockLengthsMatrix.getColumn(col);
-      VECTOR blockIndices = blockIndicesMatrix.getColumn(col);
-      VECTOR sList = sListMatrix.getColumn(col);
-
-      decoded_runLength = RunLengthDecodeBinary(allDataZ, blockNumber, blockLengths, blockIndices); 
-
-      VECTOR decoded_runLengthVector = CastIntToVector(decoded_runLength);
-      INTEGER_FIELD_3D unzigzagged = ZigzagUnflatten(decoded_runLengthVector);
-      FIELD_3D decoded_block = DecodeBlock(unzigzagged, blockNumber, col, compression_data, dataZ);
-      // cout << "desired value is: " << decoded_block[blockIndex] << endl;
-      double result = decoded_block[blockIndex];
-      return result;
-     
-    }
-  }
+  COMPRESSION_DATA compression_data = data.get_compression_data();
+  VEC3I dims = compression_data.get_dims();
+  // double q = compression_data.get_q();
+  // double power = compression_data.get_power();
   
-  MATRIX GetSubmatrix(int startRow, int endRow, short* allDataX, short* allDataY, short* allDataZ, COMPRESSION_DATA& compression_data,
-      DECOMPRESSION_DATA& dataX, DECOMPRESSION_DATA& dataY, DECOMPRESSION_DATA& dataZ) {
+  short* allDataX = data.get_dataX();
+  short* allDataY = data.get_dataY();
+  short* allDataZ = data.get_dataZ();
+
+  DECOMPRESSION_DATA dataX = data.get_decompression_dataX();
+  DECOMPRESSION_DATA dataY = data.get_decompression_dataY();
+  DECOMPRESSION_DATA dataZ = data.get_decompression_dataZ();
+
+  vector<short> decoded_runLength;
+
+  // dummy initialization
+  int blockIndex = 0;
+  int blockNumber = ComputeBlockNumber(row, col, dims, blockIndex);
+
+  if (row % 3 == 0) { // X coordinate
+    MATRIX blockLengthsMatrix = dataX.get_blockLengthsMatrix();
+    MATRIX blockIndicesMatrix = dataX.get_blockIndicesMatrix();
+    MATRIX sListMatrix = dataX.get_sListMatrix();
+        
+    
+    VECTOR blockLengths = blockLengthsMatrix.getColumn(col);
+    VECTOR blockIndices = blockIndicesMatrix.getColumn(col);
+    VECTOR sList = sListMatrix.getColumn(col);
+
+    decoded_runLength = RunLengthDecodeBinary(allDataX, blockNumber, blockLengths, blockIndices); 
+
+    VECTOR decoded_runLengthVector = CastIntToVector(decoded_runLength);
+    INTEGER_FIELD_3D unzigzagged = ZigzagUnflatten(decoded_runLengthVector);
+    FIELD_3D decoded_block = DecodeBlock(unzigzagged, blockNumber, col, compression_data, dataX); 
+    // cout << "desired value is: " << decoded_block[blockIndex] << endl;
+    double result = decoded_block[blockIndex];
+    return result;
+
+  }
+
+  else if (row % 3 == 1) { // Y coordinate
+  
+    MATRIX blockLengthsMatrix = dataY.get_blockLengthsMatrix();
+    MATRIX blockIndicesMatrix = dataY.get_blockIndicesMatrix();
+    MATRIX sListMatrix = dataY.get_sListMatrix();
+
+
+
+    VECTOR blockLengths = blockLengthsMatrix.getColumn(col);
+    VECTOR blockIndices = blockIndicesMatrix.getColumn(col);
+    VECTOR sList = sListMatrix.getColumn(col);
+
+    decoded_runLength = RunLengthDecodeBinary(allDataY, blockNumber, blockLengths, blockIndices); 
+
+    VECTOR decoded_runLengthVector = CastIntToVector(decoded_runLength);
+    INTEGER_FIELD_3D unzigzagged = ZigzagUnflatten(decoded_runLengthVector);
+    FIELD_3D decoded_block = DecodeBlock(unzigzagged, blockNumber, col, compression_data, dataY); 
+    // cout << "desired value is: " << decoded_block[blockIndex] << endl;
+    double result = decoded_block[blockIndex];
+    return result;
+  
+  }
+
+  else { // Z coordinate
+   
+    MATRIX blockLengthsMatrix = dataZ.get_blockLengthsMatrix();
+    MATRIX blockIndicesMatrix = dataZ.get_blockIndicesMatrix();
+    MATRIX sListMatrix = dataZ.get_sListMatrix();
+
+
+    VECTOR blockLengths = blockLengthsMatrix.getColumn(col);
+    VECTOR blockIndices = blockIndicesMatrix.getColumn(col);
+    VECTOR sList = sListMatrix.getColumn(col);
+
+    decoded_runLength = RunLengthDecodeBinary(allDataZ, blockNumber, blockLengths, blockIndices); 
+
+    VECTOR decoded_runLengthVector = CastIntToVector(decoded_runLength);
+    INTEGER_FIELD_3D unzigzagged = ZigzagUnflatten(decoded_runLengthVector);
+    FIELD_3D decoded_block = DecodeBlock(unzigzagged, blockNumber, col, compression_data, dataZ);
+    // cout << "desired value is: " << decoded_block[blockIndex] << endl;
+    double result = decoded_block[blockIndex];
+    return result;
+   
+  }
+}
+  
+  MATRIX GetSubmatrix(int startRow, int numRows, const MATRIX_COMPRESSION_DATA& data) {
+     
     
     TIMER functionTimer(__FUNCTION__);
 
-    int numRows = endRow - startRow;
     assert(numRows == 3);
+    COMPRESSION_DATA compression_data = data.get_compression_data();
     int numCols = compression_data.get_numCols();
     MATRIX result(numRows, numCols);
 
     for (int col = 0; col < numCols; col++) {
       for (int row = 0; row < numRows; row++) {
-        double value = DecodeFromRowCol(row + startRow, col, allDataX, allDataY, allDataZ, compression_data, dataX, dataY, dataZ);
-        cout << "  Value is: " << value << flush;
+        double value = DecodeFromRowCol(row + startRow, col, data); 
         result(row, col) = value;
       }
     }

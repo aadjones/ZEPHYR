@@ -14,7 +14,7 @@ using std::endl;
   class COMPRESSION_DATA {
     public:
       COMPRESSION_DATA();
-      COMPRESSION_DATA(VEC3I dims, double q, double power, int nBits);
+      COMPRESSION_DATA(VEC3I dims, int numCols, double q, double power, int nBits);
       ~COMPRESSION_DATA();
 
 
