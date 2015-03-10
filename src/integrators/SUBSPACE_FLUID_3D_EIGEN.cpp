@@ -469,7 +469,9 @@ VectorXd SUBSPACE_FLUID_3D_EIGEN::advectCellStamPeeled(const MatrixXd& U, const 
 
   // NOTE: it spends most of its time (+50%) here,
   const VectorXd v000 = U.block(i000, 0, 3, totalColumns) * qDot;
-  const VectorXd v000 = GetSubmatrix(i000, i000+3) * qDot;
+  // for example,
+
+  // const VectorXd v000 = GetSubmatrix(i000, i000+3) * qDot;
   const VectorXd v010 = U.block(i010, 0, 3, totalColumns) * qDot;
   const VectorXd v100 = U.block(i100, 0, 3, totalColumns) * qDot;
   const VectorXd v110 = U.block(i110, 0, 3, totalColumns) * qDot;
@@ -504,7 +506,7 @@ VectorXd SUBSPACE_FLUID_3D_EIGEN::advectCellStamPeeled(const MatrixXd& U, const 
 //////////////////////////////////
 // advect a single cell (original)
 //////////////////////////////////
-
+/*
 VectorXd SUBSPACE_FLUID_3D_EIGEN::advectCellStamPeeled(const MatrixXd& U, const Real& dt, const VectorXd& qDot, const int index)
 {
   TIMER functionTimer(__FUNCTION__);
@@ -597,6 +599,7 @@ VectorXd SUBSPACE_FLUID_3D_EIGEN::advectCellStamPeeled(const MatrixXd& U, const 
   return w000 * v000 + w010 * v010 + w100 * v100 + w110 * v110 +
          w001 * v001 + w011 * v011 + w101 * v101 + w111 * v111;
 }
+*/
 
 //////////////////////////////////////////////////////////////////////
 // advect a single cell
