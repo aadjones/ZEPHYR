@@ -8,6 +8,8 @@ using std::cout;
 using std::endl;
 using std::vector;
 
+INTEGER_FIELD_3D::INTEGER_FIELD_3D() {}
+
 INTEGER_FIELD_3D::INTEGER_FIELD_3D(const int& xRes, const int& yRes, const int& zRes) :
   _xRes(xRes), _yRes(yRes), _zRes(zRes)
 {
@@ -47,7 +49,13 @@ INTEGER_FIELD_3D::INTEGER_FIELD_3D(const int* data, const int& xRes, const int& 
     _data[x] = data[x];
   }
 }
-  
+ 
+INTEGER_FIELD_3D::~INTEGER_FIELD_3D() {
+  if (_data) {
+    delete[] _data;
+  }
+}
+
 // Return a flattened VECTOR
 VECTOR INTEGER_FIELD_3D::flattened() const {
   VECTOR final(_totalCells);
