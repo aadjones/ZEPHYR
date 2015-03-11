@@ -275,6 +275,7 @@ VECTOR ZigzagFlattenSmart(const INTEGER_FIELD_3D& F, const INTEGER_FIELD_3D& zig
     for (int y = 0; y < yRes; y++) {
       for (int x = 0; x < xRes; x++) {
         int index = zigzagArray(x, y, z);
+        // cout << "  Index: " << index << flush;
         double data = F(x, y, z);
         result[index] = data;
       }
@@ -318,6 +319,7 @@ INTEGER_FIELD_3D ZigzagUnflattenSmart(const VECTOR& V, const INTEGER_FIELD_3D& z
     for (int y = 0; y < yRes; y++) {
       for (int x = 0; x < xRes; x++) {
         int index = zigzagArray(x, y, z);
+        cout << "  Index: " << index << flush;
         result(x, y, z) = V[index];
       }
     }
@@ -970,7 +972,6 @@ void ReadBinaryFileToMemory(const char* filename, short*& allData, COMPRESSION_D
     free(double_dummy);
     MATRIX sMatrix(flattened_s, numBlocks, numCols);
     decompression_data.set_sListMatrix(sMatrix);
-
     short* short_dummy = (short*) malloc(totalSize * sizeof(short));
     fread(short_dummy, totalSize, sizeof(short), pFile);
     VECTOR flattened_lengths = CastToVector(short_dummy, totalSize);
@@ -1065,7 +1066,9 @@ vector<short> RunLengthDecodeBinary(const short* allData, int blockNumber, VECTO
   TIMER functionTimer(__FUNCTION__);
   
     int numBlocks = compression_data.get_numBlocks();
-    INTEGER_FIELD_3D zigzagArray = compression_data.get_zigzagArray();
+
+    // why must this be declared as a reference?
+    const INTEGER_FIELD_3D& zigzagArray = compression_data.get_zigzagArray();
     vector<FIELD_3D> blocks = GetBlocks(F);
 
     // Initialize the relevant variables before looping through all the blocks
@@ -1393,6 +1396,7 @@ void CompressAndWriteMatrixComponent(const char* filename, const MatrixXd& U, in
 
   double percent = 0.0;
   for (int col = 0; col < numCols; col++) {  
+    // cout << "Column: " << col << endl;
     VectorXd vXd = U.col(col);
     VECTOR v = EIGEN::convert(vXd);
     VECTOR3_FIELD_3D V(v, xRes, yRes, zRes);

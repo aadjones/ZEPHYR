@@ -11,6 +11,7 @@ using std::vector;
 INTEGER_FIELD_3D::INTEGER_FIELD_3D() : 
   _xRes(-1), _yRes(-1), _zRes(-1), _data(NULL)
 {
+  cout << "called defaut int3d constructor" << endl;
 }
 
 
@@ -21,6 +22,7 @@ INTEGER_FIELD_3D::INTEGER_FIELD_3D(const int& xRes, const int& yRes, const int& 
  
   try {
     _data = new int[_totalCells];
+    cout << "called int3d constructor with new" << endl;
   }
   catch(std::bad_alloc& exc)
   {
@@ -40,6 +42,7 @@ INTEGER_FIELD_3D::INTEGER_FIELD_3D(const int* data, const int& xRes, const int& 
   _totalCells = _xRes * _yRes * _zRes;
   try {
     _data = new int[_totalCells];
+    cout << "called int3d constructor with new" << endl;
   }
   catch(std::bad_alloc& exc)
   {
@@ -57,6 +60,7 @@ INTEGER_FIELD_3D::INTEGER_FIELD_3D(const int* data, const int& xRes, const int& 
 INTEGER_FIELD_3D::~INTEGER_FIELD_3D() {
   if (_data) {
     delete[] _data;
+    cout << "called int 3d destructor and called delete" << endl;
   }
 }
 
@@ -103,11 +107,12 @@ void INTEGER_FIELD_3D::resizeAndWipe(int xRes, int yRes, int zRes)
   if (_xRes == xRes && _yRes == yRes && _zRes == zRes)
   {
     clear();
-
+    cout << "called int3d resize and wipe without delete" << endl;
     return;
   }
 
   if (_data) delete[] _data;
+  cout << "called int3d resize and wipe with delete" << endl;
 
   _xRes = xRes;
   _yRes = yRes;
@@ -116,6 +121,7 @@ void INTEGER_FIELD_3D::resizeAndWipe(int xRes, int yRes, int zRes)
 
   try {
     _data = new int[_totalCells];
+    cout << "called new within int3d resize and wipe" << endl;
   }
   catch(std::bad_alloc& exc)
   {
@@ -181,6 +187,7 @@ INTEGER_FIELD_3D& INTEGER_FIELD_3D::operator=(const INTEGER_FIELD_3D& A)
   for (int x = 0; x < _totalCells; x++)
     _data[x] = A[x];
 
+  cout << "called int field 3d operator=" << endl;
   return *this;
 }
 
