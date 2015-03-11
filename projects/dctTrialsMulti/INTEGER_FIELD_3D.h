@@ -12,6 +12,7 @@ class INTEGER_FIELD_3D {
     INTEGER_FIELD_3D(); 
     INTEGER_FIELD_3D(const int& xRes, const int& yRes, const int& zRes);
     INTEGER_FIELD_3D(const int* data, const int& xRes, const int& yRes, const int& zRes);
+    INTEGER_FIELD_3D(const INTEGER_FIELD_3D& m);
     ~INTEGER_FIELD_3D();
     
     // Accessors

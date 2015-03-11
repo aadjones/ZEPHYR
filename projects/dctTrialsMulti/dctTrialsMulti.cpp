@@ -158,10 +158,11 @@ int main(int argc, char* argv[]) {
       decompression_dataX, decompression_dataY, decompression_dataZ);
 
 
+  
 
- 
+  
   // test the decompressor on a (row, col)   
-  /* 
+   
   int row = 8;
   int col = 32;
 
@@ -182,7 +183,7 @@ int main(int argc, char* argv[]) {
   // EIGEN::write("sub23.matrix", subMatrix);
 
   subMatrix.write("sub23.matrix");
-  */
+  
   
   TIMER::printTimings();
   

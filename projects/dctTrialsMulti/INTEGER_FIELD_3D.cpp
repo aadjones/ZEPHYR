@@ -12,6 +12,7 @@ INTEGER_FIELD_3D::INTEGER_FIELD_3D() :
   _xRes(-1), _yRes(-1), _zRes(-1), _data(NULL)
 {
   cout << "called defaut int3d constructor" << endl;
+  cout << "_data has address: " << _data << endl;
 }
 
 
@@ -23,6 +24,7 @@ INTEGER_FIELD_3D::INTEGER_FIELD_3D(const int& xRes, const int& yRes, const int& 
   try {
     _data = new int[_totalCells];
     cout << "called int3d constructor with new" << endl;
+    cout << "_data has address: " << _data << endl;
   }
   catch(std::bad_alloc& exc)
   {
@@ -56,10 +58,33 @@ INTEGER_FIELD_3D::INTEGER_FIELD_3D(const int* data, const int& xRes, const int& 
     _data[x] = data[x];
   }
 }
+INTEGER_FIELD_3D::INTEGER_FIELD_3D(const INTEGER_FIELD_3D& m) :
+  _xRes(m.xRes()), _yRes(m.yRes()), _zRes(m.zRes()) 
+{
+  _totalCells = _xRes * _yRes * _zRes;
+  
+  try {
+    _data = new int[_totalCells];
+  }
+  catch(std::bad_alloc& exc)
+  {
+    cout << " Failed to allocate " << _xRes << " " << _yRes << " " << _zRes << " INTEGER_FIELD_3D!" << endl;
+    double bytes = _xRes * _yRes * _zRes * sizeof(int);
+    cout <<  bytes / pow(2.0,20.0) << " MB needed" << endl;
+    exit(0);
+  }
+
+
+  for (int x = 0; x < _totalCells; x++)
+    _data[x] = m[x];
+
+}
  
 INTEGER_FIELD_3D::~INTEGER_FIELD_3D() {
-  if (_data) {
+  if (_data != NULL) {
     delete[] _data;
+    _data = NULL;
+    cout << "_data has address: " << _data << endl;
     cout << "called int 3d destructor and called delete" << endl;
   }
 }

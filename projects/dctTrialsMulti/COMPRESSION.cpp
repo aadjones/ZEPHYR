@@ -940,9 +940,14 @@ void RunLengthEncodeBinary(const char* filename, int blockNumber, int* zigzagged
     // cout << "Encoded length is: " << encodedLength << endl;
     blockLengths[blockNumber] = encodedLength;
 
+    {
+    TIMER writeTimer("fwrite timer");
+
     fwrite(&(dataList[0]), sizeof(short), encodedLength, pFile);
     // this write assumes that C++ vectors are stored in contiguous memory!
     
+    }
+
     fclose(pFile);
     return;
   }
