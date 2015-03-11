@@ -52,9 +52,13 @@ bool captureMovie = true;
 // fluid being simulated
 SUBSPACE_FLUID_3D_EIGEN* fluid = NULL;
 
+// ground truth
+FLUID_3D_MIC* ground = NULL;
+
 // Quicktime movie to capture to
 QUICKTIME_MOVIE movie;
 
+void runOnce();
 void runEverytime();
 
 vector<VECTOR> snapshots;
@@ -131,9 +135,18 @@ void glutDisplay()
 
     glPushMatrix();
       glTranslatef(0.5, 0.5, 0.5);
+      /////////////////////////////////////////////////////////////////
       // take difference here
+      /* 
+      auto density = fluid->density();
+      auto ground_density = ground->density();
+      auto diff = density - ground_density;
+      diff.draw();
+      diff.drawBoundingBox();
+      */
       fluid->density().draw();
       fluid->density().drawBoundingBox();
+      /////////////////////////////////////////////////////////////////
     glPopMatrix();
 
     //drawAxes();
@@ -323,7 +336,12 @@ int main(int argc, char *argv[])
 
   fluid->fullRankPath() = snapshotPath;
   fluid->vorticityEps() = vorticity;
+  
+  ///////////////////////////////
+  ground = new FLUID_3D_MIC(xRes, yRes, zRes, 0);
+  ////////////////////////////////////////////////////////////////////////////
  
+  
   TIMER::printTimings();
  
   glutInit(&argc, argv);
@@ -334,6 +352,11 @@ int main(int argc, char *argv[])
 
 //////////////////////////////////////////////////////////////////////////////
 //////////////////////////////////////////////////////////////////////////////
+
+void runOnce()
+  {
+  }
+
 void runEverytime()
 {
   if (animate)
@@ -342,10 +365,19 @@ void runEverytime()
     cout << " Simulation step " << steps << endl;
     fluid->addSmokeColumn();
     fluid->stepReorderedCubatureStam();
+    
+    /* 
+    char buffer[256];
+    string path = snapshotPath;
+    sprintf(buffer, "%sfluid.%04i.fluid3d", path.c_str(), steps);
+    string filename(buffer);
+    ground->readGz(filename);
+    cout << " Loaded in ground. " << endl;
+    */
 
     steps++;
 
-    if (steps == 151) {    
+    if (steps == 48) {    
     // if we were already capturing a movie
         if (captureMovie)
         {
