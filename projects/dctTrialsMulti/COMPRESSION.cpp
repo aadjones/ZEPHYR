@@ -275,7 +275,6 @@ VECTOR ZigzagFlattenSmart(const INTEGER_FIELD_3D& F, const INTEGER_FIELD_3D& zig
     for (int y = 0; y < yRes; y++) {
       for (int x = 0; x < xRes; x++) {
         int index = zigzagArray(x, y, z);
-        // cout << "  Index: " << index << flush;
         double data = F(x, y, z);
         result[index] = data;
       }
@@ -319,7 +318,6 @@ INTEGER_FIELD_3D ZigzagUnflattenSmart(const VECTOR& V, const INTEGER_FIELD_3D& z
     for (int y = 0; y < yRes; y++) {
       for (int x = 0; x < xRes; x++) {
         int index = zigzagArray(x, y, z);
-        cout << "  Index: " << index << flush;
         result(x, y, z) = V[index];
       }
     }
@@ -800,11 +798,11 @@ return quantized;
 }
 
 
-FIELD_3D DecodeBlock(const INTEGER_FIELD_3D& intBlock, int blockNumber, int col, const COMPRESSION_DATA& data, const DECOMPRESSION_DATA& decompression_data) {
+FIELD_3D DecodeBlock(const INTEGER_FIELD_3D& intBlock, int blockNumber, int col, const DECOMPRESSION_DATA& decompression_data) {
 
   TIMER functionTimer(__FUNCTION__);
 
-  int numBlocks = data.get_numBlocks();
+  int numBlocks = decompression_data.get_numBlocks();
   // make sure we are not accessing an invalid block
   assert( (blockNumber >= 0) && (blockNumber < numBlocks) );
 
@@ -819,7 +817,7 @@ FIELD_3D DecodeBlock(const INTEGER_FIELD_3D& intBlock, int blockNumber, int col,
   double s = sListMatrix(blockNumber, col);
   
   // dequantize by inverting the scaling by s and contracting by the damping array
-  FIELD_3D dampingArray = data.get_dampingArray();
+  FIELD_3D dampingArray = decompression_data.get_dampingArray();
   FIELD_3D dequantized_F(uRes, vRes, wRes);
   dequantized_F = CastIntFieldToDouble(intBlock);
   dequantized_F *= (1.0 / s);
@@ -953,7 +951,7 @@ void RunLengthEncodeBinary(const char* filename, int blockNumber, int* zigzagged
   }
 }
 
-void ReadBinaryFileToMemory(const char* filename, short*& allData, COMPRESSION_DATA& compression_data, DECOMPRESSION_DATA& decompression_data) {
+void ReadBinaryFileToMemory(const char* filename, short*& allData, DECOMPRESSION_DATA& decompression_data) {
   TIMER functionTimer(__FUNCTION__);
   // allData is passed by reference and will be modified, as will decompression_data
 
@@ -967,24 +965,61 @@ void ReadBinaryFileToMemory(const char* filename, short*& allData, COMPRESSION_D
   }
 
   else {
-    int numBlocks = compression_data.get_numBlocks();
-    int numCols = compression_data.get_numCols();
-    int totalSize = numBlocks * numCols;
 
+    // read in q, power, and nBits
+    double q, power;
+    fread(&q, 1, sizeof(double), pFile);
+    fread(&power, 1, sizeof(double), pFile);
+    int nBits;
+    fread(&nBits, 1, sizeof(int), pFile);
+
+    // set the decompression data
+    decompression_data.set_q(q);
+    decompression_data.set_power(power);
+    decompression_data.set_nBits(nBits);
+    // build the damping array using the previous values
+    decompression_data.set_dampingArray();
+
+    // this can be called at any time, so might as well do it now
+    decompression_data.set_zigzagArray();
+
+    int xRes, yRes, zRes;
+    // read in the dims from the binary file
+    fread(&xRes, 1, sizeof(int), pFile);
+    fread(&yRes, 1, sizeof(int), pFile);
+    fread(&zRes, 1, sizeof(int), pFile);
+    VEC3I dims(xRes, yRes, zRes);
+    // set the decompression data accordingly
+    decompression_data.set_dims(dims);
+
+    int numCols, numBlocks;
+    // read in numCols and numBlocks
+    fread(&numCols, 1, sizeof(int), pFile);
+    fread(&numBlocks, 1, sizeof(int), pFile);
+    // set the decompression data accordingly
+    decompression_data.set_numCols(numCols);
+    decompression_data.set_numBlocks(numBlocks);
+    
+    // read in the sListMatrix and set the data
+    int totalSize = numBlocks * numCols;
     double* double_dummy = (double*) malloc(totalSize * sizeof(double));
     fread(double_dummy, totalSize, sizeof(double), pFile);
     VECTOR flattened_s = CastToVector(double_dummy, totalSize);
     free(double_dummy);
     MATRIX sMatrix(flattened_s, numBlocks, numCols);
     decompression_data.set_sListMatrix(sMatrix);
+
+    // do the same for the blockLengthsMatrix
     short* short_dummy = (short*) malloc(totalSize * sizeof(short));
     fread(short_dummy, totalSize, sizeof(short), pFile);
     VECTOR flattened_lengths = CastToVector(short_dummy, totalSize);
     free(short_dummy);
     MATRIX blockLengthsMatrix(flattened_lengths, numBlocks, numCols);
+    // store the total length to be able to read in the full compressed data later
     int totalLength = blockLengthsMatrix.sum();
     decompression_data.set_blockLengthsMatrix(blockLengthsMatrix);
 
+    // do the same for the blockIndicesMatrix
     int* int_dummy = (int*) malloc(totalSize * sizeof(int));
     fread(int_dummy, totalSize, sizeof(int), pFile);
     VECTOR flattened_indices = CastToVector(int_dummy, totalSize);
@@ -992,7 +1027,7 @@ void ReadBinaryFileToMemory(const char* filename, short*& allData, COMPRESSION_D
     MATRIX blockIndicesMatrix(flattened_indices, numBlocks, numCols);
     decompression_data.set_blockIndicesMatrix(blockIndicesMatrix);
 
-
+    // finally, read in the full compressed data
     allData = (short*) malloc(totalLength * sizeof(short));
     if (allData == NULL) {
       perror("Malloc failed to allocate allData!");
@@ -1005,6 +1040,7 @@ void ReadBinaryFileToMemory(const char* filename, short*& allData, COMPRESSION_D
 
 
 vector<short> RunLengthDecodeBinary(const short* allData, int blockNumber, VECTOR& blockLengths, VECTOR& blockIndices) {
+
   TIMER functionTimer(__FUNCTION__);
   // although blockLengths and blockIndices are passed by reference,
   // they will not be modified.
@@ -1199,19 +1235,16 @@ double DecodeFromRowCol(int row, int col, const MATRIX_COMPRESSION_DATA& data) {
      
   TIMER functionTimer(__FUNCTION__);
 
-  COMPRESSION_DATA compression_data = data.get_compression_data();
-  VEC3I dims = compression_data.get_dims();
-  INTEGER_FIELD_3D zigzagArray = compression_data.get_zigzagArray();
-  // double q = compression_data.get_q();
-  // double power = compression_data.get_power();
+  DECOMPRESSION_DATA dataX = data.get_decompression_dataX();
+  // using X is arbitrary---it will be the same for all three
+  VEC3I dims = dataX.get_dims();
+  INTEGER_FIELD_3D zigzagArray = dataX.get_zigzagArray();
   
   short* allDataX = data.get_dataX();
   short* allDataY = data.get_dataY();
   short* allDataZ = data.get_dataZ();
-  DECOMPRESSION_DATA dataX = data.get_decompression_dataX();
   DECOMPRESSION_DATA dataY = data.get_decompression_dataY();
   DECOMPRESSION_DATA dataZ = data.get_decompression_dataZ();
-
 
   vector<short> decoded_runLength;
 
@@ -1231,7 +1264,7 @@ double DecodeFromRowCol(int row, int col, const MATRIX_COMPRESSION_DATA& data) {
 
     VECTOR decoded_runLengthVector = CastIntToVector(decoded_runLength);
     INTEGER_FIELD_3D unzigzagged = ZigzagUnflattenSmart(decoded_runLengthVector, zigzagArray);
-    FIELD_3D decoded_block = DecodeBlock(unzigzagged, blockNumber, col, compression_data, dataX); 
+    FIELD_3D decoded_block = DecodeBlock(unzigzagged, blockNumber, col, dataX); 
     // cout << "desired value is: " << decoded_block[blockIndex] << endl;
     double result = decoded_block[blockIndex];
     return result;
@@ -1254,7 +1287,7 @@ double DecodeFromRowCol(int row, int col, const MATRIX_COMPRESSION_DATA& data) {
 
     VECTOR decoded_runLengthVector = CastIntToVector(decoded_runLength);
     INTEGER_FIELD_3D unzigzagged = ZigzagUnflattenSmart(decoded_runLengthVector, zigzagArray);
-    FIELD_3D decoded_block = DecodeBlock(unzigzagged, blockNumber, col, compression_data, dataY); 
+    FIELD_3D decoded_block = DecodeBlock(unzigzagged, blockNumber, col, dataY); 
     // cout << "desired value is: " << decoded_block[blockIndex] << endl;
     double result = decoded_block[blockIndex];
     return result;
@@ -1276,7 +1309,7 @@ double DecodeFromRowCol(int row, int col, const MATRIX_COMPRESSION_DATA& data) {
 
     VECTOR decoded_runLengthVector = CastIntToVector(decoded_runLength);
     INTEGER_FIELD_3D unzigzagged = ZigzagUnflattenSmart(decoded_runLengthVector, zigzagArray);
-    FIELD_3D decoded_block = DecodeBlock(unzigzagged, blockNumber, col, compression_data, dataZ);
+    FIELD_3D decoded_block = DecodeBlock(unzigzagged, blockNumber, col, dataZ);
     // cout << "desired value is: " << decoded_block[blockIndex] << endl;
     double result = decoded_block[blockIndex];
     return result;
@@ -1289,9 +1322,9 @@ double DecodeFromRowCol(int row, int col, const MATRIX_COMPRESSION_DATA& data) {
     
     TIMER functionTimer(__FUNCTION__);
 
-    assert(numRows == 3);
-    COMPRESSION_DATA compression_data = data.get_compression_data();
-    int numCols = compression_data.get_numCols();
+    // assert(numRows == 3);
+    DECOMPRESSION_DATA decompression_dataX = data.get_decompression_dataX();
+    int numCols = decompression_dataX.get_numCols();
     MATRIX result(numRows, numCols);
 
     for (int col = 0; col < numCols; col++) {
@@ -1307,7 +1340,9 @@ double DecodeFromRowCol(int row, int col, const MATRIX_COMPRESSION_DATA& data) {
 
 
 
-  void WriteMetaData(const char* filename, const MATRIX& sListMatrix, const MATRIX& blockLengthsMatrix, const MATRIX& blockIndicesMatrix) {
+  void WriteMetaData(const char* filename, const COMPRESSION_DATA& compression_data, 
+      const MATRIX& sListMatrix, const MATRIX& blockLengthsMatrix, const MATRIX& blockIndicesMatrix) {
+
   TIMER functionTimer(__FUNCTION__);
     FILE* pFile;
     pFile = fopen(filename, "wb");
@@ -1316,11 +1351,33 @@ double DecodeFromRowCol(int row, int col, const MATRIX_COMPRESSION_DATA& data) {
     }
     else {
       
+      // write q, power, and nBits to the binary file
+      double q = compression_data.get_q();
+      fwrite(&q, sizeof(double), 1, pFile);
+      double power = compression_data.get_power();
+      fwrite(&power, sizeof(double), 1, pFile);
+      int nBits = compression_data.get_nBits();
+      fwrite(&nBits, sizeof(int), 1, pFile);
+
+      // write dims, numCols, and numBloks
+      VEC3I dims = compression_data.get_dims();
+      int xRes = dims[0];
+      int yRes = dims[1];
+      int zRes = dims[2];
+      fwrite(&xRes, sizeof(int), 1, pFile);
+      fwrite(&yRes, sizeof(int), 1, pFile);
+      fwrite(&zRes, sizeof(int), 1, pFile);
+      int numCols = compression_data.get_numCols();
+      int numBlocks = compression_data.get_numBlocks();
+      fwrite(&numCols, sizeof(int), 1, pFile);
+      fwrite(&numBlocks, sizeof(int), 1, pFile);
+            
+       
       VECTOR flattened_s = sListMatrix.flattenedColumn();
       int blocksXcols = flattened_s.size();
 
       double* sData = (double*) malloc(sizeof(double) * blocksXcols);
-      // fill sData
+      // fill sData and write it
       sData = CastToDouble(flattened_s, sData);
       fwrite(sData, sizeof(double), blocksXcols, pFile);
 
@@ -1328,13 +1385,14 @@ double DecodeFromRowCol(int row, int col, const MATRIX_COMPRESSION_DATA& data) {
       assert(flattened_lengths.size() == blocksXcols);
 
       short* lengthsData = (short*) malloc(sizeof(short) * blocksXcols);
-      // fill lengthsData
+      // fill lengthsData and write it
       lengthsData = CastToShort(flattened_lengths, lengthsData);
       fwrite(lengthsData, sizeof(short), blocksXcols, pFile);
       
       VECTOR flattened_indices = blockIndicesMatrix.flattenedColumn();
       assert(flattened_indices.size() == blocksXcols);
 
+      // fill indicesData and write it
       int* indicesData = (int*) malloc(sizeof(int) * blocksXcols);
       indicesData = CastToInt(flattened_indices, indicesData);
       fwrite(indicesData, sizeof(int), blocksXcols, pFile);
@@ -1436,7 +1494,7 @@ void CompressAndWriteMatrixComponent(const char* filename, const MatrixXd& U, in
   blockIndicesMatrix = ModifiedCumSum(blockLengthsMatrix);
   
   const char* metafile = "metadata.bin"; 
-  WriteMetaData(metafile, sListMatrix, blockLengthsMatrix, blockIndicesMatrix);
+  WriteMetaData(metafile, data, sListMatrix, blockLengthsMatrix, blockIndicesMatrix);
   // appends the metadata as a header to the main binary file and pipes them into final_string
   PrefixBinary(metafile, filename, final_string);
   // removes the now-redundant metadata and main binary files

@@ -106,7 +106,7 @@ int main(int argc, char* argv[]) {
   // Old version to get the distorted matrix. Currenty has memory leak problems
   // for huge matrices!!!
    
-  /*
+  /* 
   vector<VectorXd> columnList;
   for (int col = 0; col < g_numCols; col++) {
     cout << "Column: " << col << endl;
@@ -128,14 +128,14 @@ int main(int argc, char* argv[]) {
 
   // write a binary file for each scalar field component
 
-  /*
+  /* 
   const char* filename = "runLength.bin";
   for (int component = 0; component < 3; component++) {
     cout << "Writing component: " << component << endl;
     CompressAndWriteMatrixComponent(filename, g_U, component, compression_data);
   }
   */
-
+  
   
   // preprocessing for the decoder
   short* allDataX;
@@ -146,25 +146,19 @@ int main(int argc, char* argv[]) {
   DECOMPRESSION_DATA decompression_dataZ;
 
   // fill allData and decompression_data
-  ReadBinaryFileToMemory("runLength.binX", allDataX, compression_data, decompression_dataX); 
-  cout << "did one read" << endl;
-  ReadBinaryFileToMemory("runLength.binY", allDataY, compression_data, decompression_dataY);
-  ReadBinaryFileToMemory("runLength.binZ", allDataZ, compression_data, decompression_dataZ);
+  ReadBinaryFileToMemory("runLength.binX", allDataX, decompression_dataX); 
+  ReadBinaryFileToMemory("runLength.binY", allDataY, decompression_dataY);
+  ReadBinaryFileToMemory("runLength.binZ", allDataZ, decompression_dataZ);
 
-  cout << "got past reads " << endl;
 
   // set the entirety of the data for the decoder into one package
-  MATRIX_COMPRESSION_DATA matrixData(compression_data, allDataX, allDataY, allDataZ, 
+  MATRIX_COMPRESSION_DATA matrixData(allDataX, allDataY, allDataZ, 
       decompression_dataX, decompression_dataY, decompression_dataZ);
-
-
-  
-
   
   // test the decompressor on a (row, col)   
    
-  int row = 8;
-  int col = 32;
+  int row = 10;
+  int col = 21;
 
   double testValue = DecodeFromRowCol(row, col, matrixData);
 
@@ -227,5 +221,7 @@ void PreprocessEncoder(COMPRESSION_DATA& data) {
   data.set_numBlocks(numBlocks);
   
 }
-  
+
+   
+
 

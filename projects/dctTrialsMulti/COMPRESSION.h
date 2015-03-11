@@ -133,7 +133,7 @@ INTEGER_FIELD_3D EncodeBlock(FIELD_3D& F, int blockNumber, COMPRESSION_DATA& com
 // the encoding procedure by doing the appropriate scaling and IDCT.
 // It returns a scalar field which is a compressed version of the original
 // scalar field fed into EncodeBlock.
-FIELD_3D DecodeBlock(const INTEGER_FIELD_3D& intBlock, int blockNumber, int col, const COMPRESSION_DATA& data, const DECOMPRESSION_DATA& decompression_data); 
+FIELD_3D DecodeBlock(const INTEGER_FIELD_3D& intBlock, int blockNumber, int col, const DECOMPRESSION_DATA& decompression_data); 
 
 FIELD_3D DecodeBlockOld(const INTEGER_FIELD_3D& intBlock, int blockNumber, COMPRESSION_DATA& data);
 
@@ -154,7 +154,7 @@ void DeleteIfExists(const char* filename);
 
 // Reads in an encoded file with its block lengths and stores it in allData. 
 // Needs blockLengths in order to know how much memory to allocate.
-void ReadBinaryFileToMemory(const char* filename, short*& allData, COMPRESSION_DATA& compression_data, DECOMPRESSION_DATA& decompression_data);
+void ReadBinaryFileToMemory(const char* filename, short*& allData, DECOMPRESSION_DATA& decompression_data);
 
 // Chains several previous functions together
 void CompressAndWriteField(const char* filename, const FIELD_3D& F, COMPRESSION_DATA& compression_data); 
@@ -166,7 +166,7 @@ double DecodeFromRowCol(int row, int col, const MATRIX_COMPRESSION_DATA& data);
 
 MATRIX GetSubmatrix(int startRow, int numRows, const MATRIX_COMPRESSION_DATA& data);
     
-void WriteMetaData(const char* filename, const MATRIX& sListMatrix, const MATRIX& blockLengths, const MATRIX& blockIndices);
+void WriteMetaData(const char* filename, const COMPRESSION_DATA& compression_data, const MATRIX& sListMatrix, const MATRIX& blockLengths, const MATRIX& blockIndices);
 
 void PrefixBinary(string prefix, string filename, string newFile); 
 

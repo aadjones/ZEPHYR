@@ -5,8 +5,12 @@
 DECOMPRESSION_DATA::DECOMPRESSION_DATA() {}
 
 
-DECOMPRESSION_DATA::DECOMPRESSION_DATA(int numBlocks, MATRIX blockLengthsMatrix, MATRIX blockIndicesMatrix, MATRIX sListMatrix) :
-  _numBlocks(numBlocks), _blockLengthsMatrix(blockLengthsMatrix), _blockIndicesMatrix(blockIndicesMatrix), _sListMatrix(sListMatrix) {}
+DECOMPRESSION_DATA::DECOMPRESSION_DATA(double q, double power, int nBits, VEC3I dims, int numCols) :
+
+  _q(q), _power(power), _nBits(nBits), _dims(dims), _numCols(numCols)
+
+{
+}
 
 
 DECOMPRESSION_DATA::~DECOMPRESSION_DATA() {}

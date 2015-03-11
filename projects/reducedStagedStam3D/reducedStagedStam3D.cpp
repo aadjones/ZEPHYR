@@ -131,6 +131,7 @@ void glutDisplay()
 
     glPushMatrix();
       glTranslatef(0.5, 0.5, 0.5);
+      // take difference here
       fluid->density().draw();
       fluid->density().drawBoundingBox();
     glPopMatrix();
