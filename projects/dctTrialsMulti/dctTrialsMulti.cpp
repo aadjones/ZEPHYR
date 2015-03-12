@@ -46,29 +46,29 @@ using std::string;
 // Globals
 ////////////////////////////////////////////////////////
 
-string path_to_U("/Users/aaron/Desktop/U.final.uncompressed.matrix");
+// string path_to_U("/Users/aaron/Desktop/U.final.uncompressed.matrix");
 // string path_to_U("/Volumes/DataDrive/data/reduced.stam.200.vorticity.1.5/U.preadvect.matrix");
-// string path_to_U("U.final.donotmodify.matrix.48");
+string path_to_U("U.final.donotmodify.matrix.48");
 // string path_to_U("U.preadvect.donotmodify.matrix.48");
 
 // make sure the read-in matrix agrees with the dimensions specified!
 
-/*
+
 const int g_xRes =    46;
 const int g_yRes =    62;
 const int g_zRes =    46;
 const VEC3I g_dims(g_xRes, g_yRes, g_zRes);
 const int g_numRows = 3 * g_xRes * g_yRes * g_zRes;
 const int g_numCols = 48;
-*/
 
+/*
 const int g_xRes = 198;
 const int g_yRes = 264;
 const int g_zRes = 198;
 const VEC3I g_dims(g_xRes, g_yRes, g_zRes);
 const int g_numRows = 3 * g_xRes * g_yRes * g_zRes;
 const int g_numCols = 151;
-
+*/
 
 MatrixXd g_U(g_numRows, g_numCols);
 
@@ -107,7 +107,7 @@ int main(int argc, char* argv[]) {
   // Old version to get the distorted matrix. Currenty has memory leak problems
   // for huge matrices!!!
    
-  
+  /* 
   vector<VectorXd> columnList(g_numCols);
   for (int col = 0; col < g_numCols; col++) {
     cout << "Column: " << col << endl;
@@ -122,14 +122,14 @@ int main(int argc, char* argv[]) {
   MatrixXd compressedResult = EIGEN::buildFromColumns(columnList);
 
   EIGEN::write("Ufinalhugetest.matrix", compressedResult);
-  
+  */
 
 
 
 
   // write a binary file for each scalar field component
 
-  /*  
+   
   const char* filename = "runLength.bin";
   for (int component = 0; component < 3; component++) {
     cout << "Writing component: " << component << endl;
@@ -157,19 +157,20 @@ int main(int argc, char* argv[]) {
       decompression_dataX, decompression_dataY, decompression_dataZ);
   
   // test the decompressor on a (row, col)   
-   
-  int row = 10;
-  int col = 22;
+  /* 
+  int row = 20;
+  int col = 19;
 
   double testValue = DecodeFromRowCol(row, col, matrixData);
 
   cout << "Test value: " << testValue << endl;
   double trueValue = g_U(row, col);
   cout << "True value: " << trueValue << endl;
-  
+  */
+
   // use the decompressor to get a 3 x numCols submatrix of U
   
-  int startRow = 23;
+  int startRow = 0;
   int numRows = 3;
   MATRIX subMatrix = GetSubmatrix(startRow, numRows, matrixData); 
   
@@ -178,7 +179,7 @@ int main(int argc, char* argv[]) {
   // EIGEN::write("sub23.matrix", subMatrix);
 
   subMatrix.write("Ucompressedsub.matrix");
-  */
+  
   
   TIMER::printTimings();
   

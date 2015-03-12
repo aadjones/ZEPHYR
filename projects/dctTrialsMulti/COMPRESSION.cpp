@@ -1080,6 +1080,7 @@ vector<short> RunLengthDecodeBinary(const short* allData, int blockNumber, VECTO
     }
 
     free(blockData);
+    cout << "parsed data size: " << parsedData.size() << endl;;
     return parsedData;
   }
   
