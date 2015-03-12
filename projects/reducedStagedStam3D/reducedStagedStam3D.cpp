@@ -137,15 +137,15 @@ void glutDisplay()
       glTranslatef(0.5, 0.5, 0.5);
       /////////////////////////////////////////////////////////////////
       // take difference here
-      /* 
+      
       auto density = fluid->density();
       auto ground_density = ground->density();
       auto diff = density - ground_density;
       diff.draw();
       diff.drawBoundingBox();
-      */
-      fluid->density().draw();
-      fluid->density().drawBoundingBox();
+      
+      // fluid->density().draw();
+      // fluid->density().drawBoundingBox();
       /////////////////////////////////////////////////////////////////
     glPopMatrix();
 
@@ -337,9 +337,7 @@ int main(int argc, char *argv[])
   fluid->fullRankPath() = snapshotPath;
   fluid->vorticityEps() = vorticity;
   
-  ///////////////////////////////
   ground = new FLUID_3D_MIC(xRes, yRes, zRes, 0);
-  ////////////////////////////////////////////////////////////////////////////
  
   
   TIMER::printTimings();
@@ -366,18 +364,17 @@ void runEverytime()
     fluid->addSmokeColumn();
     fluid->stepReorderedCubatureStam();
     
-    /* 
     char buffer[256];
     string path = snapshotPath;
     sprintf(buffer, "%sfluid.%04i.fluid3d", path.c_str(), steps);
     string filename(buffer);
     ground->readGz(filename);
     cout << " Loaded in ground. " << endl;
-    */
+   
 
     steps++;
 
-    if (steps == 48) {    
+    if (steps == 151) {    
     // if we were already capturing a movie
         if (captureMovie)
         {

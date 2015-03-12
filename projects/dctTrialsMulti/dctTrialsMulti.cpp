@@ -46,29 +46,29 @@ using std::string;
 // Globals
 ////////////////////////////////////////////////////////
 
-string path_to_U("/Users/aaron/Desktop/U.final.uncompressed.matrix");
+// string path_to_U("/Users/aaron/Desktop/U.final.uncompressed.matrix");
 // string path_to_U("/Volumes/DataDrive/data/reduced.stam.200.vorticity.1.5/U.preadvect.matrix");
-// string path_to_U("U.final.donotmodify.matrix.48");
+string path_to_U("U.final.donotmodify.matrix.48");
 // string path_to_U("U.preadvect.donotmodify.matrix.48");
 
 // make sure the read-in matrix agrees with the dimensions specified!
 
-/*
+
 const int g_xRes =    46;
 const int g_yRes =    62;
 const int g_zRes =    46;
 const VEC3I g_dims(g_xRes, g_yRes, g_zRes);
 const int g_numRows = 3 * g_xRes * g_yRes * g_zRes;
 const int g_numCols = 48;
-*/
 
+/*
 const int g_xRes = 198;
 const int g_yRes = 264;
 const int g_zRes = 198;
 const VEC3I g_dims(g_xRes, g_yRes, g_zRes);
 const int g_numRows = 3 * g_xRes * g_yRes * g_zRes;
 const int g_numCols = 151;
-
+*/
 
 MatrixXd g_U(g_numRows, g_numCols);
 
@@ -107,37 +107,37 @@ int main(int argc, char* argv[]) {
   // Old version to get the distorted matrix. Currenty has memory leak problems
   // for huge matrices!!!
    
-  
+  /* 
   vector<VectorXd> columnList(g_numCols);
   for (int col = 0; col < g_numCols; col++) {
     cout << "Column: " << col << endl;
     VectorXd v = g_U.col(col);
     VECTOR v_vector = EIGEN::convert(v);
     VECTOR3_FIELD_3D V(v_vector, g_xRes, g_yRes, g_zRes);
-    // VECTOR3_FIELD_3D compressedV = SmartBlockCompressVectorField(V, compression_data);
-    VECTOR flattenedV = V.flattened();
+    VECTOR3_FIELD_3D compressedV = SmartBlockCompressVectorField(V, compression_data);
+    VECTOR flattenedV = compressedV.flattened();
     VectorXd flattenedV_eigen = EIGEN::convert(flattenedV);
     columnList[col] = (flattenedV_eigen);
   }
   MatrixXd compressedResult = EIGEN::buildFromColumns(columnList);
 
-  EIGEN::write("Ufinalhugetest.matrix", compressedResult);
-  
+  EIGEN::write("Ufinaloldmethod.matrix", compressedResult);
+  */
 
 
 
 
   // write a binary file for each scalar field component
 
-  /*  
+  
   const char* filename = "runLength.bin";
   for (int component = 0; component < 3; component++) {
     cout << "Writing component: " << component << endl;
     CompressAndWriteMatrixComponent(filename, g_U, component, compression_data);
   }
-    
   
   
+   
   // preprocessing for the decoder
   short* allDataX;
   short* allDataY;
@@ -155,11 +155,14 @@ int main(int argc, char* argv[]) {
   // set the entirety of the data for the decoder into one package
   MATRIX_COMPRESSION_DATA matrixData(allDataX, allDataY, allDataZ, 
       decompression_dataX, decompression_dataY, decompression_dataZ);
+
+  MatrixXd U_recovered = DecodeFullMatrix(matrixData); 
+  EIGEN::write("Ufinalnewmethod.matrix", U_recovered);
   
   // test the decompressor on a (row, col)   
    
-  int row = 10;
-  int col = 22;
+  int row = 1;
+  int col = 0;
 
   double testValue = DecodeFromRowCol(row, col, matrixData);
 
@@ -168,9 +171,9 @@ int main(int argc, char* argv[]) {
   cout << "True value: " << trueValue << endl;
   
   // use the decompressor to get a 3 x numCols submatrix of U
-  
-  int startRow = 23;
-  int numRows = 3;
+  /* 
+  int startRow = 0;
+  int numRows = g_numRows;
   MATRIX subMatrix = GetSubmatrix(startRow, numRows, matrixData); 
   
   // EIGEN is giving a bizarre malloc error, calling free on something that has already been freed
@@ -178,7 +181,7 @@ int main(int argc, char* argv[]) {
   // EIGEN::write("sub23.matrix", subMatrix);
 
   subMatrix.write("Ucompressedsub.matrix");
-  */
+  */ 
   
   TIMER::printTimings();
   

@@ -114,7 +114,7 @@ void GetPaddings(VEC3I v, int& xPadding, int& yPadding, int& zPadding);
 vector<FIELD_3D> GetBlocks(const FIELD_3D& F);
 
 // Converts a C++ vector of scalar field blocks in row-major order back into a scalar field.
-FIELD_3D AssimilateBlocks(const FIELD_3D& F, vector<FIELD_3D> V);
+FIELD_3D AssimilateBlocks(const VEC3I& dims, vector<FIELD_3D> V);
 
 
 // Accepts as input a vector of scalar fields (in practice, 8x8x8 blocks) and performs
@@ -174,6 +174,16 @@ void CleanUpPrefix(const char* prefix, const char* filename);
 
 
 void CompressAndWriteMatrixComponent(const char* filename, const MatrixXd& U, int component, COMPRESSION_DATA& data); 
+
+
+
+FIELD_3D DecodeScalarField(const DECOMPRESSION_DATA& decompression_data, short* const& allData, int col); 
+
+
+VECTOR3_FIELD_3D DecodeVectorField(const MATRIX_COMPRESSION_DATA& data, int col); 
+
+
+MatrixXd DecodeFullMatrix(const MATRIX_COMPRESSION_DATA& data); 
 
 ////////////////////////////////////////////////////////
 // End Function Signatures
