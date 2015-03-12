@@ -1156,8 +1156,8 @@ vector<short> RunLengthDecodeBinary(const short* allData, int blockNumber, VECTO
       block_i = blocks[i];
       // performs quantization and damping. updates sList
       intEncoded_i = EncodeBlock(block_i, i, compression_data);
-      zigzagged_i = ZigzagFlatten(intEncoded_i);
-      // zigzagged_i = ZigzagFlattenSmart(intEncoded_i, zigzagArray);
+      // zigzagged_i = ZigzagFlatten(intEncoded_i);
+      zigzagged_i = ZigzagFlattenSmart(intEncoded_i, zigzagArray);
       zigzagArray_i = CastToInt(zigzagged_i, zigzagArray_i);
       // performs run-length encoding. updates blockLengths
       RunLengthEncodeBinary(filename, i, zigzagArray_i, blockLengths);  
@@ -1289,8 +1289,8 @@ double DecodeFromRowCol(int row, int col, const MATRIX_COMPRESSION_DATA& data) {
     decoded_runLength = RunLengthDecodeBinary(allDataX, blockNumber, blockLengths, blockIndices); 
 
     VECTOR decoded_runLengthVector = CastIntToVector(decoded_runLength);
-    INTEGER_FIELD_3D unzigzagged = ZigzagUnflatten(decoded_runLengthVector);
-    // INTEGER_FIELD_3D unzigzagged = ZigzagUnflattenSmart(decoded_runLengthVector, zigzagArray);
+    // INTEGER_FIELD_3D unzigzagged = ZigzagUnflatten(decoded_runLengthVector);
+    INTEGER_FIELD_3D unzigzagged = ZigzagUnflattenSmart(decoded_runLengthVector, zigzagArray);
     FIELD_3D decoded_block = DecodeBlock(unzigzagged, blockNumber, col, dataX); 
     // cout << "desired value is: " << decoded_block[blockIndex] << endl;
     double result = decoded_block[blockIndex];
@@ -1313,8 +1313,8 @@ double DecodeFromRowCol(int row, int col, const MATRIX_COMPRESSION_DATA& data) {
     decoded_runLength = RunLengthDecodeBinary(allDataY, blockNumber, blockLengths, blockIndices); 
 
     VECTOR decoded_runLengthVector = CastIntToVector(decoded_runLength);
-    INTEGER_FIELD_3D unzigzagged = ZigzagUnflatten(decoded_runLengthVector);
-    // INTEGER_FIELD_3D unzigzagged = ZigzagUnflattenSmart(decoded_runLengthVector, zigzagArray);
+    // INTEGER_FIELD_3D unzigzagged = ZigzagUnflatten(decoded_runLengthVector);
+    INTEGER_FIELD_3D unzigzagged = ZigzagUnflattenSmart(decoded_runLengthVector, zigzagArray);
     FIELD_3D decoded_block = DecodeBlock(unzigzagged, blockNumber, col, dataY); 
     // cout << "desired value is: " << decoded_block[blockIndex] << endl;
     double result = decoded_block[blockIndex];
@@ -1336,8 +1336,8 @@ double DecodeFromRowCol(int row, int col, const MATRIX_COMPRESSION_DATA& data) {
     decoded_runLength = RunLengthDecodeBinary(allDataZ, blockNumber, blockLengths, blockIndices); 
 
     VECTOR decoded_runLengthVector = CastIntToVector(decoded_runLength);
-    INTEGER_FIELD_3D unzigzagged = ZigzagUnflatten(decoded_runLengthVector);
-    // INTEGER_FIELD_3D unzigzagged = ZigzagUnflattenSmart(decoded_runLengthVector, zigzagArray);
+    // INTEGER_FIELD_3D unzigzagged = ZigzagUnflatten(decoded_runLengthVector);
+    INTEGER_FIELD_3D unzigzagged = ZigzagUnflattenSmart(decoded_runLengthVector, zigzagArray);
     FIELD_3D decoded_block = DecodeBlock(unzigzagged, blockNumber, col, dataZ);
     // cout << "desired value is: " << decoded_block[blockIndex] << endl;
     double result = decoded_block[blockIndex];
@@ -1564,7 +1564,6 @@ FIELD_3D DecodeScalarField(const DECOMPRESSION_DATA& decompression_data, short* 
     vector<short> runLengthDecoded = RunLengthDecodeBinary(allData, blockNumber, blockLengths, blockIndices);
     // cast to VECTOR to play nice with ZigzagUnflattenSmart
     VECTOR runLengthDecodedVec = CastIntToVector(runLengthDecoded);
-    cout << "length: " << runLengthDecodedVec.size() << endl;
     // undo the zigzag scan
     INTEGER_FIELD_3D unzigzagged = ZigzagUnflatten(runLengthDecodedVec);
     // INTEGER_FIELD_3D unzigzagged = ZigzagUnflattenSmart(runLengthDecodedVec, zigzagArray);
@@ -1587,42 +1586,27 @@ FIELD_3D DecodeScalarField(const DECOMPRESSION_DATA& decompression_data, short* 
 VECTOR3_FIELD_3D DecodeVectorField(const MATRIX_COMPRESSION_DATA& data, int col) {
   TIMER functionTimer(__FUNCTION__);
   
-  cout << __FILE__ << " " << __FUNCTION__ << " " << __LINE__ << " : " << endl;
   DECOMPRESSION_DATA decompression_dataX = data.get_decompression_dataX();
-  cout << __FILE__ << " " << __FUNCTION__ << " " << __LINE__ << " : " << endl;
   DECOMPRESSION_DATA decompression_dataY = data.get_decompression_dataY();
   DECOMPRESSION_DATA decompression_dataZ = data.get_decompression_dataZ();
-  cout << __FILE__ << " " << __FUNCTION__ << " " << __LINE__ << " : " << endl;
 
   VEC3I dims = decompression_dataX.get_dims();
   int xRes = dims[0];
-  cout << __FILE__ << " " << __FUNCTION__ << " " << __LINE__ << " : " << endl;
   int yRes = dims[1];
-  cout << __FILE__ << " " << __FUNCTION__ << " " << __LINE__ << " : " << endl;
   int zRes = dims[2];
-  cout << __FILE__ << " " << __FUNCTION__ << " " << __LINE__ << " : " << endl;
 
   short* allDataX = data.get_dataX();
-  cout << __FILE__ << " " << __FUNCTION__ << " " << __LINE__ << " : " << endl;
   short* allDataY = data.get_dataY();
-  cout << __FILE__ << " " << __FUNCTION__ << " " << __LINE__ << " : " << endl;
   short* allDataZ = data.get_dataZ();
-  cout << __FILE__ << " " << __FUNCTION__ << " " << __LINE__ << " : " << endl;
 
   FIELD_3D scalarX = DecodeScalarField(decompression_dataX, allDataX, col);
-  cout << __FILE__ << " " << __FUNCTION__ << " " << __LINE__ << " : " << endl;
   FIELD_3D scalarY = DecodeScalarField(decompression_dataY, allDataY, col);
-  cout << __FILE__ << " " << __FUNCTION__ << " " << __LINE__ << " : " << endl;
   FIELD_3D scalarZ = DecodeScalarField(decompression_dataZ, allDataZ, col);
 
-  cout << __FILE__ << " " << __FUNCTION__ << " " << __LINE__ << " : " << endl;
   VECTOR scalarXflat = scalarX.flattened();
-  cout << __FILE__ << " " << __FUNCTION__ << " " << __LINE__ << " : " << endl;
   VECTOR scalarYflat = scalarY.flattened();
-  cout << __FILE__ << " " << __FUNCTION__ << " " << __LINE__ << " : " << endl;
   VECTOR scalarZflat = scalarZ.flattened();
    
-  cout << __FILE__ << " " << __FUNCTION__ << " " << __LINE__ << " : " << endl;
   double* X_array = (double*) malloc(sizeof(double) * xRes * yRes * zRes);
   double* Y_array = (double*) malloc(sizeof(double) * xRes * yRes * zRes);
   double* Z_array = (double*) malloc(sizeof(double) * xRes * yRes * zRes);
@@ -1645,19 +1629,14 @@ MatrixXd DecodeFullMatrix(const MATRIX_COMPRESSION_DATA& data) {
 
   DECOMPRESSION_DATA decompression_dataX = data.get_decompression_dataX();
   int numCols = decompression_dataX.get_numCols();
-  cout << "num cols: " <<  numCols << endl;
 
   vector<VectorXd> columnList(numCols);
   for (int col = 0; col < numCols; col++) {
     cout << "Column: " << col << endl;
     VECTOR3_FIELD_3D decodedV = DecodeVectorField(data, col);
-    cout << __FILE__ << " " << __FUNCTION__ << " " << __LINE__ << " : " << endl;
     VECTOR flattenedV = decodedV.flattened();
-    cout << __FILE__ << " " << __FUNCTION__ << " " << __LINE__ << " : " << endl;
     VectorXd flattenedV_eigen = EIGEN::convert(flattenedV);
-    cout << __FILE__ << " " << __FUNCTION__ << " " << __LINE__ << " : " << endl;
     columnList[col] = (flattenedV_eigen);
-    cout << __FILE__ << " " << __FUNCTION__ << " " << __LINE__ << " : " << endl;
   }
   MatrixXd decodedResult = EIGEN::buildFromColumns(columnList);
   return decodedResult; 

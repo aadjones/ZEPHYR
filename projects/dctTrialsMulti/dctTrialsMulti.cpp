@@ -129,13 +129,13 @@ int main(int argc, char* argv[]) {
 
   // write a binary file for each scalar field component
 
-  
+  /* 
   const char* filename = "runLength.bin";
   for (int component = 0; component < 3; component++) {
     cout << "Writing component: " << component << endl;
     CompressAndWriteMatrixComponent(filename, g_U, component, compression_data);
   }
-  
+  */
   
    
   // preprocessing for the decoder
@@ -161,7 +161,7 @@ int main(int argc, char* argv[]) {
   
   // test the decompressor on a (row, col)   
    
-  int row = 1;
+  int row = 0;
   int col = 0;
 
   double testValue = DecodeFromRowCol(row, col, matrixData);

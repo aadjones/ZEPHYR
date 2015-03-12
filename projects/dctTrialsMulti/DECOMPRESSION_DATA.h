@@ -57,7 +57,7 @@ class DECOMPRESSION_DATA {
             r_uvw = pow(r_uvw, power);
             damp(u, v, w) = r_uvw;
             // for debugging!
-            damp(u, v, w) = 1.0;
+            // damp(u, v, w) = 1.0;
           }
         }
       }
