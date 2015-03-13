@@ -38,6 +38,7 @@
 #include <cmath>
 #include <cfenv>
 #include <climits>
+#include "VECTOR3_FIELD_3D.h"
 
 using std::vector;
 using std::string;
@@ -114,14 +115,15 @@ int main(int argc, char* argv[]) {
     VectorXd v = g_U.col(col);
     VECTOR v_vector = EIGEN::convert(v);
     VECTOR3_FIELD_3D V(v_vector, g_xRes, g_yRes, g_zRes);
-    // VECTOR3_FIELD_3D compressedV = SmartBlockCompressVectorField(V, compression_data);
-    VECTOR flattenedV = V.flattened();
+    VECTOR3_FIELD_3D compressedV = SmartBlockCompressVectorField(V, compression_data);
+    VECTOR flattenedV = compressedV.flattened();
     VectorXd flattenedV_eigen = EIGEN::convert(flattenedV);
     columnList[col] = (flattenedV_eigen);
   }
   MatrixXd compressedResult = EIGEN::buildFromColumns(columnList);
 
   EIGEN::write("Ufinalhugetest.matrix", compressedResult);
+  EIGEN::write("Ufinaloldmethod.matrix", compressedResult);
   */
 
 
@@ -130,14 +132,15 @@ int main(int argc, char* argv[]) {
   // write a binary file for each scalar field component
 
    
+  /* 
   const char* filename = "runLength.bin";
   for (int component = 0; component < 3; component++) {
     cout << "Writing component: " << component << endl;
     CompressAndWriteMatrixComponent(filename, g_U, component, compression_data);
   }
-    
+  */
   
-  
+   
   // preprocessing for the decoder
   short* allDataX;
   short* allDataY;
@@ -155,11 +158,17 @@ int main(int argc, char* argv[]) {
   // set the entirety of the data for the decoder into one package
   MATRIX_COMPRESSION_DATA matrixData(allDataX, allDataY, allDataZ, 
       decompression_dataX, decompression_dataY, decompression_dataZ);
+
+  MatrixXd U_recovered = DecodeFullMatrix(matrixData); 
+  EIGEN::write("Ufinalnewmethod.matrix", U_recovered);
   
   // test the decompressor on a (row, col)   
   /* 
   int row = 20;
   int col = 19;
+   
+  int row = 0;
+  int col = 0;
 
   double testValue = DecodeFromRowCol(row, col, matrixData);
 
@@ -172,13 +181,13 @@ int main(int argc, char* argv[]) {
   
   int startRow = 0;
   int numRows = 3;
-  MATRIX subMatrix = GetSubmatrix(startRow, numRows, matrixData); 
+  MatrixXd subMatrix = GetSubmatrix(startRow, numRows, matrixData); 
   
   // EIGEN is giving a bizarre malloc error, calling free on something that has already been freed
   // (or never been allocated)
-  // EIGEN::write("sub23.matrix", subMatrix);
+  EIGEN::write("sub0.matrix", subMatrix);
 
-  subMatrix.write("Ucompressedsub.matrix");
+  // subMatrix.write("Ucompressedsub.matrix");
   
   
   TIMER::printTimings();

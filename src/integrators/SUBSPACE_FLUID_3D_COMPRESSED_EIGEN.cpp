@@ -16,12 +16,14 @@
  
  Copyright 2013 Theodore Kim
  */
-// SUBSPACE_FLUID_3D_EIGEN.cpp: implementation of the SUBSPACE_FLUID_3D_EIGEN class.
+// SUBSPACE_FLUID_3D_COMPRESSED_EIGEN.cpp: implementation of the SUBSPACE_FLUID_3D_COMPRESSED_EIGEN class.
 //
 //////////////////////////////////////////////////////////////////////
 
 #include "SUBSPACE_FLUID_3D_COMPRESSED_EIGEN.h"
 #include "BIG_MATRIX.h"
+#include "MATRIX_COMPRESSION_DATA.h"
+#include "COMPRESSION.h"
 
 //////////////////////////////////////////////////////////////////////
 // Construction/Destruction
@@ -72,7 +74,7 @@ SUBSPACE_FLUID_3D_COMPRESSED_EIGEN::SUBSPACE_FLUID_3D_COMPRESSED_EIGEN(int xRes,
 // initialize the peeled version where there is a separate basis
 // for each stage
 //////////////////////////////////////////////////////////////////////
-void SUBSPACE_FLUID_3D_EIGEN::initOutOfCore()
+void SUBSPACE_FLUID_3D_COMPRESSED_EIGEN::initOutOfCore()
 {
   // init the peeled dimensions
   _xPeeled = _xRes - 2;
@@ -130,7 +132,7 @@ void SUBSPACE_FLUID_3D_EIGEN::initOutOfCore()
   }
 }
 
-SUBSPACE_FLUID_3D_EIGEN::~SUBSPACE_FLUID_3D_EIGEN()
+SUBSPACE_FLUID_3D_COMPRESSED_EIGEN::~SUBSPACE_FLUID_3D_COMPRESSED_EIGEN()
 {
 }
 
@@ -138,7 +140,7 @@ SUBSPACE_FLUID_3D_EIGEN::~SUBSPACE_FLUID_3D_EIGEN()
 // The reduced solver, with peeled boundaries, 
 // with cubature enabled
 //////////////////////////////////////////////////////////////////////
-void SUBSPACE_FLUID_3D_EIGEN::stepReorderedCubatureStam()
+void SUBSPACE_FLUID_3D_COMPRESSED_EIGEN::stepReorderedCubatureStam()
 {
   TIMER functionTimer(__FUNCTION__);
   Real goalTime = 0.1;
@@ -167,7 +169,8 @@ void SUBSPACE_FLUID_3D_EIGEN::stepReorderedCubatureStam()
   
   VECTOR::printVertical = false;
   TIMER projectionTimer("Velocity projection");
-  _qDot = _velocity.peeledProject(_preadvectU);
+  // _qDot = _velocity.peeledProject(_preadvectU);
+  _qDot = PeeledCompressedProject(_velocity, _U_preadvect_data);
   
   // VECTOR qDot = EIGEN::convert(_qDot);
   // cout << "qDot preadvect: " << qDot << "; " << endl;
@@ -192,7 +195,8 @@ void SUBSPACE_FLUID_3D_EIGEN::stepReorderedCubatureStam()
   // qDot = EIGEN::convert(_qDot);
   // cout << "qDot post unproject: " << qDot << "; " << endl;
   //
-  _velocity.peeledUnproject(_U, _qDot);
+  // _velocity.peeledUnproject(_U, _qDot);
+  PeeledCompressedUnproject(_velocity, _U_final_data, _qDot);
 
   // do the full space unprojection
   TIMER unprojectionTimer("Velocity unprojection");
@@ -211,7 +215,7 @@ void SUBSPACE_FLUID_3D_EIGEN::stepReorderedCubatureStam()
 //////////////////////////////////////////////////////////////////////
 // do a full-rank advection of heat and density
 //////////////////////////////////////////////////////////////////////
-void SUBSPACE_FLUID_3D_EIGEN::advectHeatAndDensityStam()
+void SUBSPACE_FLUID_3D_COMPRESSED_EIGEN::advectHeatAndDensityStam()
 {
   TIMER functionTimer(__FUNCTION__);
 
@@ -244,7 +248,7 @@ void SUBSPACE_FLUID_3D_EIGEN::advectHeatAndDensityStam()
 //////////////////////////////////////////////////////////////////////
 // perform reduced order diffusion with separate boundary slabs
 //////////////////////////////////////////////////////////////////////
-void SUBSPACE_FLUID_3D_EIGEN::reducedPeeledDiffusion() 
+void SUBSPACE_FLUID_3D_COMPRESSED_EIGEN::reducedPeeledDiffusion() 
 {
   TIMER functionTimer(__FUNCTION__);
 
@@ -255,7 +259,7 @@ void SUBSPACE_FLUID_3D_EIGEN::reducedPeeledDiffusion()
 //////////////////////////////////////////////////////////////////////
 // get the projection error of a vector with respect to a basis
 //////////////////////////////////////////////////////////////////////
-Real SUBSPACE_FLUID_3D_EIGEN::projectionError(const MatrixXd& basis, const VectorXd& v)
+Real SUBSPACE_FLUID_3D_COMPRESSED_EIGEN::projectionError(const MatrixXd& basis, const VectorXd& v)
 {
   VectorXd after = basis * (basis.transpose() * v);
 
@@ -265,7 +269,7 @@ Real SUBSPACE_FLUID_3D_EIGEN::projectionError(const MatrixXd& basis, const Vecto
 //////////////////////////////////////////////////////////////////////
 // compute pressure-to-velocity matrix
 //////////////////////////////////////////////////////////////////////
-void SUBSPACE_FLUID_3D_EIGEN::computePressureToVelocity()
+void SUBSPACE_FLUID_3D_COMPRESSED_EIGEN::computePressureToVelocity()
 {
   int xPeeled = _xRes - 2;
   int yPeeled = _yRes - 2;
@@ -338,7 +342,7 @@ void SUBSPACE_FLUID_3D_EIGEN::computePressureToVelocity()
 //////////////////////////////////////////////////////////////////////
 // do a staged reduced order pressure projection
 //////////////////////////////////////////////////////////////////////
-void SUBSPACE_FLUID_3D_EIGEN::reducedStagedProject()
+void SUBSPACE_FLUID_3D_COMPRESSED_EIGEN::reducedStagedProject()
 {
   TIMER functionTimer(__FUNCTION__);
   _qDot = _preprojectToFinal * _qDot + _inverseProduct * _qDot;
@@ -347,7 +351,7 @@ void SUBSPACE_FLUID_3D_EIGEN::reducedStagedProject()
 //////////////////////////////////////////////////////////////////////
 // diff the current sim results against ground truth
 //////////////////////////////////////////////////////////////////////
-void SUBSPACE_FLUID_3D_EIGEN::diffGroundTruth()
+void SUBSPACE_FLUID_3D_COMPRESSED_EIGEN::diffGroundTruth()
 {
   TIMER functionTimer(__FUNCTION__);
   if (_fullRankPath.size() == 0)
@@ -383,7 +387,7 @@ void SUBSPACE_FLUID_3D_EIGEN::diffGroundTruth()
 //////////////////////////////////////////////////////////////////////
 // get the sub-basis associated with a cell
 //////////////////////////////////////////////////////////////////////
-MatrixXd SUBSPACE_FLUID_3D_EIGEN::cellBasisPeeled(const MatrixXd& U, const int index)
+MatrixXd SUBSPACE_FLUID_3D_COMPRESSED_EIGEN::cellBasisPeeled(const MatrixXd& U, const int index)
 {
   TIMER functionTimer(__FUNCTION__);
   // decompose into x,y,z
@@ -399,16 +403,48 @@ MatrixXd SUBSPACE_FLUID_3D_EIGEN::cellBasisPeeled(const MatrixXd& U, const int i
   assert(z >= 0);
   assert(z < _zRes - 2);
   assert(3 * index < U.rows());
-
-  return EIGEN::getRows(3 * index, 3, U);
+  
+  return EIGEN::getRows(3 * index, 3, U); 
 }
 
+//////////////////////////////////////////////////////////////////////
+// get the sub-basis associated with a cell, compressed version
+//////////////////////////////////////////////////////////////////////
+MatrixXd SUBSPACE_FLUID_3D_COMPRESSED_EIGEN::cellBasisCompressedPeeled(const MATRIX_COMPRESSION_DATA& U_data, const int index)
+{
+  TIMER functionTimer(__FUNCTION__);
+  // decompose into x,y,z
+  const int decompose = index;
+  const int z = decompose / _slabPeeled;
+  const int y = (decompose % _slabPeeled) / _xPeeled;
+  const int x = (decompose % _slabPeeled) % _xPeeled;
+
+  DECOMPRESSION_DATA dataX = U_data.get_decompression_dataX();
+  VEC3I dims = dataX.get_dims();
+  const int xRes = dims[0];
+  const int yRes = dims[1];
+  const int zRes = dims[2];
+  const int numRows = 3 * xRes * yRes * zRes;
+
+  assert(x >= 0);
+  assert(x < _xRes - 2);
+  assert(y >= 0);
+  assert(y < _yRes - 2);
+  assert(z >= 0);
+  assert(z < _zRes - 2);
+  // assert(3 * index < U.rows());
+  assert(3 * index < numRows);
+  
+  MatrixXd result = GetSubmatrix(3 * index, 3, U_data); 
+  return result;
+  // return EIGEN::getRows(3 * index, 3, U); 
+}
 //////////////////////////////////////////////////////////////////////
 // advect a single cell
 //////////////////////////////////////////////////////////////////////
 
 // TODO: integrate decoder here!
-VectorXd SUBSPACE_FLUID_3D_EIGEN::advectCellStamPeeled(const MatrixXd& U, const Real& dt, const VectorXd& qDot, const int index)
+VectorXd SUBSPACE_FLUID_3D_COMPRESSED_EIGEN::advectCellStamPeeled(const MATRIX_COMPRESSION_DATA& U_data, const Real& dt, const VectorXd& qDot, const int index)
 {
   TIMER functionTimer(__FUNCTION__);
   // peeled coordinates were passed in -- need to promote to full grid
@@ -419,8 +455,11 @@ VectorXd SUBSPACE_FLUID_3D_EIGEN::advectCellStamPeeled(const MatrixXd& U, const 
 
   // try using Eigen's block functionality
   const int index3 = 3 * index;
-  const int totalColumns = U.cols();
-  VectorXd v = U.block(index3, 0, 3, totalColumns) * qDot;
+  // const int totalColumns = U.cols();
+  DECOMPRESSION_DATA dataX = U_data.get_decompression_dataX();
+  const int totalColumns = dataX.get_numCols();
+  // VectorXd v = U.block(index3, 0, 3, totalColumns) * qDot;
+  VectorXd v = GetSubmatrix(index3, 3, U_data) * qDot;
 
   // backtrace
   const VEC3F velocity(v[0], v[1], v[2]);
@@ -468,17 +507,22 @@ VectorXd SUBSPACE_FLUID_3D_EIGEN::advectCellStamPeeled(const MatrixXd& U, const 
   const int i111 = 3 * (x1 + y1Scaled + z1Scaled);
 
   // NOTE: it spends most of its time (+50%) here,
-  const VectorXd v000 = U.block(i000, 0, 3, totalColumns) * qDot;
-  // for example,
-
-  // const VectorXd v000 = GetSubmatrix(i000, i000+3) * qDot;
-  const VectorXd v010 = U.block(i010, 0, 3, totalColumns) * qDot;
-  const VectorXd v100 = U.block(i100, 0, 3, totalColumns) * qDot;
-  const VectorXd v110 = U.block(i110, 0, 3, totalColumns) * qDot;
-  const VectorXd v001 = U.block(i001, 0, 3, totalColumns) * qDot;
-  const VectorXd v011 = U.block(i011, 0, 3, totalColumns) * qDot;
-  const VectorXd v101 = U.block(i101, 0, 3, totalColumns) * qDot;
-  const VectorXd v111 = U.block(i111, 0, 3, totalColumns) * qDot;
+  // const VectorXd v000 = U.block(i000, 0, 3, totalColumns) * qDot;
+  const VectorXd v000 = GetSubmatrix(i000, 3, U_data) * qDot;
+  // const VectorXd v010 = U.block(i010, 0, 3, totalColumns) * qDot;
+  const VectorXd v010 = GetSubmatrix(i010, 3, U_data) * qDot;
+  // const VectorXd v100 = U.block(i100, 0, 3, totalColumns) * qDot;
+  const VectorXd v100 = GetSubmatrix(i100, 3, U_data) * qDot;
+  // const VectorXd v110 = U.block(i110, 0, 3, totalColumns) * qDot;
+  const VectorXd v110 = GetSubmatrix(i110, 3, U_data) * qDot;
+  // const VectorXd v001 = U.block(i001, 0, 3, totalColumns) * qDot;
+  const VectorXd v001 = GetSubmatrix(i001, 3, U_data) * qDot;
+  // const VectorXd v011 = U.block(i011, 0, 3, totalColumns) * qDot;
+  const VectorXd v011 = GetSubmatrix(i011, 3, U_data) * qDot;
+  // const VectorXd v101 = U.block(i101, 0, 3, totalColumns) * qDot;
+  const VectorXd v101 = GetSubmatrix(i101, 3, U_data) * qDot;
+  // const VectorXd v111 = U.block(i111, 0, 3, totalColumns) * qDot;
+  const VectorXd v111 = GetSubmatrix(i111, 3, U_data) * qDot;
 
   const Real w000 = u0 * s0 * t0;
   const Real w010 = u0 * s0 * t1;
@@ -507,7 +551,7 @@ VectorXd SUBSPACE_FLUID_3D_EIGEN::advectCellStamPeeled(const MatrixXd& U, const 
 // advect a single cell (original)
 //////////////////////////////////
 /*
-VectorXd SUBSPACE_FLUID_3D_EIGEN::advectCellStamPeeled(const MatrixXd& U, const Real& dt, const VectorXd& qDot, const int index)
+VectorXd SUBSPACE_FLUID_3D_COMPRESSED_EIGEN::advectCellStamPeeled(const MatrixXd& U, const Real& dt, const VectorXd& qDot, const int index)
 {
   TIMER functionTimer(__FUNCTION__);
   // peeled coordinates were passed in -- need to promote to full grid
@@ -604,7 +648,7 @@ VectorXd SUBSPACE_FLUID_3D_EIGEN::advectCellStamPeeled(const MatrixXd& U, const 
 //////////////////////////////////////////////////////////////////////
 // advect a single cell
 //////////////////////////////////////////////////////////////////////
-VectorXd SUBSPACE_FLUID_3D_EIGEN::advectCellStamPeeled(const MatrixXd& U, const MatrixXd& cellU, const Real& dt, const VectorXd& qDot, const int index)
+VectorXd SUBSPACE_FLUID_3D_COMPRESSED_EIGEN::advectCellStamPeeled(const MATRIX_COMPRESSION_DATA& U_data, const MatrixXd& cellU, const Real& dt, const VectorXd& qDot, const int index)
 {
   TIMER functionTimer(__FUNCTION__);
   // peeled coordinates were passed in -- need to promote to full grid
@@ -666,16 +710,22 @@ VectorXd SUBSPACE_FLUID_3D_EIGEN::advectCellStamPeeled(const MatrixXd& U, const 
   const int i111 = 3 * (x1 + y1Scaled + z1Scaled);
 
   // NOTE: it spends most of its time (+50%) here,
-  // unprojecting
-  const int totalColumns = U.cols();
-  const VectorXd v000 = U.block(i000, 0, 3, totalColumns) * qDot;
-  const VectorXd v010 = U.block(i010, 0, 3, totalColumns) * qDot;
-  const VectorXd v100 = U.block(i100, 0, 3, totalColumns) * qDot;
-  const VectorXd v110 = U.block(i110, 0, 3, totalColumns) * qDot;
-  const VectorXd v001 = U.block(i001, 0, 3, totalColumns) * qDot;
-  const VectorXd v011 = U.block(i011, 0, 3, totalColumns) * qDot;
-  const VectorXd v101 = U.block(i101, 0, 3, totalColumns) * qDot;
-  const VectorXd v111 = U.block(i111, 0, 3, totalColumns) * qDot;
+  // const VectorXd v000 = U.block(i000, 0, 3, totalColumns) * qDot;
+  const VectorXd v000 = GetSubmatrix(i000, 3, U_data) * qDot;
+  // const VectorXd v010 = U.block(i010, 0, 3, totalColumns) * qDot;
+  const VectorXd v010 = GetSubmatrix(i010, 3, U_data) * qDot;
+  // const VectorXd v100 = U.block(i100, 0, 3, totalColumns) * qDot;
+  const VectorXd v100 = GetSubmatrix(i100, 3, U_data) * qDot;
+  // const VectorXd v110 = U.block(i110, 0, 3, totalColumns) * qDot;
+  const VectorXd v110 = GetSubmatrix(i110, 3, U_data) * qDot;
+  // const VectorXd v001 = U.block(i001, 0, 3, totalColumns) * qDot;
+  const VectorXd v001 = GetSubmatrix(i001, 3, U_data) * qDot;
+  // const VectorXd v011 = U.block(i011, 0, 3, totalColumns) * qDot;
+  const VectorXd v011 = GetSubmatrix(i011, 3, U_data) * qDot;
+  // const VectorXd v101 = U.block(i101, 0, 3, totalColumns) * qDot;
+  const VectorXd v101 = GetSubmatrix(i101, 3, U_data) * qDot;
+  // const VectorXd v111 = U.block(i111, 0, 3, totalColumns) * qDot;
+  const VectorXd v111 = GetSubmatrix(i111, 3, U_data) * qDot;
 
   const Real w000 = u0 * s0 * t0;
   const Real w010 = u0 * s0 * t1;
@@ -704,7 +754,7 @@ VectorXd SUBSPACE_FLUID_3D_EIGEN::advectCellStamPeeled(const MatrixXd& U, const 
 //////////////////////////////////////////////////////////////////////
 // read in a cubature scheme
 //////////////////////////////////////////////////////////////////////
-void SUBSPACE_FLUID_3D_EIGEN::readAdvectionCubature()
+void SUBSPACE_FLUID_3D_COMPRESSED_EIGEN::readAdvectionCubature()
 {
   string filename = _reducedPath + string("cubature");
   cout << " Trying to read in cubature file  " << filename.c_str() << " ... "; flush(cout);
@@ -762,14 +812,32 @@ void SUBSPACE_FLUID_3D_EIGEN::readAdvectionCubature()
     // make the before cache
     _advectionCubatureBefore.clear();
     // TODO: insert the decoder for U.preadvect
-    string preadvectFile = _reducedPath + string("U.preadvect.matrix");
-    EIGEN::read(preadvectFile, _preadvectU);
+    // string preadvectFile = _reducedPath + string("U.preadvect.matrix");
+
+    short* allDataX = NULL;
+    short* allDataY = NULL;
+    short* allDataZ = NULL;
+    DECOMPRESSION_DATA decompression_dataX;
+    DECOMPRESSION_DATA decompression_dataY;
+    DECOMPRESSION_DATA decompression_dataZ;
+    string preadvectFile = _reducedPath + string("U.preadvect.componentX");
+    ReadBinaryFileToMemory(preadvectFile.c_str(), allDataX, decompression_dataX);
+    preadvectFile = _reducedPath + string("U.preadvect.componentY");
+    ReadBinaryFileToMemory(preadvectFile.c_str(), allDataY, decompression_dataY);
+    preadvectFile = _reducedPath + string("U.preadvect.componentZ");
+    ReadBinaryFileToMemory(preadvectFile.c_str(), allDataZ, decompression_dataZ);
+    MATRIX_COMPRESSION_DATA U_preadvect_data(allDataX, allDataY, allDataZ,
+        decompression_dataX, decompression_dataY, decompression_dataZ);
+    _U_preadvect_data = U_preadvect_data;
+
+    // EIGEN::read(preadvectFile, _preadvectU);
+    //
     for (int x = 0; x < totalPoints; x++)
     {
       const int index = _keyAdvectionCells[x];
-      _advectionCubatureBefore.push_back(cellBasisPeeled(_preadvectU, index));
+      _advectionCubatureBefore.push_back(cellBasisCompressedPeeled(_U_preadvect_data, index));
     }
-    _preadvectU.resize(0,0);
+    // _preadvectU.resize(0,0);
 
     // make the after cache
     _advectionCubatureAfter.clear();
@@ -822,7 +890,7 @@ void SUBSPACE_FLUID_3D_EIGEN::readAdvectionCubature()
 //////////////////////////////////////////////////////////////////////
 // do Stam-style advection using cubautre
 //////////////////////////////////////////////////////////////////////
-void SUBSPACE_FLUID_3D_EIGEN::reducedAdvectStagedStamFast()
+void SUBSPACE_FLUID_3D_COMPRESSED_EIGEN::reducedAdvectStagedStamFast()
 {
   TIMER functionTimer(__FUNCTION__);
   VectorXd final(_advectionCubatureAfter[0].rows());
@@ -841,7 +909,8 @@ void SUBSPACE_FLUID_3D_EIGEN::reducedAdvectStagedStamFast()
   for (int x = 0; x < totalPoints; x++)
   {
     const int index = _keyAdvectionCells[x];
-    finals[x] = _advectionCubatureAfter[x] * advectCellStamPeeled(_preadvectU, _advectionCubatureBefore[x], dt0, _qDot, index);
+    // finals[x] = _advectionCubatureAfter[x] * advectCellStamPeeled(_preadvectU, _advectionCubatureBefore[x], dt0, _qDot, index);
+    finals[x] = _advectionCubatureAfter[x] * advectCellStamPeeled(_U_preadvect_data, _advectionCubatureBefore[x], dt0, _qDot, index);
   }
 
   for (int x = 0; x < totalPoints; x++)
@@ -853,7 +922,7 @@ void SUBSPACE_FLUID_3D_EIGEN::reducedAdvectStagedStamFast()
 //////////////////////////////////////////////////////////////////////
 // build the staged bases and the projected matrices
 //////////////////////////////////////////////////////////////////////
-void SUBSPACE_FLUID_3D_EIGEN::buildOutOfCoreMatrices()
+void SUBSPACE_FLUID_3D_COMPRESSED_EIGEN::buildOutOfCoreMatrices()
 {
   TIMER functionTimer(__FUNCTION__);
 
@@ -931,10 +1000,28 @@ void SUBSPACE_FLUID_3D_EIGEN::buildOutOfCoreMatrices()
   TIMER preprojectTimer("Preprojection projection");
   // read in the needed matrices
 
-  // TODO: do we need U.final in full?
+  /*
   filename = _reducedPath + string("U.final.matrix");
   // EIGEN::readBig(filename, _U);
   EIGEN::read(filename, _U);
+  */
+  
+  short* allDataX = NULL;
+  short* allDataY = NULL;
+  short* allDataZ = NULL;
+  DECOMPRESSION_DATA decompression_dataX;
+  DECOMPRESSION_DATA decompression_dataY;
+  DECOMPRESSION_DATA decompression_dataZ;
+  filename = _reducedPath + string("U.final.componentX");
+  ReadBinaryFileToMemory(filename.c_str(), allDataX, decompression_dataX);
+  filename = _reducedPath + string("U.final.componentY");
+  ReadBinaryFileToMemory(filename.c_str(), allDataY, decompression_dataY);
+  filename = _reducedPath + string("U.final.componentZ");
+  ReadBinaryFileToMemory(filename.c_str(), allDataZ, decompression_dataZ);
+  MATRIX_COMPRESSION_DATA U_data(allDataX, allDataY, allDataZ,
+      decompression_dataX, decompression_dataY, decompression_dataZ);
+
+
 
   // need: preproject and U
   EIGEN::transposeProduct(_U, _preprojectU, _preprojectToFinal);
@@ -983,7 +1070,7 @@ void SUBSPACE_FLUID_3D_EIGEN::buildOutOfCoreMatrices()
 //////////////////////////////////////////////////////////////////////
 // check of a file exists
 //////////////////////////////////////////////////////////////////////
-bool SUBSPACE_FLUID_3D_EIGEN::fileExists(const string& filename)
+bool SUBSPACE_FLUID_3D_COMPRESSED_EIGEN::fileExists(const string& filename)
 {
   FILE* file;
   file = fopen(filename.c_str(), "rb");
@@ -998,25 +1085,40 @@ bool SUBSPACE_FLUID_3D_EIGEN::fileExists(const string& filename)
 //////////////////////////////////////////////////////////////////////
 // stomp all loaded bases
 //////////////////////////////////////////////////////////////////////
-void SUBSPACE_FLUID_3D_EIGEN::stompAllBases()
+void SUBSPACE_FLUID_3D_COMPRESSED_EIGEN::stompAllBases()
 {
   _pressureU.resize(0,0);
   _preprojectU.resize(0,0);
   _prediffuseU.resize(0,0);
-  _preadvectU.resize(0,0);
-  _U.resize(0,0);
+  // _preadvectU.resize(0,0);
+  // _U.resize(0,0);
 }
 
 //////////////////////////////////////////////////////////////////////
 // stomp the other matrices and load the ones needed for cubature 
 // training
 //////////////////////////////////////////////////////////////////////
-void SUBSPACE_FLUID_3D_EIGEN::loadCubatureTrainingBases()
+void SUBSPACE_FLUID_3D_COMPRESSED_EIGEN::loadCubatureTrainingBases()
 {
   string filename;
   // TODO: insert the decoder for U.preadvect 
-  filename = _reducedPath + string("U.preadvect.matrix");
-  EIGEN::read(filename, _preadvectU);
+  short* allDataX = NULL;
+  short* allDataY = NULL;
+  short* allDataZ = NULL;
+  DECOMPRESSION_DATA decompression_dataX;
+  DECOMPRESSION_DATA decompression_dataY;
+  DECOMPRESSION_DATA decompression_dataZ;
+  filename = _reducedPath + string("U.preadvect.componentX");
+  ReadBinaryFileToMemory(filename.c_str(), allDataX, decompression_dataX);
+  filename = _reducedPath + string("U.preadvect.componentY");
+  ReadBinaryFileToMemory(filename.c_str(), allDataY, decompression_dataY);
+  filename = _reducedPath + string("U.preadvect.componentZ");
+  ReadBinaryFileToMemory(filename.c_str(), allDataZ, decompression_dataZ);
+  MATRIX_COMPRESSION_DATA U_preadvect_data(allDataX, allDataY, allDataZ,
+      decompression_dataX, decompression_dataY, decompression_dataZ);
+  _U_preadvect_data = U_preadvect_data;
+
+  // EIGEN::read(filename, _preadvectU);
 
   filename = _reducedPath + string("U.prediffuse.matrix");
   EIGEN::read(filename, _prediffuseU);
@@ -1027,7 +1129,7 @@ void SUBSPACE_FLUID_3D_EIGEN::loadCubatureTrainingBases()
 //
 // the path variable is there in case we want to load off the SSD
 //////////////////////////////////////////////////////////////////////
-void SUBSPACE_FLUID_3D_EIGEN::loadReducedRuntimeBases(string path)
+void SUBSPACE_FLUID_3D_COMPRESSED_EIGEN::loadReducedRuntimeBases(string path)
 {
   TIMER functionTimer(__FUNCTION__);
   if (path.length() == 0)
@@ -1036,27 +1138,67 @@ void SUBSPACE_FLUID_3D_EIGEN::loadReducedRuntimeBases(string path)
   string filename;
   
   // TODO: insert the decoder for U.preadvect
-  filename = path + string("U.preadvect.matrix");
-  EIGEN::read(filename, _preadvectU);
+  short* allDataX = NULL;
+  short* allDataY = NULL;
+  short* allDataZ = NULL;
+  DECOMPRESSION_DATA decompression_dataX;
+  DECOMPRESSION_DATA decompression_dataY;
+  DECOMPRESSION_DATA decompression_dataZ;
+  filename = _reducedPath + string("U.preadvect.componentX");
+  ReadBinaryFileToMemory(filename.c_str(), allDataX, decompression_dataX);
+  filename = _reducedPath + string("U.preadvect.componentY");
+  ReadBinaryFileToMemory(filename.c_str(), allDataY, decompression_dataY);
+  filename = _reducedPath + string("U.preadvect.componentZ");
+  ReadBinaryFileToMemory(filename.c_str(), allDataZ, decompression_dataZ);
+  MATRIX_COMPRESSION_DATA U_preadvect_data(allDataX, allDataY, allDataZ,
+      decompression_dataX, decompression_dataY, decompression_dataZ);
+  _U_preadvect_data = U_preadvect_data;
+
+  DECOMPRESSION_DATA preadvect_dataX = _U_preadvect_data.get_decompression_dataX();
+  VEC3I dims = preadvect_dataX.get_dims();
+  const int xRes = dims[0];
+  const int yRes = dims[1];
+  const int zRes = dims[2];
+  const int numRows = 3 * xRes * yRes * zRes;
+
+  // EIGEN::read(filename, _preadvectU);
  
-  if (_preadvectU.rows() > 1000000)
+  // if (_preadvectU.rows() > 1000000)
+  if (numRows > 1000000) 
     purge();
     // TODO: what do we do here? do we need U.final in full?
     filename = path + string("U.final.matrix");
-    EIGEN::read(filename, _U);
+    short* UallDataX = NULL;
+    short* UallDataY = NULL;
+    short* UallDataZ = NULL;
+    DECOMPRESSION_DATA Udecompression_dataX;
+    DECOMPRESSION_DATA Udecompression_dataY;
+    DECOMPRESSION_DATA Udecompression_dataZ;
+    filename = _reducedPath + string("U.final.componentX");
+    ReadBinaryFileToMemory(filename.c_str(), UallDataX, Udecompression_dataX);
+    filename = _reducedPath + string("U.final.componentY");
+    ReadBinaryFileToMemory(filename.c_str(), UallDataY, Udecompression_dataY);
+    filename = _reducedPath + string("U.final.componentZ");
+    ReadBinaryFileToMemory(filename.c_str(), UallDataZ, Udecompression_dataZ);
+    MATRIX_COMPRESSION_DATA U_final_data(UallDataX, UallDataY, UallDataZ,
+        Udecompression_dataX, Udecompression_dataY, Udecompression_dataZ);
+    _U_final_data = U_final_data;
+
+    // EIGEN::read(filename, _U);
   
 
 
 
   TIMER::printTimings();
-  if (_preadvectU.rows() > 1000000)
+  // if (_preadvectU.rows() > 1000000)
+  if (numRows > 1000000) 
     purge();
 }
 
 //////////////////////////////////////////////////////////////////////
 // compute the velocity-to-divergence matrix
 //////////////////////////////////////////////////////////////////////
-void SUBSPACE_FLUID_3D_EIGEN::computeVelocityToDivergence()
+void SUBSPACE_FLUID_3D_COMPRESSED_EIGEN::computeVelocityToDivergence()
 {
   int xPeeled = _xRes - 2;
   int yPeeled = _yRes - 2;
@@ -1160,7 +1302,7 @@ void SUBSPACE_FLUID_3D_EIGEN::computeVelocityToDivergence()
 //////////////////////////////////////////////////////////////////////
 // build the peeled damping matrix
 //////////////////////////////////////////////////////////////////////
-void SUBSPACE_FLUID_3D_EIGEN::buildPeeledDampingMatrixFlat(SPARSE_MATRIX_ARRAY& peeledDampingMatrix)
+void SUBSPACE_FLUID_3D_COMPRESSED_EIGEN::buildPeeledDampingMatrixFlat(SPARSE_MATRIX_ARRAY& peeledDampingMatrix)
 {
   TIMER functionTimer(__FUNCTION__);
   cout << " Building flat peeled damping matrix ... ";flush(cout);
@@ -1219,7 +1361,7 @@ void SUBSPACE_FLUID_3D_EIGEN::buildPeeledDampingMatrixFlat(SPARSE_MATRIX_ARRAY& 
 //////////////////////////////////////////////////////////////////////
 // build a sparse version of the Poisson matrix
 //////////////////////////////////////////////////////////////////////
-void SUBSPACE_FLUID_3D_EIGEN::buildFlatA(SPARSE_MATRIX_ARRAY& sparseA, unsigned char* skip)
+void SUBSPACE_FLUID_3D_COMPRESSED_EIGEN::buildFlatA(SPARSE_MATRIX_ARRAY& sparseA, unsigned char* skip)
 {
   int xPeeled = _xRes - 2;
   int yPeeled = _yRes - 2;

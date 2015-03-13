@@ -17,13 +17,13 @@ class MATRIX_COMPRESSION_DATA {
    
     // getters
     
-    short* get_dataX() const { return _dataX; }
-    short* get_dataY() const { return _dataY; }
-    short* get_dataZ() const { return _dataZ; }
+    short* const& get_dataX() const { return _dataX; }
+    short* const& get_dataY() const { return _dataY; }
+    short* const& get_dataZ() const { return _dataZ; }
 
-    DECOMPRESSION_DATA get_decompression_dataX() const { return _decompression_dataX; }
-    DECOMPRESSION_DATA get_decompression_dataY() const { return _decompression_dataY; }
-    DECOMPRESSION_DATA get_decompression_dataZ() const { return _decompression_dataZ; }
+    const DECOMPRESSION_DATA& get_decompression_dataX() const { return _decompression_dataX; }
+    const DECOMPRESSION_DATA& get_decompression_dataY() const { return _decompression_dataY; }
+    const DECOMPRESSION_DATA& get_decompression_dataZ() const { return _decompression_dataZ; }
     
     // setters
     
