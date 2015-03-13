@@ -1,21 +1,21 @@
 #include <iostream>
-#include <fftw3.h>
-#include <sys/stat.h>  // for using stat to check whether a file exists
-#include <numeric>     // for std::accumulate
-#include <assert.h>
+// #include <fftw3.h>
+// #include <sys/stat.h>  // for using stat to check whether a file exists
+// #include <numeric>     // for std::accumulate
+// #include <assert.h>
 
 #include "EIGEN.h"
-#include "SUBSPACE_FLUID_3D_EIGEN.h"
-#include "FLUID_3D_MIC.h"
-#include "CUBATURE_GENERATOR_EIGEN.h"
+// #include "SUBSPACE_FLUID_3D_EIGEN.h"
+// #include "FLUID_3D_MIC.h"
 #include "MATRIX.h"
-#include "SIMPLE_PARSER.h"
+// #include "SIMPLE_PARSER.h"
 #include "COMPRESSION.h"
-#include "INTEGER_FIELD_3D.h"
-#include "COMPRESSION_DATA.h"
-#include "DECOMPRESSION_DATA.h"
+// #include "INTEGER_FIELD_3D.h"
+// #include "COMPRESSION_DATA.h"
+// #include "DECOMPRESSION_DATA.h"
 #include "MATRIX_COMPRESSION_DATA.h"
-#include "FIELD_3D.h"
+// #include "FIELD_3D.h"
+// #include "CUBATURE_GENERATOR_EIGEN.h"
 
 using std::vector;
 using std::accumulate;
@@ -1346,7 +1346,7 @@ double DecodeFromRowCol(int row, int col, const MATRIX_COMPRESSION_DATA& data) {
   }
 }
   
-  MATRIX GetSubmatrix(int startRow, int numRows, const MATRIX_COMPRESSION_DATA& data) {
+  MatrixXd GetSubmatrix(int startRow, int numRows, const MATRIX_COMPRESSION_DATA& data) {
      
     
     TIMER functionTimer(__FUNCTION__);
@@ -1354,13 +1354,28 @@ double DecodeFromRowCol(int row, int col, const MATRIX_COMPRESSION_DATA& data) {
     // assert(numRows == 3);
     DECOMPRESSION_DATA decompression_dataX = data.get_decompression_dataX();
     int numCols = decompression_dataX.get_numCols();
-    MATRIX result(numRows, numCols);
+    MatrixXd result(numRows, numCols);
 
     for (int col = 0; col < numCols; col++) {
       for (int row = 0; row < numRows; row++) {
         double value = DecodeFromRowCol(row + startRow, col, data); 
         result(row, col) = value;
       }
+    }
+    return result;
+  }
+
+  VectorXd GetRow(int row, const MATRIX_COMPRESSION_DATA& data) {
+
+    TIMER functionTimer(__FUNCTION__);
+    
+    DECOMPRESSION_DATA decompression_dataX = data.get_decompression_dataX();
+    int numCols = decompression_dataX.get_numCols();
+    VectorXd result(numCols);
+
+    for (int col = 0; col < numCols; col++) {
+      double value = DecodeFromRowCol(row, col, data);
+      result(col) = value;
     }
     return result;
   }
@@ -1642,6 +1657,198 @@ MatrixXd DecodeFullMatrix(const MATRIX_COMPRESSION_DATA& data) {
   return decodedResult; 
 }
 
+//////////////////////////////////////////////////////////////////////
+// unproject the reduced coordinate into the peeled cells in this field 
+// using compression data
+//////////////////////////////////////////////////////////////////////
+void PeeledCompressedUnproject(VECTOR3_FIELD_3D& V, const MATRIX_COMPRESSION_DATA& U_data, const VectorXd& q) {
+  TIMER functionTimer(__FUNCTION__);
+
+  int xRes = V.xRes();
+  int yRes = V.yRes();
+  int zRes = V.zRes();
+  const int xPeeled = xRes - 2;
+  const int slabPeeled = (xRes - 2) * (yRes - 2);
+  // const int totalColumns = U.cols();
+  DECOMPRESSION_DATA dataX = U_data.get_decompression_dataX();
+  int totalColumns = dataX.get_numCols();
+
+#pragma omp parallel
+#pragma omp for  schedule(static)
+  for (int z = 0; z < zRes - 2; z++)
+  {
+    const int zCached = 3 * z * slabPeeled;
+    for (int y = 0; y < yRes - 2; y++)
+    {
+      const int yzCached = 3 * y * xPeeled + zCached;
+
+      int stride = 2;
+      int xEnd = (xRes - 2) / stride * stride;
+
+      // do the unrolling
+      for (int x = 0; x < xEnd; x += stride)
+      {
+        const int index0 = 3 * x + yzCached;
+        const int index1 = 3 * (x + 1) + yzCached;
+
+        // Real finalX0 = U.row(index0).dot(q);
+        Real finalX0 = (GetRow(index0, U_data)).dot(q);
+        // Real finalY0 = U.row(index0 + 1).dot(q);
+        Real finalY0 = (GetRow(index0 + 1, U_data)).dot(q);
+        // Real finalZ0 = U.row(index0 + 2).dot(q);
+        Real finalZ0 = (GetRow(index0 + 2, U_data)).dot(q);
+        // Real finalX1 = U.row(index1).dot(q);
+        Real finalX1 = (GetRow(index1, U_data)).dot(q);
+        // Real finalY1 = U.row(index1 + 1).dot(q);
+        Real finalY1 = (GetRow(index1 + 1, U_data)).dot(q);
+        // Real finalZ1 = U.row(index1 + 2).dot(q);
+        Real finalZ1 = (GetRow(index1 + 2, U_data)).dot(q);
+
+        V(x + 1, y + 1, z + 1) = VEC3F(finalX0, finalY0, finalZ0);
+        V(x + 2, y + 1, z + 1) = VEC3F(finalX1, finalY1, finalZ1);
+      }
+
+      // catch the leftovers
+      for (int x = xEnd; x < xRes - 2; x++)
+      {
+        const int index = 3 * x + yzCached;
+        // Real finalX = U.row(index).dot(q);
+        Real finalX = (GetRow(index, U_data)).dot(q);
+        // Real finalY = U.row(index + 1).dot(q);
+        Real finalY = (GetRow(index + 1, U_data)).dot(q);
+        // Real finalZ = U.row(index + 2).dot(q);
+        Real finalZ = (GetRow(index + 2, U_data)).dot(q);
+        V(x + 1, y + 1, z + 1) = VEC3F(finalX, finalY, finalZ);
+      }
+
+    }
+  }
+}
     
+VectorXd PeeledCompressedProject(VECTOR3_FIELD_3D& V, const MATRIX_COMPRESSION_DATA& U_data)
+{
+  TIMER functionTimer(__FUNCTION__);
+
+  /*
+  int index = 0;
+  for (int z = 1; z < _zRes - 1; z++)
+    for (int y = 1; y < _yRes - 1; y++)
+      for (int x = 1; x < _xRes - 1; x++, index++)
+      {
+        (*this)(x,y,z)[0] = data[3 * index];
+        (*this)(x,y,z)[1] = data[3 * index + 1];
+        (*this)(x,y,z)[2] = data[3 * index + 2];
+      }
+      */
+
+  DECOMPRESSION_DATA dataX = U_data.get_decompression_dataX();
+  VEC3I dims = dataX.get_dims();
+  const int xRes = dims[0];
+  const int yRes = dims[1];
+  const int zRes = dims[2];
+  const int totalColumns = dataX.get_numCols();
+
+  const int xPeeled = xRes - 2;
+  const int slabPeeled = (xRes - 2) * (yRes - 2);
+  //const int totalThreads = omp_get_max_threads();
+  const int totalThreads = 1; 
+
+  vector<VectorXd> finals(totalThreads);
+  for (unsigned int x = 0; x < finals.size(); x++)
+  {
+    finals[x].resize(totalColumns);
+    finals[x].setZero();
+  }
+
+#pragma omp parallel
+#pragma omp for  schedule(static)
+  for (int z = 0; z < zRes - 2; z++)
+  {
+    const int zCached = 3 * z * slabPeeled;
+    //const int threadID = omp_get_thread_num();
+    const int threadID = 0; 
+    VectorXd& currentFinal = finals[threadID];
+
+    int stride = 4;
+    VectorXd unroll0(finals[threadID].size());
+    VectorXd unroll1(finals[threadID].size());
+    VectorXd unroll2(finals[threadID].size());
+    VectorXd unroll3(finals[threadID].size());
+
+    for (int y = 0; y < yRes - 2; y++)
+    {
+      const int yzCached = 3 * y * xPeeled + zCached;
+
+      int xEnd = (xRes - 2) / stride * stride;
+
+      unroll0.setZero();
+      unroll1.setZero();
+      unroll2.setZero();
+      unroll3.setZero();
+      for (int x = 0; x < xEnd; x += stride)
+      {
+        const int index0 = 3 * x + yzCached;
+        const int index1 = 3 * (x + 1) + yzCached;
+        const int index2 = 3 * (x + 2) + yzCached;
+        const int index3 = 3 * (x + 3) + yzCached;
+
+        const VEC3F v30 = V(x + 1, y + 1, z + 1);
+        const VEC3F v31 = V(x + 2, y + 1, z + 1);
+        const VEC3F v32 = V(x + 3, y + 1, z + 1);
+        const VEC3F v33 = V(x + 4, y + 1, z + 1);
+
+        const Vector3d v0(v30[0], v30[1], v30[2]);
+        const Vector3d v1(v31[0], v31[1], v31[2]);
+        const Vector3d v2(v32[0], v32[1], v32[2]);
+        const Vector3d v3(v33[0], v33[1], v33[2]);
+
+        // unroll0.noalias() += U.block(index0, 0, 3, totalColumns).transpose() * v0;
+        unroll0.noalias() += GetSubmatrix(index0, 3, U_data).transpose() * v0; 
+        // unroll1.noalias() += U.block(index1, 0, 3, totalColumns).transpose() * v1;
+        unroll0.noalias() += GetSubmatrix(index1, 3, U_data).transpose() * v1; 
+        // unroll2.noalias() += U.block(index2, 0, 3, totalColumns).transpose() * v2;
+        unroll0.noalias() += GetSubmatrix(index2, 3, U_data).transpose() * v2; 
+        // unroll3.noalias() += U.block(index3, 0, 3, totalColumns).transpose() * v3;
+        unroll0.noalias() += GetSubmatrix(index3, 3, U_data).transpose() * v3; 
+      }
+      currentFinal.noalias() += unroll0;
+      currentFinal.noalias() += unroll1;
+      currentFinal.noalias() += unroll2;
+      currentFinal.noalias() += unroll3;
+
+      // unrolling leftovers
+      for (int x = xEnd; x < xRes - 2; x++)
+      {
+        const int index = 3 * x + yzCached;
+        const VEC3F v3 = V(x + 1, y + 1, z + 1);
+        const Vector3d v(v3[0], v3[1], v3[2]);
+        // currentFinal.noalias() += U.block(index, 0, 3, totalColumns).transpose() * v;
+        currentFinal.noalias() += GetSubmatrix(index, 3, U_data).transpose() * v;
+      }
+
+      /*
+      for (int x = 0; x < _xRes - 2; x++)
+      {
+        const int index = 3 * x + yzCached;
+        const VEC3F v3 = (*this)(x + 1, y + 1, z + 1);
+        const Vector3d v(v3[0], v3[1], v3[2]);
+        currentFinal.noalias() += U.block(index, 0, 3, totalColumns).transpose() * v;
+      }
+      */
+    }
+  }
+
+  TIMER finalReduce("peeledProject final reduce");
+
+  // do a sum of the thread results
+  VectorXd final(totalColumns);
+  final.setZero();
+  for (unsigned int x = 0; x < finals.size(); x++)
+    final += finals[x];
+  finalReduce.stop();
+
+  return final;
+}
+
    
   

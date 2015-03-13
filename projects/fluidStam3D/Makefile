@@ -2,7 +2,7 @@ include ../include.mk
 
 # calls:
 CC         = g++
-CFLAGS     = ${CFLAGS_COMMON}
+CFLAGS     = ${CFLAGS_COMMON} 
 LDFLAGS    = ${LDFLAGS_COMMON}
 EXECUTABLE = ../../bin/fluidStam3D
 
@@ -19,7 +19,8 @@ SOURCES    = fluidStam3D.cpp \
 						 ../../src/integrators/FLUID_3D_MIC.cpp \
 						 ../../src/geometry/FIELD_2D.cpp \
 						 ../../src/geometry/VECTOR3_FIELD_2D.cpp \
-						 ../../src/util/MIN_HEAP.cpp
+						 ../../src/util/MIN_HEAP.cpp \
+
 OBJECTS    = $(SOURCES:.cpp=.o)
 
 all: $(SOURCES) $(EXECUTABLE)

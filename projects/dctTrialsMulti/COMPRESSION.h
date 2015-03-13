@@ -7,15 +7,17 @@
 #include <numeric>
 
 #include "EIGEN.h"
-#include "SUBSPACE_FLUID_3D_EIGEN.h"
-#include "FLUID_3D_MIC.h"
-#include "CUBATURE_GENERATOR_EIGEN.h"
+// #include "SUBSPACE_FLUID_3D_EIGEN.h"
+// #include "FLUID_3D_MIC.h"
 #include "MATRIX.h"
-#include "SIMPLE_PARSER.h"
+// #include "SIMPLE_PARSER.h"
+#include "FIELD_3D.h"
+#include "VECTOR3_FIELD_3D.h"
 #include "INTEGER_FIELD_3D.h"
 #include "COMPRESSION_DATA.h"
 #include "DECOMPRESSION_DATA.h"
 #include "MATRIX_COMPRESSION_DATA.h"
+// #include "CUBATURE_GENERATOR_EIGEN.h"
 
 //////////////////////////////////////////////////////// 
 // Function signatures
@@ -164,7 +166,7 @@ int ComputeBlockNumber(int row, int col, VEC3I dims, int& blockIndex);
 // Given a (row, col) entry of U.final.matrix, decode the corresponding block and entry
 double DecodeFromRowCol(int row, int col, const MATRIX_COMPRESSION_DATA& data); 
 
-MATRIX GetSubmatrix(int startRow, int numRows, const MATRIX_COMPRESSION_DATA& data);
+MatrixXd GetSubmatrix(int startRow, int numRows, const MATRIX_COMPRESSION_DATA& data);
     
 void WriteMetaData(const char* filename, const COMPRESSION_DATA& compression_data, const MATRIX& sListMatrix, const MATRIX& blockLengths, const MATRIX& blockIndices);
 
@@ -184,6 +186,12 @@ VECTOR3_FIELD_3D DecodeVectorField(const MATRIX_COMPRESSION_DATA& data, int col)
 
 
 MatrixXd DecodeFullMatrix(const MATRIX_COMPRESSION_DATA& data); 
+
+
+void PeeledCompressedUnproject(VECTOR3_FIELD_3D& V, const MATRIX_COMPRESSION_DATA& U_data, const VectorXd& q);   
+
+
+VectorXd PeeledCompressedProject(VECTOR3_FIELD_3D& V, const MATRIX_COMPRESSION_DATA& U_data);
 
 ////////////////////////////////////////////////////////
 // End Function Signatures

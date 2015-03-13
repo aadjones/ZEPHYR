@@ -38,6 +38,7 @@
 #include <cmath>
 #include <cfenv>
 #include <climits>
+#include "VECTOR3_FIELD_3D.h"
 
 using std::vector;
 using std::string;
@@ -171,17 +172,17 @@ int main(int argc, char* argv[]) {
   cout << "True value: " << trueValue << endl;
   
   // use the decompressor to get a 3 x numCols submatrix of U
-  /* 
+  
   int startRow = 0;
-  int numRows = g_numRows;
-  MATRIX subMatrix = GetSubmatrix(startRow, numRows, matrixData); 
+  int numRows = 3;
+  MatrixXd subMatrix = GetSubmatrix(startRow, numRows, matrixData); 
   
   // EIGEN is giving a bizarre malloc error, calling free on something that has already been freed
   // (or never been allocated)
-  // EIGEN::write("sub23.matrix", subMatrix);
+  EIGEN::write("sub0.matrix", subMatrix);
 
-  subMatrix.write("Ucompressedsub.matrix");
-  */ 
+  // subMatrix.write("Ucompressedsub.matrix");
+  
   
   TIMER::printTimings();
   

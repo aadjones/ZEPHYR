@@ -30,6 +30,7 @@
 #include "FLUID_3D_MIC.h"
 #include "SPARSE_MATRIX_ARRAY.h"
 #include "MATRIX_COMPRESSION_DATA.h"
+#include "COMPRESSION.h"
 
 using namespace std;
 using namespace Eigen;
@@ -54,8 +55,8 @@ public:
 
   void stepReorderedCubatureStam();
 
-  const MatrixXd& U() const { return _U; };
-  const MatrixXd& preadvectU() const { return _preadvectU; };
+  // const MatrixXd& U() const { return _U; };
+  // const MatrixXd& preadvectU() const { return _preadvectU; };
 
   const MATRIX_COMPRESSION_DATA& U_final_data() { return _U_final_data; }
   const MATRIX_COMPRESSION_DATA& U_preadvect_data() { return _U_preadvect_data; }
@@ -70,7 +71,8 @@ public:
 
   // get the sub-basis of a cell from a specific basis  
   MatrixXd cellBasisPeeled(const MatrixXd& U, const int index);
-
+  // get the sub-basis of a cell from a specific basis, compressed version
+  MatrixXd cellBasisCompressedPeeled(const MATRIX_COMPRESSION_DATA& U_data, const int index);
   // advect a single cell using Semi-Lagrangian,
   // assuming that "index" is a peeled index, not a full grid index
   VectorXd advectCellStamPeeled(const MATRIX_COMPRESSION_DATA& U_data, const Real& dt, const VectorXd& qDot, const int index);
@@ -96,7 +98,9 @@ public:
   void buildOutOfCoreMatrices();
 
 protected: 
-  MatrixXd _U;
+  // MatrixXd _U;
+  MATRIX_COMPRESSION_DATA _U_final_data;
+  MATRIX_COMPRESSION_DATA _U_preadvect_data;
 
   // boundary bases -- ordering is:
   // 0 - left
@@ -190,7 +194,8 @@ protected:
   // all the different bases -- eventually these will never get loaded, just created
   // once to project the matrix
   MatrixXd _preprojectU;
-  MatrixXd _preadvectU;
+  // TODO: use compressed version here?
+  // MatrixXd _preadvectU;
   MatrixXd _prediffuseU;
   MatrixXd _prevorticityU;
 
