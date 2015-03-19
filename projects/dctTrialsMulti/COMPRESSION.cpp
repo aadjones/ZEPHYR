@@ -1261,14 +1261,12 @@ vector<int> RunLengthDecodeBinary(const int* allData, int blockNumber, VECTOR& b
     vector<int> parsedData;                                
     
     int blockSize = blockLengths[blockNumber];
-    cout << "read in block size: " << blockSize << endl;
     if (blockSize > 3 * 8 * 8 * 8) {
       cout << "bogus block size read in: aborting!" << endl;
       cout << "block size was thought to be: " << blockSize << endl;
       exit(1);
     }
     int blockIndex = blockIndices[blockNumber];
-    cout << "read in block index: " << blockIndex << endl;
     
     int* blockData = (int*) malloc(blockSize * sizeof(int));
 
@@ -1561,12 +1559,13 @@ VectorXd GetRow(int row, MATRIX_COMPRESSION_DATA& data) {
   // fill blockIndex
   int blockNumber = ComputeBlockNumber(row, dims, blockIndex);
   int cachedBlockNumber = data.get_cachedBlockNumber();
-  int decodeCounter = data.get_decodeCounter();
+  // int decodeCounter = data.get_decodeCounter();
 
-  if (blockNumber == cachedBlockNumber && decodeCounter > 2) { // if we've already decoded this block
-    // cout << "Used cache!" << endl;
+  if (blockNumber == cachedBlockNumber) { // if we've already decoded this block
+    cout << "Used cache!" << endl;
 
     if (row % 3 == 0) { // X coordinate
+      
       // load the previously decoded data
       vector<FIELD_3D> cachedBlocksX = data.get_cachedBlocksX();
       for (int col = 0; col < numCols; col++) {
@@ -1597,12 +1596,8 @@ VectorXd GetRow(int row, MATRIX_COMPRESSION_DATA& data) {
   }
 
   else { // no cache; have to compute it from scratch
-    // cout << "Didn't use cache!" << endl;  
+    cout << "Didn't use cache!" << endl;  
 
-    // set the cached block number
-    data.set_cachedBlockNumber(blockNumber);
-    // keep track of how many times we've done the full decode
-    data.increment_decodeCounter();
 
     if (row % 3 == 0) { // X coordinate
       int* allDataX = data.get_dataX();
@@ -1634,6 +1629,8 @@ VectorXd GetRow(int row, MATRIX_COMPRESSION_DATA& data) {
         result[col] = decoded_block[blockIndex];
       }
 
+      // update the counter
+      // data.increment_decodeCounter('X');
       return result;
     }
 
@@ -1659,10 +1656,6 @@ VectorXd GetRow(int row, MATRIX_COMPRESSION_DATA& data) {
         // set the cached block
 
         vector<FIELD_3D> cachedBlocksY = data.get_cachedBlocksY();
-        // if it's the first time through, resize it to numCols
-        if (cachedBlocksY.size() == 0) {
-          cachedBlocksY.resize(numCols);
-        }
         // update the cache
         cachedBlocksY[col] = decoded_block;
         data.set_cachedBlocksY(cachedBlocksY);
@@ -1670,6 +1663,8 @@ VectorXd GetRow(int row, MATRIX_COMPRESSION_DATA& data) {
         result[col] = decoded_block[blockIndex];
       }
 
+      // update the counter
+      // data.increment_decodeCounter('Y');
       return result;
      
     }
@@ -1696,16 +1691,16 @@ VectorXd GetRow(int row, MATRIX_COMPRESSION_DATA& data) {
         // set the cached block
 
         vector<FIELD_3D> cachedBlocksZ = data.get_cachedBlocksZ();
-        // if it's the first time through, resize it to numCols
-        if (cachedBlocksZ.size() == 0) {
-          cachedBlocksZ.resize(numCols);
-        }
+        
         // update the cache
         cachedBlocksZ[col] = decoded_block;
         data.set_cachedBlocksZ(cachedBlocksZ);
 
         result[col] = decoded_block[blockIndex];
       }
+
+      // set the cached block number
+      data.set_cachedBlockNumber(blockNumber);
 
       return result;
     }

@@ -216,10 +216,10 @@ int main(int argc, char* argv[]) {
   // int numRows = 3;
    
 
-  /*
+  
   MatrixXd subMatrix = GetSubmatrix(0, g_numRows, matrixData);
-  EIGEN::write("Unewsub0.matrix", subMatrix);
-  */
+  EIGEN::write("U.sub.test.matrix", subMatrix);
+  
   
 
   

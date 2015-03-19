@@ -35,7 +35,9 @@ class MATRIX_COMPRESSION_DATA {
     const vector<FIELD_3D>& get_cachedBlocksZ() const { return _cachedBlocksZ; }
 
     int get_cachedBlockNumber() const { return _cachedBlockNumber; }
-    int get_decodeCounter() const { return _decodeCounter; }
+    // int get_decodeCounterX() const { return _decodeCounterX; }
+    // int get_decodeCounterY() const { return _decodeCounterY; }
+    // int get_decodeCounterZ() const { return _decodeCounterZ; }
     
     // setters
     
@@ -52,7 +54,9 @@ class MATRIX_COMPRESSION_DATA {
     void set_cachedBlocksZ(const vector<FIELD_3D>& cachedBlocksZ) { _cachedBlocksZ = cachedBlocksZ; }
 
     void set_cachedBlockNumber(int cachedBlockNumber) { _cachedBlockNumber = cachedBlockNumber; }
-    void set_decodeCounter(int decodeCounter) { _decodeCounter = decodeCounter; }
+    // void set_decodeCounterX(int decodeCounterX) { _decodeCounterX = decodeCounterX; }
+    // void set_decodeCounterY(int decodeCounterY) { _decodeCounterY = decodeCounterY; }
+    // void set_decodeCounterZ(int decodeCounterZ) { _decodeCounterZ = decodeCounterZ; }
    
     // initializations
     void init_cache() {
@@ -61,7 +65,7 @@ class MATRIX_COMPRESSION_DATA {
       // set block number to nonsense
       _cachedBlockNumber = -1;
       // initialize decode counter
-      _decodeCounter = 0;
+      // _decodeCounter = 0;
 
       const int xRes = 8;
       const int yRes = 8;
@@ -88,10 +92,20 @@ class MATRIX_COMPRESSION_DATA {
     }
 
     // incrementer
-    void increment_decodeCounter() {
-      _decodeCounter++;
+    /* 
+    void increment_decodeCounter(const char c) {
+      if (c == 'X') {
+         _decodeCounterX++;
+      }
+      else if (c == 'Y') {
+        _decodeCounterY++;
+      }
+      else {
+        _decodeCounterZ++;
+      }
     }
-    
+    */
+
     void dct_setup(int direction) {
       const int xRes = 8;
       const int yRes = 8;
@@ -133,7 +147,9 @@ class MATRIX_COMPRESSION_DATA {
     vector<FIELD_3D> _cachedBlocksZ;
 
     int _cachedBlockNumber;
-    int _decodeCounter;
+    // int _decodeCounterX;
+    // int _decodeCounterY;
+    // int _decodeCounterZ;
 
     double* _dct_in;
     double* _dct_out;
