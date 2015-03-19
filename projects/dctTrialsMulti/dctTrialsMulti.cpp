@@ -50,8 +50,8 @@ using std::string;
 
 // string path_to_U("/Users/aaron/Desktop/U.final.uncompressed.matrix");
 // string path_to_U("/Volumes/DataDrive/data/reduced.stam.200.vorticity.1.5/U.preadvect.matrix");
-// string path_to_U("U.final.donotmodify.matrix.48");
-string path_to_U("U.preadvect.donotmodify.matrix.48");
+string path_to_U("U.final.donotmodify.matrix.48");
+// string path_to_U("U.preadvect.donotmodify.matrix.48");
 
 // debugging
 // string path_to_U("randTest.matrix");
@@ -110,9 +110,9 @@ int main(int argc, char* argv[]) {
   EIGEN::read(path_to_U, g_U);
 
   // Compression parameters    
-  const int nBits = 16;
+  const int nBits = 24;
   const double q = 1.0;
-  const double power = 4.0;
+  const double power = 1.0;
 
   // set the parameters in compression data
   COMPRESSION_DATA compression_data(g_dims, g_numCols, q, power, nBits);
@@ -137,7 +137,7 @@ int main(int argc, char* argv[]) {
   }
   MatrixXd compressedResult = EIGEN::buildFromColumns(columnList);
 
-  EIGEN::write("U.preadvect.pow4q1.matrix", compressedResult);
+  EIGEN::write("U.final.lossless.matrix", compressedResult);
   */
 
 
@@ -146,19 +146,19 @@ int main(int argc, char* argv[]) {
   // write a binary file for each scalar field component
 
   
-  /* 
+  
   const char* filename = "U.final.component";
   for (int component = 0; component < 3; component++) {
     cout << "Writing component: " << component << endl;
     CompressAndWriteMatrixComponent(filename, g_U, component, compression_data);
   }
-  */
+  
   
   
   // preprocessing for the decoder
-  short* allDataX;
-  short* allDataY;
-  short* allDataZ;
+  int* allDataX;
+  int* allDataY;
+  int* allDataZ;
   DECOMPRESSION_DATA decompression_dataX;
   DECOMPRESSION_DATA decompression_dataY;
   DECOMPRESSION_DATA decompression_dataZ;
@@ -178,7 +178,7 @@ int main(int argc, char* argv[]) {
   
   
   MatrixXd U_recovered = DecodeFullMatrix(matrixData); 
-  EIGEN::write("U.final.matlab.test.matrix", U_recovered);
+  EIGEN::write("U.final.lossless.matlab.test.matrix", U_recovered);
   
   
   /*
@@ -186,7 +186,7 @@ int main(int argc, char* argv[]) {
   VECTOR blockIndices = decompression_dataZ.get_blockIndicesMatrix().getColumn(19);
 
   cout << "block 151 is this long: " << blockLengths[151] << endl;
-  vector<short> testRL = RunLengthDecodeBinary(allDataZ, 151, blockLengths, blockIndices);
+  vector<int> testRL = RunLengthDecodeBinary(allDataZ, 151, blockLengths, blockIndices);
 
   VECTOR testRLvec = CastIntToVector(testRL);
   testRLvec.printVertical = false;

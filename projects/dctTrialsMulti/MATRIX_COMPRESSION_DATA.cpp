@@ -6,7 +6,7 @@ MATRIX_COMPRESSION_DATA::MATRIX_COMPRESSION_DATA()
 {
 }
 
-MATRIX_COMPRESSION_DATA::MATRIX_COMPRESSION_DATA(short* const& dataX, short* const& dataY, short* const& dataZ,
+MATRIX_COMPRESSION_DATA::MATRIX_COMPRESSION_DATA(int* const& dataX, int* const& dataY, int* const& dataZ,
         const DECOMPRESSION_DATA& decompression_dataX, const DECOMPRESSION_DATA& decompression_dataY, const DECOMPRESSION_DATA& decompression_dataZ) :
   
   _dataX(dataX), _dataY(dataY), _dataZ(dataZ), 

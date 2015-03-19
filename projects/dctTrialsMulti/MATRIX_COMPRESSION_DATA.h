@@ -14,7 +14,7 @@ class MATRIX_COMPRESSION_DATA {
   public: 
     MATRIX_COMPRESSION_DATA(); 
 
-    MATRIX_COMPRESSION_DATA(short* const& dataX, short* const& dataY, short* const& dataZ,
+    MATRIX_COMPRESSION_DATA(int* const& dataX, int* const& dataY, int* const& dataZ,
         const DECOMPRESSION_DATA& decompression_dataX, const DECOMPRESSION_DATA& decompression_dataY, const DECOMPRESSION_DATA& decompression_dataZ);
 
     ~MATRIX_COMPRESSION_DATA();
@@ -22,9 +22,9 @@ class MATRIX_COMPRESSION_DATA {
    
     // getters
     
-    short* const& get_dataX() const { return _dataX; }
-    short* const& get_dataY() const { return _dataY; }
-    short* const& get_dataZ() const { return _dataZ; }
+    int* const& get_dataX() const { return _dataX; }
+    int* const& get_dataY() const { return _dataY; }
+    int* const& get_dataZ() const { return _dataZ; }
 
     const DECOMPRESSION_DATA& get_decompression_dataX() const { return _decompression_dataX; }
     const DECOMPRESSION_DATA& get_decompression_dataY() const { return _decompression_dataY; }
@@ -39,9 +39,9 @@ class MATRIX_COMPRESSION_DATA {
     
     // setters
     
-    void set_dataX(short* const& dataX) { _dataX = dataX; }
-    void set_dataY(short* const& dataY) { _dataY = dataY; }
-    void set_dataZ(short* const& dataZ) { _dataZ = dataZ; }
+    void set_dataX(int* const& dataX) { _dataX = dataX; }
+    void set_dataY(int* const& dataY) { _dataY = dataY; }
+    void set_dataZ(int* const& dataZ) { _dataZ = dataZ; }
 
     void set_decompression_dataX(const DECOMPRESSION_DATA& decompression_dataX) { _decompression_dataX = decompression_dataX; }
     void set_decompression_dataY(const DECOMPRESSION_DATA& decompression_dataY) { _decompression_dataY = decompression_dataY; }
@@ -120,9 +120,9 @@ class MATRIX_COMPRESSION_DATA {
 
 
   private:
-    short* _dataX;
-    short* _dataY;
-    short* _dataZ;
+    int* _dataX;
+    int* _dataY;
+    int* _dataZ;
 
     DECOMPRESSION_DATA _decompression_dataX;
     DECOMPRESSION_DATA _decompression_dataY;

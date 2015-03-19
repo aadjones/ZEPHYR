@@ -47,15 +47,15 @@ double* CastToDouble(const VECTOR& x, double* array);
 // cast a VECTOR (preferably with integer entries to avoid lossiness) to an array of ints
 int* CastToInt(const VECTOR& x, int* array);
 
-short* CastToShort(const VECTOR& x, short* array);
+int* CastToShort(const VECTOR& x, int* array);
 
 long* CastToLong(const VECTOR& x, long* array);
 
 // cast a C++ vector of integers to a VECTOR of integers
 VECTOR CastIntToVector(const vector<int>& V);
 
-// same as above, but with the input as a C++ vector of short integers (int16)
-VECTOR CastIntToVector(const vector<short>& V);
+// same as above, but with the input as a C++ vector of int integers (int16)
+VECTOR CastIntToVector(const vector<int>& V);
 
 // more fun casting
 vector<int> CastVectorToInt(const VECTOR& V);
@@ -149,14 +149,14 @@ void RunLengthEncodeBinary(const char* filename, int* zigzaggedArray, int length
 
 // Works in a chain with RunLengthEncodeBinary.
 // Decodes a run-length encoded, zigzagged vector, returning a vector of integers.
-vector<short> RunLengthDecodeBinary(const short* allData, int blockNumber, VECTOR& blockLengths, VECTOR& blockIndices); 
+vector<int> RunLengthDecodeBinary(const int* allData, int blockNumber, VECTOR& blockLengths, VECTOR& blockIndices); 
 
 // Deletes the file named 'filename' if it already exists
 void DeleteIfExists(const char* filename);
 
 // Reads in an encoded file with its block lengths and stores it in allData. 
 // Needs blockLengths in order to know how much memory to allocate.
-void ReadBinaryFileToMemory(const char* filename, short*& allData, DECOMPRESSION_DATA& decompression_data);
+void ReadBinaryFileToMemory(const char* filename, int*& allData, DECOMPRESSION_DATA& decompression_data);
 
 // Chains several previous functions together
 void CompressAndWriteField(const char* filename, const FIELD_3D& F, COMPRESSION_DATA& compression_data); 
@@ -181,7 +181,7 @@ void CompressAndWriteMatrixComponent(const char* filename, const MatrixXd& U, in
 
 
 
-FIELD_3D DecodeScalarField(const DECOMPRESSION_DATA& decompression_data, short* const& allData, int col); 
+FIELD_3D DecodeScalarField(const DECOMPRESSION_DATA& decompression_data, int* const& allData, int col); 
 
 
 VECTOR3_FIELD_3D DecodeVectorField(MATRIX_COMPRESSION_DATA& data, int col); 

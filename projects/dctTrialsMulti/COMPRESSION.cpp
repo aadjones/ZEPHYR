@@ -52,10 +52,11 @@ VECTOR CastToVector(int* data, int size) {
   return x;
 }
 
+/*
 ////////////////////////////////////////////////////////
-// fill a VECTOR from a buffer of shorts
+// fill a VECTOR from a buffer of ints
 ////////////////////////////////////////////////////////
-VECTOR CastToVector(short* data, int size) {
+VECTOR CastToVector(int* data, int size) {
   TIMER functionTimer(__FUNCTION__);
   VECTOR x(size);
   for (int i = 0; i < size; i++) {
@@ -63,6 +64,7 @@ VECTOR CastToVector(short* data, int size) {
   }
   return x;
 }
+*/
 
 ////////////////////////////////////////////////////////
 // fill a buffer of doubles from a VECTOR 
@@ -91,10 +93,10 @@ int* CastToInt(const VECTOR& x, int* array) {
 ////////////////////////////////////////////////////////
 // fill a buffer of ints from a VECTOR
 ////////////////////////////////////////////////////////
-short* CastToShort(const VECTOR& x, short* array) {
+int* CastToShort(const VECTOR& x, int* array) {
   TIMER functionTimer(__FUNCTION__);
   for (int i = 0; i < x.size(); i++) {
-    short data_i = (short) x[i];
+    int data_i = (int) x[i];
     array[i] = data_i;
   }
   return array;
@@ -128,10 +130,11 @@ vector<int> CastVectorToInt(const VECTOR& V) {
   return result;
 }
 
+/*
 ////////////////////////////////////////////////////////
-// convert a vector<short> to a VECTOR 
+// convert a vector<int> to a VECTOR 
 ////////////////////////////////////////////////////////
-VECTOR CastIntToVector(const vector<short>& V) {
+VECTOR CastIntToVector(const vector<int>& V) {
   TIMER functionTimer(__FUNCTION__);
   int length = V.size();
   VECTOR result(length);
@@ -141,6 +144,7 @@ VECTOR CastIntToVector(const vector<short>& V) {
   }
   return result;
 }
+*/
 
 ////////////////////////////////////////////////////////
 // convert a VECTOR to a vector<double> 
@@ -1100,17 +1104,17 @@ void RunLengthEncodeBinary(const char* filename, int blockNumber, int* zigzagged
   }
   else {
 
-    vector<short> dataList;            // a C++ vector container for our data (int16s)
-    short data = 0;
-    short runLength = 0;
-    int encodedLength = 0;             // variable used to keep track of how long our code is for the decoder
+    vector<int> dataList;            // a C++ vector container for our data (int16s)
+    int data = 0;
+    int runLength = 0;
+    // int encodedLength = 0;             // variable used to keep track of how long our code is for the decoder
 
     // assuming 8 x 8 x 8 blocks
     int length = 8 * 8 * 8;
     for (int i = 0; i < length; i++) {
       data = zigzaggedArray[i];
       dataList.push_back(data);
-      encodedLength++;
+      // encodedLength++;
 
       runLength = 1;
       while ( (i + 1 < length) && (zigzaggedArray[i] == zigzaggedArray[i + 1]) ) {
@@ -1122,13 +1126,14 @@ void RunLengthEncodeBinary(const char* filename, int blockNumber, int* zigzagged
         // use a single repeated value as an 'escape' to indicate a run
         dataList.push_back(data);
         
-        encodedLength++;
+        // encodedLength++;
 
         // push the runLength to the data vector
         dataList.push_back(runLength);
-        encodedLength++;
+        // encodedLength++;
       }
     }
+    int encodedLength = dataList.size();
     if (encodedLength > 8 * 8 * 8) {
       cout << "Encoded length is pretty big: " << encodedLength << endl;
     }
@@ -1138,7 +1143,7 @@ void RunLengthEncodeBinary(const char* filename, int blockNumber, int* zigzagged
     {
     TIMER writeTimer("fwrite timer");
 
-    fwrite(&(dataList[0]), sizeof(short), encodedLength, pFile);
+    fwrite(&(dataList[0]), sizeof(int), encodedLength, pFile);
     // this write assumes that C++ vectors are stored in contiguous memory!
     
     }
@@ -1152,7 +1157,7 @@ void RunLengthEncodeBinary(const char* filename, int blockNumber, int* zigzagged
 // reads from a binary file into a buffer, and sets
 // important initializations inside decompression data
 ////////////////////////////////////////////////////////
-void ReadBinaryFileToMemory(const char* filename, short*& allData, DECOMPRESSION_DATA& decompression_data) {
+void ReadBinaryFileToMemory(const char* filename, int*& allData, DECOMPRESSION_DATA& decompression_data) {
   TIMER functionTimer(__FUNCTION__);
   // allData is passed by reference and will be modified, as will decompression_data
 
@@ -1213,30 +1218,30 @@ void ReadBinaryFileToMemory(const char* filename, short*& allData, DECOMPRESSION
     decompression_data.set_sListMatrix(sMatrix);
 
     // do the same for the blockLengthsMatrix
-    short* short_dummy = (short*) malloc(totalSize * sizeof(short));
-    fread(short_dummy, totalSize, sizeof(short), pFile);
-    VECTOR flattened_lengths = CastToVector(short_dummy, totalSize);
-    free(short_dummy);
+    int* int_dummy = (int*) malloc(totalSize * sizeof(int));
+    fread(int_dummy, totalSize, sizeof(int), pFile);
+    VECTOR flattened_lengths = CastToVector(int_dummy, totalSize);
+    free(int_dummy);
     MATRIX blockLengthsMatrix(flattened_lengths, numBlocks, numCols);
     // store the total length to be able to read in the full compressed data later
     int totalLength = blockLengthsMatrix.sum();
     decompression_data.set_blockLengthsMatrix(blockLengthsMatrix);
 
     // do the same for the blockIndicesMatrix
-    int* int_dummy = (int*) malloc(totalSize * sizeof(int));
-    fread(int_dummy, totalSize, sizeof(int), pFile);
-    VECTOR flattened_indices = CastToVector(int_dummy, totalSize);
-    free(int_dummy);
+    int* int_dummy2 = (int*) malloc(totalSize * sizeof(int));
+    fread(int_dummy2, totalSize, sizeof(int), pFile);
+    VECTOR flattened_indices = CastToVector(int_dummy2, totalSize);
+    free(int_dummy2);
     MATRIX blockIndicesMatrix(flattened_indices, numBlocks, numCols);
     decompression_data.set_blockIndicesMatrix(blockIndicesMatrix);
 
     // finally, read in the full compressed data
-    allData = (short*) malloc(totalLength * sizeof(short));
+    allData = (int*) malloc(totalLength * sizeof(int));
     if (allData == NULL) {
       perror("Malloc failed to allocate allData!");
       exit(EXIT_FAILURE);
     }
-    fread(allData, totalLength, sizeof(short), pFile);
+    fread(allData, totalLength, sizeof(int), pFile);
     }
   return;
 }
@@ -1244,16 +1249,16 @@ void ReadBinaryFileToMemory(const char* filename, short*& allData, DECOMPRESSION
 
 ////////////////////////////////////////////////////////
 // decode a run-length encoded binary file and return
-// a vector<short> type
+// a vector<int> type
 ////////////////////////////////////////////////////////
-vector<short> RunLengthDecodeBinary(const short* allData, int blockNumber, VECTOR& blockLengths, VECTOR& blockIndices) {
+vector<int> RunLengthDecodeBinary(const int* allData, int blockNumber, VECTOR& blockLengths, VECTOR& blockIndices) {
 
   TIMER functionTimer(__FUNCTION__);
   // although blockLengths and blockIndices are passed by reference,
   // they will not be modified.
     
     // what we will be returning
-    vector<short> parsedData;                                
+    vector<int> parsedData;                                
     
     int blockSize = blockLengths[blockNumber];
     cout << "read in block size: " << blockSize << endl;
@@ -1265,7 +1270,7 @@ vector<short> RunLengthDecodeBinary(const short* allData, int blockNumber, VECTO
     int blockIndex = blockIndices[blockNumber];
     cout << "read in block index: " << blockIndex << endl;
     
-    short* blockData = (short*) malloc(blockSize * sizeof(short));
+    int* blockData = (int*) malloc(blockSize * sizeof(int));
 
     if (blockData == NULL) {
       perror("Malloc failed to allocate blockData!");
@@ -1281,28 +1286,25 @@ vector<short> RunLengthDecodeBinary(const short* allData, int blockNumber, VECTO
     int runLength = 1;
     while (i < blockSize) {
       parsedData.push_back(blockData[i]);          // write the value once
-      if (blockData[i] == blockData[i + 1]) {      // if we read an 'escape' value, it indicates a run.
-        // int j = i + 2;                                      // advance past the escape value to the run length value.
-        runLength = blockData[i + 2];
+      if ( (i + 1 < blockSize) && blockData[i] == blockData[i + 1]) {      // if we read an 'escape' value, it indicates a run.
+        i += 2;                                     // advance past the escape value to the run length value.
+        runLength = blockData[i];
         
         assert(runLength > 1);
-        if (runLength <= 1) {
-          cout << "Parsing error: run length was read in as <= 1. Aborting." << endl;
+        if (runLength <= 1 || runLength > 512) {
+          cout << "Parsing error: run length was read in as garbage. Aborting." << endl;
           cout << "Run length was thought to be: " << runLength << endl;
-          cout << "Previous two values were: " << blockData[i] << ", " << blockData[i+1] << endl;
-          cout << "Next value is: " << blockData[i+3] << endl;
+          cout << "Previous two values were: " << blockData[i-2] << ", " << blockData[i-1] << endl;
+          cout << "Next value is: " << blockData[i+1] << endl;
+          cout << "Index is currently at: " << i << " of " << blockSize << endl;
           exit(1);
         }
 
         for (int j = 0; j < runLength - 1; j++) {  // write the original value (index i - 2) repeatedly for runLength - 1 times,
           parsedData.push_back(blockData[i - 2]);  // since we already wrote it once
         }
-        i++;
-        i++;
-
       }
       i++;
-
     }
 
     free(blockData);
@@ -1375,8 +1377,8 @@ void CompressAndWriteFieldSmart(const char* filename, const FIELD_3D& F, COMPRES
       block_i = blocks[i];
       // performs quantization and damping. updates sList
       intEncoded_i = EncodeBlock(block_i, i, compression_data);
-      zigzagged_i = ZigzagFlatten(intEncoded_i);
-      // zigzagged_i = ZigzagFlattenSmart(intEncoded_i, zigzagArray);
+      // zigzagged_i = ZigzagFlatten(intEncoded_i);
+      zigzagged_i = ZigzagFlattenSmart(intEncoded_i, zigzagArray);
       zigzagArray_i = CastToInt(zigzagged_i, zigzagArray_i);
       // performs run-length encoding. updates blockLengths. since
       // it opens 'filename' in append mode, it can be called in a chain
@@ -1449,13 +1451,13 @@ double DecodeFromRowCol(int row, int col, MATRIX_COMPRESSION_DATA& data) {
   VEC3I dims = dataX.get_dims();
   const INTEGER_FIELD_3D& zigzagArray = dataX.get_zigzagArray();
   
-  short* allDataX = data.get_dataX();
-  short* allDataY = data.get_dataY();
-  short* allDataZ = data.get_dataZ();
+  int* allDataX = data.get_dataX();
+  int* allDataY = data.get_dataY();
+  int* allDataZ = data.get_dataZ();
   DECOMPRESSION_DATA dataY = data.get_decompression_dataY();
   DECOMPRESSION_DATA dataZ = data.get_decompression_dataZ();
 
-  vector<short> decoded_runLength;
+  vector<int> decoded_runLength;
 
   // dummy initialization
   int blockIndex = 0;
@@ -1473,8 +1475,8 @@ double DecodeFromRowCol(int row, int col, MATRIX_COMPRESSION_DATA& data) {
     decoded_runLength = RunLengthDecodeBinary(allDataX, blockNumber, blockLengths, blockIndices); 
 
     VECTOR decoded_runLengthVector = CastIntToVector(decoded_runLength);
-    INTEGER_FIELD_3D unzigzagged = ZigzagUnflatten(decoded_runLengthVector);
-    // INTEGER_FIELD_3D unzigzagged = ZigzagUnflattenSmart(decoded_runLengthVector, zigzagArray);
+    // INTEGER_FIELD_3D unzigzagged = ZigzagUnflatten(decoded_runLengthVector);
+    INTEGER_FIELD_3D unzigzagged = ZigzagUnflattenSmart(decoded_runLengthVector, zigzagArray);
     FIELD_3D decoded_block = DecodeBlock(unzigzagged, blockNumber, col, dataX); 
     double result = decoded_block[blockIndex];
     return result;
@@ -1494,8 +1496,8 @@ double DecodeFromRowCol(int row, int col, MATRIX_COMPRESSION_DATA& data) {
     decoded_runLength = RunLengthDecodeBinary(allDataY, blockNumber, blockLengths, blockIndices); 
 
     VECTOR decoded_runLengthVector = CastIntToVector(decoded_runLength);
-    INTEGER_FIELD_3D unzigzagged = ZigzagUnflatten(decoded_runLengthVector);
-    // INTEGER_FIELD_3D unzigzagged = ZigzagUnflattenSmart(decoded_runLengthVector, zigzagArray);
+    // INTEGER_FIELD_3D unzigzagged = ZigzagUnflatten(decoded_runLengthVector);
+    INTEGER_FIELD_3D unzigzagged = ZigzagUnflattenSmart(decoded_runLengthVector, zigzagArray);
     FIELD_3D decoded_block = DecodeBlock(unzigzagged, blockNumber, col, dataY); 
     double result = decoded_block[blockIndex];
     return result;
@@ -1515,8 +1517,8 @@ double DecodeFromRowCol(int row, int col, MATRIX_COMPRESSION_DATA& data) {
     decoded_runLength = RunLengthDecodeBinary(allDataZ, blockNumber, blockLengths, blockIndices); 
 
     VECTOR decoded_runLengthVector = CastIntToVector(decoded_runLength);
-    INTEGER_FIELD_3D unzigzagged = ZigzagUnflatten(decoded_runLengthVector);
-    // INTEGER_FIELD_3D unzigzagged = ZigzagUnflattenSmart(decoded_runLengthVector, zigzagArray);
+    // INTEGER_FIELD_3D unzigzagged = ZigzagUnflatten(decoded_runLengthVector);
+    INTEGER_FIELD_3D unzigzagged = ZigzagUnflattenSmart(decoded_runLengthVector, zigzagArray);
     FIELD_3D decoded_block = DecodeBlock(unzigzagged, blockNumber, col, dataZ);
     double result = decoded_block[blockIndex];
     return result;
@@ -1603,7 +1605,7 @@ VectorXd GetRow(int row, MATRIX_COMPRESSION_DATA& data) {
     data.increment_decodeCounter();
 
     if (row % 3 == 0) { // X coordinate
-      short* allDataX = data.get_dataX();
+      int* allDataX = data.get_dataX();
       MATRIX blockLengthsMatrix = decompression_dataX.get_blockLengthsMatrix();
       MATRIX blockIndicesMatrix = decompression_dataX.get_blockIndicesMatrix();
       MATRIX sListMatrix = decompression_dataX.get_sListMatrix();
@@ -1614,11 +1616,11 @@ VectorXd GetRow(int row, MATRIX_COMPRESSION_DATA& data) {
         VECTOR blockLengths = blockLengthsMatrix.getColumn(col);
         VECTOR blockIndices = blockIndicesMatrix.getColumn(col);
         VECTOR sList = sListMatrix.getColumn(col);
-        vector<short> decoded_runLength = RunLengthDecodeBinary(allDataX, blockNumber, blockLengths, blockIndices); 
+        vector<int> decoded_runLength = RunLengthDecodeBinary(allDataX, blockNumber, blockLengths, blockIndices); 
 
         VECTOR decoded_runLengthVector = CastIntToVector(decoded_runLength);
-        INTEGER_FIELD_3D unzigzagged = ZigzagUnflatten(decoded_runLengthVector);
-        // INTEGER_FIELD_3D unzigzagged = ZigzagUnflattenSmart(decoded_runLengthVector, zigzagArray);
+        // INTEGER_FIELD_3D unzigzagged = ZigzagUnflatten(decoded_runLengthVector);
+        INTEGER_FIELD_3D unzigzagged = ZigzagUnflattenSmart(decoded_runLengthVector, zigzagArray);
 
         FIELD_3D decoded_block = DecodeBlock(unzigzagged, blockNumber, col, decompression_dataX); 
         
@@ -1637,7 +1639,7 @@ VectorXd GetRow(int row, MATRIX_COMPRESSION_DATA& data) {
 
     else if (row % 3 == 1) { // Y coordinate
       
-      short* allDataY = data.get_dataY();
+      int* allDataY = data.get_dataY();
       DECOMPRESSION_DATA decompression_dataY = data.get_decompression_dataY();
       MATRIX blockLengthsMatrix = decompression_dataY.get_blockLengthsMatrix();
       MATRIX blockIndicesMatrix = decompression_dataY.get_blockIndicesMatrix();
@@ -1648,11 +1650,11 @@ VectorXd GetRow(int row, MATRIX_COMPRESSION_DATA& data) {
         VECTOR blockLengths = blockLengthsMatrix.getColumn(col);
         VECTOR blockIndices = blockIndicesMatrix.getColumn(col);
         VECTOR sList = sListMatrix.getColumn(col);
-        vector<short> decoded_runLength = RunLengthDecodeBinary(allDataY, blockNumber, blockLengths, blockIndices); 
+        vector<int> decoded_runLength = RunLengthDecodeBinary(allDataY, blockNumber, blockLengths, blockIndices); 
 
         VECTOR decoded_runLengthVector = CastIntToVector(decoded_runLength);
-        INTEGER_FIELD_3D unzigzagged = ZigzagUnflatten(decoded_runLengthVector);
-        // INTEGER_FIELD_3D unzigzagged = ZigzagUnflattenSmart(decoded_runLengthVector, zigzagArray);
+        // INTEGER_FIELD_3D unzigzagged = ZigzagUnflatten(decoded_runLengthVector);
+        INTEGER_FIELD_3D unzigzagged = ZigzagUnflattenSmart(decoded_runLengthVector, zigzagArray);
         FIELD_3D decoded_block = DecodeBlock(unzigzagged, blockNumber, col, decompression_dataY); 
         // set the cached block
 
@@ -1674,7 +1676,7 @@ VectorXd GetRow(int row, MATRIX_COMPRESSION_DATA& data) {
 
     else { // Z coordinate
 
-      short* allDataZ = data.get_dataZ();
+      int* allDataZ = data.get_dataZ();
       DECOMPRESSION_DATA decompression_dataZ = data.get_decompression_dataZ();
       MATRIX blockLengthsMatrix = decompression_dataZ.get_blockLengthsMatrix();
       MATRIX blockIndicesMatrix = decompression_dataZ.get_blockIndicesMatrix();
@@ -1685,11 +1687,11 @@ VectorXd GetRow(int row, MATRIX_COMPRESSION_DATA& data) {
         VECTOR blockLengths = blockLengthsMatrix.getColumn(col);
         VECTOR blockIndices = blockIndicesMatrix.getColumn(col);
         VECTOR sList = sListMatrix.getColumn(col);
-        vector<short> decoded_runLength = RunLengthDecodeBinary(allDataZ, blockNumber, blockLengths, blockIndices); 
+        vector<int> decoded_runLength = RunLengthDecodeBinary(allDataZ, blockNumber, blockLengths, blockIndices); 
 
         VECTOR decoded_runLengthVector = CastIntToVector(decoded_runLength);
-        INTEGER_FIELD_3D unzigzagged = ZigzagUnflatten(decoded_runLengthVector);
-        // INTEGER_FIELD_3D unzigzagged = ZigzagUnflattenSmart(decoded_runLengthVector, zigzagArray);
+        // INTEGER_FIELD_3D unzigzagged = ZigzagUnflatten(decoded_runLengthVector);
+        INTEGER_FIELD_3D unzigzagged = ZigzagUnflattenSmart(decoded_runLengthVector, zigzagArray);
         FIELD_3D decoded_block = DecodeBlock(unzigzagged, blockNumber, col, decompression_dataZ); 
         // set the cached block
 
@@ -1761,10 +1763,10 @@ void WriteMetaData(const char* filename, const COMPRESSION_DATA& compression_dat
       VECTOR flattened_lengths = blockLengthsMatrix.flattenedColumn();
       assert(flattened_lengths.size() == blocksXcols);
 
-      short* lengthsData = (short*) malloc(sizeof(short) * blocksXcols);
+      int* lengthsData = (int*) malloc(sizeof(int) * blocksXcols);
       // fill lengthsData and write it
       lengthsData = CastToShort(flattened_lengths, lengthsData);
-      fwrite(lengthsData, sizeof(short), blocksXcols, pFile);
+      fwrite(lengthsData, sizeof(int), blocksXcols, pFile);
       
       VECTOR flattened_indices = blockIndicesMatrix.flattenedColumn();
       assert(flattened_indices.size() == blocksXcols);
@@ -1822,12 +1824,15 @@ void CompressAndWriteMatrixComponent(const char* filename, const MatrixXd& U, in
   string final_string(filename);
   if (component == 0) {
     final_string += 'X';
+    DeleteIfExists(final_string.c_str());
   }
   else if (component == 1) {
     final_string += 'Y';
+    DeleteIfExists(final_string.c_str());
   }
   else { // component == 2
     final_string += 'Z';
+    DeleteIfExists(final_string.c_str());
   }
   
   VEC3I dims = data.get_dims();
@@ -1893,9 +1898,9 @@ void CompressAndWriteMatrixComponent(const char* filename, const MatrixXd& U, in
 ////////////////////////////////////////////////////////
 // reconstructs a lossy original of a scalar field
 // which had been written to a binary file and now loaded 
-// into a short buffer
+// into a int buffer
 ////////////////////////////////////////////////////////
-FIELD_3D DecodeScalarField(const DECOMPRESSION_DATA& decompression_data, short* const& allData, int col) {
+FIELD_3D DecodeScalarField(const DECOMPRESSION_DATA& decompression_data, int* const& allData, int col) {
   TIMER functionTimer(__FUNCTION__);
 
   // get the dims from data and construct a field of the appropriate size
@@ -1933,12 +1938,12 @@ FIELD_3D DecodeScalarField(const DECOMPRESSION_DATA& decompression_data, short* 
 
   for (int blockNumber = 0; blockNumber < numBlocks; blockNumber++) {
     // decode the run length scheme
-    vector<short> runLengthDecoded = RunLengthDecodeBinary(allData, blockNumber, blockLengths, blockIndices);
+    vector<int> runLengthDecoded = RunLengthDecodeBinary(allData, blockNumber, blockLengths, blockIndices);
     // cast to VECTOR to play nice with ZigzagUnflattenSmart
     VECTOR runLengthDecodedVec = CastIntToVector(runLengthDecoded);
     // undo the zigzag scan
-    INTEGER_FIELD_3D unzigzagged = ZigzagUnflatten(runLengthDecodedVec);
-    // INTEGER_FIELD_3D unzigzagged = ZigzagUnflattenSmart(runLengthDecodedVec, zigzagArray);
+    // INTEGER_FIELD_3D unzigzagged = ZigzagUnflatten(runLengthDecodedVec);
+    INTEGER_FIELD_3D unzigzagged = ZigzagUnflattenSmart(runLengthDecodedVec, zigzagArray);
     // undo the scaling from the quantizer
     FIELD_3D unquantized = DecodeBlockDecomp(unzigzagged, blockNumber, col, decompression_data);
     // push to the block container
@@ -1973,9 +1978,9 @@ VECTOR3_FIELD_3D DecodeVectorField(MATRIX_COMPRESSION_DATA& data, int col) {
   int yRes = dims[1];
   int zRes = dims[2];
 
-  short* allDataX = data.get_dataX();
-  short* allDataY = data.get_dataY();
-  short* allDataZ = data.get_dataZ();
+  int* allDataX = data.get_dataX();
+  int* allDataY = data.get_dataY();
+  int* allDataZ = data.get_dataZ();
 
   FIELD_3D scalarX = DecodeScalarField(decompression_dataX, allDataX, col);
   FIELD_3D scalarY = DecodeScalarField(decompression_dataY, allDataY, col);
