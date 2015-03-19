@@ -31,6 +31,10 @@
 #endif
 #include "SUBSPACE_FLUID_3D_COMPRESSED_EIGEN.h"
 #include "MATRIX.h"
+#include "COMPRESSION.h"
+#include "COMPRESSION_DATA.h"
+#include "DECOMPRESSION_DATA.h"
+#include "MATRIX_COMPRESSION_DATA.h"
 #include "SIMPLE_PARSER.h"
 
 using namespace std;
@@ -135,6 +139,7 @@ void glutDisplay()
 
     glPushMatrix();
       glTranslatef(0.5, 0.5, 0.5);
+      /*
       /////////////////////////////////////////////////////////////////
       // take difference here
       
@@ -143,9 +148,9 @@ void glutDisplay()
       auto diff = density - ground_density;
       diff.draw();
       diff.drawBoundingBox();
-      
-      // fluid->density().draw();
-      // fluid->density().drawBoundingBox();
+      */
+      fluid->density().draw();
+      fluid->density().drawBoundingBox();
       /////////////////////////////////////////////////////////////////
     glPopMatrix();
 
@@ -337,7 +342,7 @@ int main(int argc, char *argv[])
   fluid->fullRankPath() = snapshotPath;
   fluid->vorticityEps() = vorticity;
   
-  ground = new FLUID_3D_MIC(xRes, yRes, zRes, 0);
+  // ground = new FLUID_3D_MIC(xRes, yRes, zRes, 0);
  
   
   TIMER::printTimings();
@@ -362,19 +367,21 @@ void runEverytime()
     static int steps = 0;
     cout << " Simulation step " << steps << endl;
     fluid->addSmokeColumn();
+    cout << " Added smoke column " << endl;
     fluid->stepReorderedCubatureStam();
-    
+    cout << "did step reordered cubature stam" << endl;
+    /* 
     char buffer[256];
     string path = snapshotPath;
     sprintf(buffer, "%sfluid.%04i.fluid3d", path.c_str(), steps);
     string filename(buffer);
     ground->readGz(filename);
     cout << " Loaded in ground. " << endl;
-   
+    */
 
     steps++;
 
-    if (steps == 151) {    
+    if (steps == 48) {    
     // if we were already capturing a movie
         if (captureMovie)
         {
@@ -399,7 +406,7 @@ void runEverytime()
     }
 
     // check if we're done
-    if (steps == 400)
+    if (steps == 49)
       exit(0);
     // stop early
     /*

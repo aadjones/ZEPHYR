@@ -3417,6 +3417,7 @@ VectorXd VECTOR3_FIELD_3D::peeledProject(const MatrixXd& U)
         (*this)(x,y,z)[2] = data[3 * index + 2];
       }
       */
+  
 
   const int xPeeled = _xRes - 2;
   const int slabPeeled = (_xRes - 2) * (_yRes - 2);
@@ -3458,6 +3459,7 @@ VectorXd VECTOR3_FIELD_3D::peeledProject(const MatrixXd& U)
       unroll3.setZero();
       for (int x = 0; x < xEnd; x += stride)
       {
+
         const int index0 = 3 * x + yzCached;
         const int index1 = 3 * (x + 1) + yzCached;
         const int index2 = 3 * (x + 2) + yzCached;
@@ -3477,11 +3479,16 @@ VectorXd VECTOR3_FIELD_3D::peeledProject(const MatrixXd& U)
         unroll1.noalias() += U.block(index1, 0, 3, totalColumns).transpose() * v1;
         unroll2.noalias() += U.block(index2, 0, 3, totalColumns).transpose() * v2;
         unroll3.noalias() += U.block(index3, 0, 3, totalColumns).transpose() * v3;
+
       }
+
+
       currentFinal.noalias() += unroll0;
       currentFinal.noalias() += unroll1;
       currentFinal.noalias() += unroll2;
       currentFinal.noalias() += unroll3;
+      
+      // cout << "current Final prior to unroll leftovers: " << endl << currentFinal << endl;
 
       // unrolling leftovers
       for (int x = xEnd; x < _xRes - 2; x++)

@@ -2,8 +2,13 @@
 #define MATRIX_COMPRESSION_DATA_H
 
 #include <iostream>
+#include <vector>
+#include <fftw3.h>
 #include "COMPRESSION_DATA.h"
 #include "DECOMPRESSION_DATA.h"
+#include "FIELD_3D.h"
+
+using std::vector;
 
 class MATRIX_COMPRESSION_DATA {
   public: 
@@ -24,6 +29,13 @@ class MATRIX_COMPRESSION_DATA {
     const DECOMPRESSION_DATA& get_decompression_dataX() const { return _decompression_dataX; }
     const DECOMPRESSION_DATA& get_decompression_dataY() const { return _decompression_dataY; }
     const DECOMPRESSION_DATA& get_decompression_dataZ() const { return _decompression_dataZ; }
+
+    const vector<FIELD_3D>& get_cachedBlocksX() const { return _cachedBlocksX; }
+    const vector<FIELD_3D>& get_cachedBlocksY() const { return _cachedBlocksY; }
+    const vector<FIELD_3D>& get_cachedBlocksZ() const { return _cachedBlocksZ; }
+
+    int get_cachedBlockNumber() const { return _cachedBlockNumber; }
+    int get_decodeCounter() const { return _decodeCounter; }
     
     // setters
     
@@ -35,6 +47,78 @@ class MATRIX_COMPRESSION_DATA {
     void set_decompression_dataY(const DECOMPRESSION_DATA& decompression_dataY) { _decompression_dataY = decompression_dataY; }
     void set_decompression_dataZ(const DECOMPRESSION_DATA& decompression_dataZ) { _decompression_dataZ = decompression_dataZ; }
 
+    void set_cachedBlocksX(const vector<FIELD_3D>& cachedBlocksX) { _cachedBlocksX = cachedBlocksX; }
+    void set_cachedBlocksY(const vector<FIELD_3D>& cachedBlocksY) { _cachedBlocksY = cachedBlocksY; }
+    void set_cachedBlocksZ(const vector<FIELD_3D>& cachedBlocksZ) { _cachedBlocksZ = cachedBlocksZ; }
+
+    void set_cachedBlockNumber(int cachedBlockNumber) { _cachedBlockNumber = cachedBlockNumber; }
+    void set_decodeCounter(int decodeCounter) { _decodeCounter = decodeCounter; }
+   
+    // initializations
+    void init_cache() {
+      // don't call this until _numCols has been set!
+
+      // set block number to nonsense
+      _cachedBlockNumber = -1;
+      // initialize decode counter
+      _decodeCounter = 0;
+
+      const int xRes = 8;
+      const int yRes = 8;
+      const int zRes = 8;
+
+      // clunky, but it works
+      int numCols = (*this)._decompression_dataX.get_numCols();
+
+      _cachedBlocksX.resize(numCols);
+      for (auto itr = _cachedBlocksX.begin(); itr != _cachedBlocksX.end(); ++itr) {
+        (*itr).resizeAndWipe(xRes, yRes, zRes);
+      }
+     
+      _cachedBlocksY.resize(numCols);
+      for (auto itr = _cachedBlocksY.begin(); itr != _cachedBlocksY.end(); ++itr) {
+        (*itr).resizeAndWipe(xRes, yRes, zRes);
+      }
+      
+      _cachedBlocksZ.resize(numCols);
+      for (auto itr = _cachedBlocksZ.begin(); itr != _cachedBlocksZ.end(); ++itr) {
+        (*itr).resizeAndWipe(xRes, yRes, zRes);
+      }
+
+    }
+
+    // incrementer
+    void increment_decodeCounter() {
+      _decodeCounter++;
+    }
+    
+    void dct_setup(int direction) {
+      const int xRes = 8;
+      const int yRes = 8;
+      const int zRes = 8;
+
+      _dct_in = (double*) fftw_malloc(xRes * yRes * zRes * sizeof(double));
+      _dct_out = (double*) fftw_malloc(xRes * yRes * zRes * sizeof(double));
+
+      if (direction == 1) { // forward transform
+         _dct_plan = fftw_plan_r2r_3d(zRes, yRes, xRes, _dct_in, _dct_out, 
+             FFTW_REDFT10, FFTW_REDFT10, FFTW_REDFT10, FFTW_MEASURE); 
+      }
+
+      else { // direction == -1; backward transform
+         _dct_plan = fftw_plan_r2r_3d(zRes, yRes, xRes, _dct_in, _dct_out, 
+      FFTW_REDFT01, FFTW_REDFT01, FFTW_REDFT01, FFTW_MEASURE);
+      }
+    }
+
+   void dct_cleanup() {
+     fftw_destroy_plan(_dct_plan);
+     fftw_free(_dct_in);
+     fftw_free(_dct_out);
+     fftw_cleanup();
+   } 
+
+
   private:
     short* _dataX;
     short* _dataY;
@@ -44,6 +128,16 @@ class MATRIX_COMPRESSION_DATA {
     DECOMPRESSION_DATA _decompression_dataY;
     DECOMPRESSION_DATA _decompression_dataZ;
 
+    vector<FIELD_3D> _cachedBlocksX;
+    vector<FIELD_3D> _cachedBlocksY;
+    vector<FIELD_3D> _cachedBlocksZ;
+
+    int _cachedBlockNumber;
+    int _decodeCounter;
+
+    double* _dct_in;
+    double* _dct_out;
+    fftw_plan _dct_plan;
 };
 
 #endif

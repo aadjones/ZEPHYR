@@ -29,6 +29,8 @@
 
 #include "FLUID_3D_MIC.h"
 #include "SPARSE_MATRIX_ARRAY.h"
+#include "COMPRESSION_DATA.h"
+#include "DECOMPRESSION_DATA.h"
 #include "MATRIX_COMPRESSION_DATA.h"
 #include "COMPRESSION.h"
 
@@ -72,11 +74,11 @@ public:
   // get the sub-basis of a cell from a specific basis  
   MatrixXd cellBasisPeeled(const MatrixXd& U, const int index);
   // get the sub-basis of a cell from a specific basis, compressed version
-  MatrixXd cellBasisCompressedPeeled(const MATRIX_COMPRESSION_DATA& U_data, const int index);
+  MatrixXd cellBasisCompressedPeeled(MATRIX_COMPRESSION_DATA& U_data, const int index);
   // advect a single cell using Semi-Lagrangian,
   // assuming that "index" is a peeled index, not a full grid index
-  VectorXd advectCellStamPeeled(const MATRIX_COMPRESSION_DATA& U_data, const Real& dt, const VectorXd& qDot, const int index);
-  VectorXd advectCellStamPeeled(const MATRIX_COMPRESSION_DATA& U_data, const MatrixXd& cellU, const Real& dt, const VectorXd& qDot, const int index);
+  VectorXd advectCellStamPeeled(MATRIX_COMPRESSION_DATA& U_data, const Real& dt, const VectorXd& qDot, const int index);
+  VectorXd advectCellStamPeeled(MATRIX_COMPRESSION_DATA& U_data, const MatrixXd& cellU, const Real& dt, const VectorXd& qDot, const int index);
   VectorXd advectCellStamNoProject(const Real& dt, const int index);
 
   // stomp the other matrices and load the ones needed for cubature training
@@ -84,6 +86,9 @@ public:
   
   // stomp all loaded bases
   void stompAllBases();
+
+  // initialize the matrix compression data
+  void initCompressionData();
 
   // load the bases needed for cubature runtime
   void loadReducedRuntimeBases(string path = string(""));
@@ -95,7 +100,7 @@ public:
   void readAdvectionCubature();
 
   // build matrices assuming that a limited number of matrices fit in memory
-  void buildOutOfCoreMatrices();
+  // void buildOutOfCoreMatrices();
 
 protected: 
   // MatrixXd _U;
@@ -232,9 +237,11 @@ protected:
   // perform reduced order diffusion with separate boundary slabs
   void reducedPeeledDiffusion();
 
+  
   // initialize the staged version, assuming the Us were computed out of core and will not
   // all fit in memory
   void initOutOfCore();
+  
 
   // build a peeled version of the damping matrix
   void buildPeeledDampingMatrix();

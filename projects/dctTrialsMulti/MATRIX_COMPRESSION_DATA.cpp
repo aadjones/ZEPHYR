@@ -2,6 +2,10 @@
 // #include "COMPRESSION_DATA.h"
 // #include "DECOMPRESSION_DATA.h"
 
+MATRIX_COMPRESSION_DATA::MATRIX_COMPRESSION_DATA() 
+{
+}
+
 MATRIX_COMPRESSION_DATA::MATRIX_COMPRESSION_DATA(short* const& dataX, short* const& dataY, short* const& dataZ,
         const DECOMPRESSION_DATA& decompression_dataX, const DECOMPRESSION_DATA& decompression_dataY, const DECOMPRESSION_DATA& decompression_dataZ) :
   

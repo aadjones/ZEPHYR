@@ -25,6 +25,7 @@
 
 #include <iostream>
 #include <fftw3.h>
+#include <assert.h>
 #include "jo_jpeg.h"
 #include "EIGEN.h"
 #include "SUBSPACE_FLUID_3D_EIGEN.h"
@@ -49,18 +50,22 @@ using std::string;
 
 // string path_to_U("/Users/aaron/Desktop/U.final.uncompressed.matrix");
 // string path_to_U("/Volumes/DataDrive/data/reduced.stam.200.vorticity.1.5/U.preadvect.matrix");
-string path_to_U("U.final.donotmodify.matrix.48");
-// string path_to_U("U.preadvect.donotmodify.matrix.48");
+// string path_to_U("U.final.donotmodify.matrix.48");
+string path_to_U("U.preadvect.donotmodify.matrix.48");
+
+// debugging
+// string path_to_U("randTest.matrix");
 
 // make sure the read-in matrix agrees with the dimensions specified!
 
-
+/*
 const int g_xRes =    46;
 const int g_yRes =    62;
 const int g_zRes =    46;
 const VEC3I g_dims(g_xRes, g_yRes, g_zRes);
 const int g_numRows = 3 * g_xRes * g_yRes * g_zRes;
 const int g_numCols = 48;
+*/
 
 /*
 const int g_xRes = 198;
@@ -70,6 +75,16 @@ const VEC3I g_dims(g_xRes, g_yRes, g_zRes);
 const int g_numRows = 3 * g_xRes * g_yRes * g_zRes;
 const int g_numCols = 151;
 */
+
+// debugging
+
+const int g_xRes = 46;
+const int g_yRes = 62;
+const int g_zRes = 46;
+const VEC3I g_dims(g_xRes, g_yRes, g_zRes);
+const int g_numRows = 3 * g_xRes * g_yRes * g_zRes;
+const int g_numCols = 48;
+
 
 MatrixXd g_U(g_numRows, g_numCols);
 
@@ -122,8 +137,7 @@ int main(int argc, char* argv[]) {
   }
   MatrixXd compressedResult = EIGEN::buildFromColumns(columnList);
 
-  EIGEN::write("Ufinalhugetest.matrix", compressedResult);
-  EIGEN::write("Ufinaloldmethod.matrix", compressedResult);
+  EIGEN::write("U.preadvect.pow4q1.matrix", compressedResult);
   */
 
 
@@ -131,16 +145,16 @@ int main(int argc, char* argv[]) {
 
   // write a binary file for each scalar field component
 
-   
+  
   /* 
-  const char* filename = "runLength.bin";
+  const char* filename = "U.final.component";
   for (int component = 0; component < 3; component++) {
     cout << "Writing component: " << component << endl;
     CompressAndWriteMatrixComponent(filename, g_U, component, compression_data);
   }
   */
   
-   
+  
   // preprocessing for the decoder
   short* allDataX;
   short* allDataY;
@@ -150,25 +164,42 @@ int main(int argc, char* argv[]) {
   DECOMPRESSION_DATA decompression_dataZ;
 
   // fill allData and decompression_data
-  ReadBinaryFileToMemory("runLength.binX", allDataX, decompression_dataX); 
-  ReadBinaryFileToMemory("runLength.binY", allDataY, decompression_dataY);
-  ReadBinaryFileToMemory("runLength.binZ", allDataZ, decompression_dataZ);
-
+  ReadBinaryFileToMemory("U.final.componentX", allDataX, decompression_dataX); 
+  ReadBinaryFileToMemory("U.final.componentY", allDataY, decompression_dataY);
+  ReadBinaryFileToMemory("U.final.componentZ", allDataZ, decompression_dataZ);
+  
 
   // set the entirety of the data for the decoder into one package
   MATRIX_COMPRESSION_DATA matrixData(allDataX, allDataY, allDataZ, 
       decompression_dataX, decompression_dataY, decompression_dataZ);
-
-  MatrixXd U_recovered = DecodeFullMatrix(matrixData); 
-  EIGEN::write("Ufinalnewmethod.matrix", U_recovered);
+ 
+  // clear the cache
+  matrixData.init_cache();
   
+  
+  MatrixXd U_recovered = DecodeFullMatrix(matrixData); 
+  EIGEN::write("U.final.matlab.test.matrix", U_recovered);
+  
+  
+  /*
+  VECTOR blockLengths = decompression_dataZ.get_blockLengthsMatrix().getColumn(19);
+  VECTOR blockIndices = decompression_dataZ.get_blockIndicesMatrix().getColumn(19);
+
+  cout << "block 151 is this long: " << blockLengths[151] << endl;
+  vector<short> testRL = RunLengthDecodeBinary(allDataZ, 151, blockLengths, blockIndices);
+
+  VECTOR testRLvec = CastIntToVector(testRL);
+  testRLvec.printVertical = false;
+  cout << "problem block: " << testRLvec << endl;
+  */
+  
+  
+
   // test the decompressor on a (row, col)   
-  /* 
-  int row = 20;
-  int col = 19;
-   
+  /*
   int row = 0;
   int col = 0;
+   
 
   double testValue = DecodeFromRowCol(row, col, matrixData);
 
@@ -176,19 +207,21 @@ int main(int argc, char* argv[]) {
   double trueValue = g_U(row, col);
   cout << "True value: " << trueValue << endl;
   */
-
+  
   // use the decompressor to get a 3 x numCols submatrix of U
   
-  int startRow = 0;
-  int numRows = 3;
-  MatrixXd subMatrix = GetSubmatrix(startRow, numRows, matrixData); 
   
-  // EIGEN is giving a bizarre malloc error, calling free on something that has already been freed
-  // (or never been allocated)
-  EIGEN::write("sub0.matrix", subMatrix);
+ 
+  // int startRow = 0;
+  // int numRows = 3;
+   
 
-  // subMatrix.write("Ucompressedsub.matrix");
+  /*
+  MatrixXd subMatrix = GetSubmatrix(0, g_numRows, matrixData);
+  EIGEN::write("Unewsub0.matrix", subMatrix);
+  */
   
+
   
   TIMER::printTimings();
   

@@ -137,15 +137,15 @@ void glutDisplay()
       glTranslatef(0.5, 0.5, 0.5);
       /////////////////////////////////////////////////////////////////
       // take difference here
-      
+      /* 
       auto density = fluid->density();
       auto ground_density = ground->density();
       auto diff = density - ground_density;
       diff.draw();
       diff.drawBoundingBox();
-      
-      // fluid->density().draw();
-      // fluid->density().drawBoundingBox();
+      */
+      fluid->density().draw();
+      fluid->density().drawBoundingBox();
       /////////////////////////////////////////////////////////////////
     glPopMatrix();
 
@@ -399,7 +399,7 @@ void runEverytime()
     }
 
     // check if we're done
-    if (steps == 400)
+    if (steps == 50)
       exit(0);
     // stop early
     /*

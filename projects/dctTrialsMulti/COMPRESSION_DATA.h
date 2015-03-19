@@ -3,6 +3,7 @@
 
 #include "EIGEN.h"
 #include <iostream>
+#include <fftw3.h>
 #include <assert.h>
 #include "VECTOR.h"
 #include "VEC3.h"
@@ -32,6 +33,9 @@ class COMPRESSION_DATA {
     const VECTOR& get_sList() const { return _sList; }
     const FIELD_3D& get_dampingArray() const { return _dampingArray; }
     const INTEGER_FIELD_3D& get_zigzagArray() const { return _zigzagArray; }
+    double* get_dct_in() const { return _dct_in; }
+    double* get_dct_out() const { return _dct_out; }
+    fftw_plan get_dct_plan() const { return _dct_plan; }
 
     // setters
     void set_dims(const VEC3I& dims) { _dims = dims; }
@@ -79,7 +83,7 @@ class COMPRESSION_DATA {
             r_uvw = pow(r_uvw, power);
             damp(u, v, w) = r_uvw;
             // for debugging!
-            damp(u, v, w) = 1.0;
+            // damp(u, v, w) = 1.0;
           }
         }
       }
@@ -113,6 +117,32 @@ class COMPRESSION_DATA {
   }
 
 
+  void dct_setup(int direction) {
+    const int xRes = 8;
+    const int yRes = 8;
+    const int zRes = 8;
+
+    _dct_in = (double*) fftw_malloc(xRes * yRes * zRes * sizeof(double));
+    _dct_out = (double*) fftw_malloc(xRes * yRes * zRes * sizeof(double));
+
+    if (direction == 1) { // forward transform
+       _dct_plan = fftw_plan_r2r_3d(zRes, yRes, xRes, _dct_in, _dct_out, 
+           FFTW_REDFT10, FFTW_REDFT10, FFTW_REDFT10, FFTW_MEASURE); 
+    }
+
+    else { // direction == -1; backward transform
+       _dct_plan = fftw_plan_r2r_3d(zRes, yRes, xRes, _dct_in, _dct_out, 
+    FFTW_REDFT01, FFTW_REDFT01, FFTW_REDFT01, FFTW_MEASURE);
+    }
+  }
+
+ void dct_cleanup() {
+   fftw_destroy_plan(_dct_plan);
+   fftw_free(_dct_in);
+   fftw_free(_dct_out);
+   fftw_cleanup();
+ }
+
   private:
     VEC3I _dims;
     int _numCols;
@@ -126,6 +156,10 @@ class COMPRESSION_DATA {
     VECTOR _sList;
     FIELD_3D _dampingArray;
     INTEGER_FIELD_3D _zigzagArray;
+
+    double* _dct_in;
+    double* _dct_out;
+    fftw_plan _dct_plan;
 };
 
 #endif

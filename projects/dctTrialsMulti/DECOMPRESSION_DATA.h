@@ -3,6 +3,7 @@
 #define DECOMPRESSION_DATA_H
 
 #include <iostream>
+#include <fftw3.h>
 #include "MATRIX.h"
 #include "VEC3.h"
 #include "FIELD_3D.h"
@@ -28,6 +29,9 @@ class DECOMPRESSION_DATA {
     const MATRIX& get_sListMatrix() const { return _sListMatrix; }
     const INTEGER_FIELD_3D& get_zigzagArray() const { return _zigzagArray; }
     const FIELD_3D& get_dampingArray() const { return _dampingArray; }
+    double* get_dct_in() const { return _dct_in; }
+    double* get_dct_out() const { return _dct_out; }
+    fftw_plan get_dct_plan() const { return _dct_plan; }
 
     // setters
     void set_q(double q) { _q = q; }
@@ -89,6 +93,32 @@ class DECOMPRESSION_DATA {
       _zigzagArray = zigzagArray;
     }
 
+    void dct_setup(int direction) {
+      const int xRes = 8;
+      const int yRes = 8;
+      const int zRes = 8;
+
+      _dct_in = (double*) fftw_malloc(xRes * yRes * zRes * sizeof(double));
+      _dct_out = (double*) fftw_malloc(xRes * yRes * zRes * sizeof(double));
+
+      if (direction == 1) { // forward transform
+         _dct_plan = fftw_plan_r2r_3d(zRes, yRes, xRes, _dct_in, _dct_out, 
+             FFTW_REDFT10, FFTW_REDFT10, FFTW_REDFT10, FFTW_MEASURE); 
+      }
+
+      else { // direction == -1; backward transform
+         _dct_plan = fftw_plan_r2r_3d(zRes, yRes, xRes, _dct_in, _dct_out, 
+      FFTW_REDFT01, FFTW_REDFT01, FFTW_REDFT01, FFTW_MEASURE);
+      }
+    }
+
+   void dct_cleanup() {
+     fftw_destroy_plan(_dct_plan);
+     fftw_free(_dct_in);
+     fftw_free(_dct_out);
+     fftw_cleanup();
+   } 
+
   private:
     double _q;
     double _power;
@@ -101,6 +131,11 @@ class DECOMPRESSION_DATA {
     MATRIX _sListMatrix;
     FIELD_3D _dampingArray;
     INTEGER_FIELD_3D _zigzagArray;
+
+    double* _dct_in;
+    double* _dct_out;
+    fftw_plan _dct_plan;
+
 };
 
 #endif

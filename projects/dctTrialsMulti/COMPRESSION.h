@@ -54,7 +54,7 @@ long* CastToLong(const VECTOR& x, long* array);
 // cast a C++ vector of integers to a VECTOR of integers
 VECTOR CastIntToVector(const vector<int>& V);
 
-// same as above, but with th einput as a C++ vector of short integers (int16)
+// same as above, but with the input as a C++ vector of short integers (int16)
 VECTOR CastIntToVector(const vector<short>& V);
 
 // more fun casting
@@ -161,12 +161,14 @@ void ReadBinaryFileToMemory(const char* filename, short*& allData, DECOMPRESSION
 // Chains several previous functions together
 void CompressAndWriteField(const char* filename, const FIELD_3D& F, COMPRESSION_DATA& compression_data); 
 
-int ComputeBlockNumber(int row, int col, VEC3I dims, int& blockIndex);
+int ComputeBlockNumber(int row, VEC3I dims, int& blockIndex);
 
 // Given a (row, col) entry of U.final.matrix, decode the corresponding block and entry
-double DecodeFromRowCol(int row, int col, const MATRIX_COMPRESSION_DATA& data); 
+double DecodeFromRowCol(int row, int col, MATRIX_COMPRESSION_DATA& data); 
 
-MatrixXd GetSubmatrix(int startRow, int numRows, const MATRIX_COMPRESSION_DATA& data);
+MatrixXd GetSubmatrix(int startRow, int numRows, MATRIX_COMPRESSION_DATA& data);
+
+VectorXd GetRow(int row, MATRIX_COMPRESSION_DATA& data);
     
 void WriteMetaData(const char* filename, const COMPRESSION_DATA& compression_data, const MATRIX& sListMatrix, const MATRIX& blockLengths, const MATRIX& blockIndices);
 
@@ -182,16 +184,16 @@ void CompressAndWriteMatrixComponent(const char* filename, const MatrixXd& U, in
 FIELD_3D DecodeScalarField(const DECOMPRESSION_DATA& decompression_data, short* const& allData, int col); 
 
 
-VECTOR3_FIELD_3D DecodeVectorField(const MATRIX_COMPRESSION_DATA& data, int col); 
+VECTOR3_FIELD_3D DecodeVectorField(MATRIX_COMPRESSION_DATA& data, int col); 
 
 
-MatrixXd DecodeFullMatrix(const MATRIX_COMPRESSION_DATA& data); 
+MatrixXd DecodeFullMatrix(MATRIX_COMPRESSION_DATA& data); 
 
 
-void PeeledCompressedUnproject(VECTOR3_FIELD_3D& V, const MATRIX_COMPRESSION_DATA& U_data, const VectorXd& q);   
+void PeeledCompressedUnproject(VECTOR3_FIELD_3D& V, MATRIX_COMPRESSION_DATA& U_data, const VectorXd& q);   
 
 
-VectorXd PeeledCompressedProject(VECTOR3_FIELD_3D& V, const MATRIX_COMPRESSION_DATA& U_data);
+VectorXd PeeledCompressedProject(VECTOR3_FIELD_3D& V, MATRIX_COMPRESSION_DATA& U_data);
 
 ////////////////////////////////////////////////////////
 // End Function Signatures

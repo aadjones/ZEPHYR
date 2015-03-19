@@ -2,11 +2,11 @@ include ../include.mk
 
 # calls:
 CC         = g++
-CFLAGS     = ${CFLAGS_COMMON} -I../dctTrialsMulti
+CFLAGS     = ${CFLAGS_COMMON} 
 LDFLAGS    = ${LDFLAGS_COMMON} 
-EXECUTABLE = ../../bin/reducedCompressedStagedStam3D
+EXECUTABLE = ../../bin/buildProducts
 
-SOURCES    = reducedCompressedStagedStam3D.cpp \
+SOURCES    = buildProducts.cpp \
 						 ../../src/glvu/glvu.cpp \
 						 ../../src/util/TIMER.cpp \
 						 ../../src/util/SIMPLE_PARSER.cpp \
@@ -18,16 +18,11 @@ SOURCES    = reducedCompressedStagedStam3D.cpp \
 						 ../../src/linearalgebra/EIGEN.cpp \
 						 ../../src/geometry/FIELD_3D.cpp \
 						 ../../src/geometry/VECTOR3_FIELD_3D.cpp \
-						 ../../src/integrators/SUBSPACE_FLUID_3D_COMPRESSED_EIGEN.cpp \
+						 ../../src/integrators/SUBSPACE_FLUID_3D_EIGEN.cpp \
 						 ../../src/integrators/FLUID_3D_MIC.cpp \
 						 ../../src/geometry/FIELD_2D.cpp \
 						 ../../src/geometry/VECTOR3_FIELD_2D.cpp \
 						 ../../src/util/MIN_HEAP.cpp \
-						 ../dctTrialsMulti/MATRIX_COMPRESSION_DATA.cpp \
-						 ../dctTrialsMulti/COMPRESSION.cpp \
-						 ../dctTrialsMulti/COMPRESSION_DATA.cpp \
-						 ../dctTrialsMulti/DECOMPRESSION_DATA.cpp \
-						 ../dctTrialsMulti/INTEGER_FIELD_3D.cpp
 
 OBJECTS    = $(SOURCES:.cpp=.o)
 
