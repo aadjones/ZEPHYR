@@ -11,8 +11,8 @@
 
 #include <TIMER.h>
 
-#ifndef NDEBUG
-#define NDEBUG
-#endif
+// #ifndef NDEBUG
+// #define NDEBUG
+// #endif
 
 #endif

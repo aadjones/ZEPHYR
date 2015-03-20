@@ -115,6 +115,10 @@ void GetPaddings(VEC3I v, int& xPadding, int& yPadding, int& zPadding);
 // and returns a vector of them in row-major order.
 vector<FIELD_3D> GetBlocks(const FIELD_3D& F);
 
+// Does the same as above, but pads with zero. Also flattens each block
+// into a VectorXd for use in projection/unprojection.
+vector<VectorXd> GetBlocksEigen(const FIELD_3D& F); 
+
 // Converts a C++ vector of scalar field blocks in row-major order back into a scalar field.
 FIELD_3D AssimilateBlocks(const VEC3I& dims, vector<FIELD_3D> V);
 
@@ -183,6 +187,7 @@ void CompressAndWriteMatrixComponent(const char* filename, const MatrixXd& U, in
 
 FIELD_3D DecodeScalarField(const DECOMPRESSION_DATA& decompression_data, int* const& allData, int col); 
 
+vector<VectorXd> DecodeScalarFieldEigen(const DECOMPRESSION_DATA& decompression_data, int* const& allData, int col);
 
 VECTOR3_FIELD_3D DecodeVectorField(MATRIX_COMPRESSION_DATA& data, int col); 
 
@@ -192,6 +197,7 @@ MatrixXd DecodeFullMatrix(MATRIX_COMPRESSION_DATA& data);
 
 void PeeledCompressedUnproject(VECTOR3_FIELD_3D& V, MATRIX_COMPRESSION_DATA& U_data, const VectorXd& q);   
 
+double GetDotProductSum(vector<VectorXd> Vlist, vector<VectorXd> Wlist);
 
 VectorXd PeeledCompressedProject(VECTOR3_FIELD_3D& V, MATRIX_COMPRESSION_DATA& U_data);
 

@@ -6162,6 +6162,83 @@ FIELD_3D FIELD_3D::pad_x(int paddingSize) const
   
   return final;
 }
+
+FIELD_3D FIELD_3D::zeroPad_z(int paddingSize) const
+{
+  assert(paddingSize >= 0);
+  if (paddingSize == 0) {
+    return (*this);
+  }
+  // else 
+  FIELD_3D final(_xRes, _yRes, _zRes + paddingSize);
+
+  for (int z = 0; z < _zRes + paddingSize; z++) {
+    for (int y = 0; y < _yRes; y++) {
+      for (int x = 0; x < _xRes; x++) {
+        if (z < _zRes) {
+          final(x, y, z) = (*this)(x, y, z);
+        }
+        else { // _zRes <= z < _zRes + paddingSize 
+          final(x, y, z) = 0.0; 
+        }
+      }
+    }
+  }
+  
+  return final;
+}
+
+
+FIELD_3D FIELD_3D::zeroPad_y(int paddingSize) const
+{ 
+  assert(paddingSize >= 0);
+  if (paddingSize == 0) {
+    return (*this);
+  }
+  // else 
+  FIELD_3D final(_xRes, _yRes + paddingSize, _zRes);
+
+  for (int z = 0; z < _zRes; z++) {
+    for (int y = 0; y < _yRes + paddingSize; y++) {
+      for (int x = 0; x < _xRes; x++) {
+        if (y < _yRes) {
+          final(x, y, z) = (*this)(x, y, z);
+        }
+        else { // _yRes <= y < _yRes + paddingSize 
+          final(x, y, z) = 0.0;
+        }
+      }
+    }
+  }
+  
+  return final;
+}
+
+
+FIELD_3D FIELD_3D::zeroPad_x(int paddingSize) const
+{
+  assert(paddingSize >= 0);
+  if (paddingSize == 0) {
+    return (*this);
+  }
+  // else 
+  FIELD_3D final(_xRes + paddingSize, _yRes, _zRes);
+
+  for (int z = 0; z < _zRes; z++) {
+    for (int y = 0; y < _yRes; y++) {
+      for (int x = 0; x < _xRes + paddingSize; x++) {
+        if (x < _xRes) {
+          final(x, y, z) = (*this)(x, y, z);
+        }
+        else { // _xRes <= x < _xRes + paddingSize 
+          final(x, y, z) = 0.0;
+        }
+      }
+    }
+  }
+  
+  return final;
+}
 ///////////////////////////////////////////////////////////////////////
 // stomp the border to zero
 ///////////////////////////////////////////////////////////////////////

@@ -395,7 +395,7 @@ void runEverytime()
        captureMovie = false;
         }
     }
-    if (steps % 10 == 0)
+    if (steps % 1 == 0)
     {
       VECTOR::printVertical = false;
       TIMER::printTimingsPerFrame(steps);
@@ -406,7 +406,7 @@ void runEverytime()
     }
 
     // check if we're done
-    if (steps == 49)
+    if (steps == 5)
       exit(0);
     // stop early
     /*

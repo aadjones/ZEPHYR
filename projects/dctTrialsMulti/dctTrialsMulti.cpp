@@ -50,8 +50,8 @@ using std::string;
 
 // string path_to_U("/Users/aaron/Desktop/U.final.uncompressed.matrix");
 // string path_to_U("/Volumes/DataDrive/data/reduced.stam.200.vorticity.1.5/U.preadvect.matrix");
-string path_to_U("U.final.donotmodify.matrix.48");
-// string path_to_U("U.preadvect.donotmodify.matrix.48");
+// string path_to_U("U.final.donotmodify.matrix.48");
+string path_to_U("U.preadvect.donotmodify.matrix.48");
 
 // debugging
 // string path_to_U("randTest.matrix");
@@ -112,7 +112,7 @@ int main(int argc, char* argv[]) {
   // Compression parameters    
   const int nBits = 24;
   const double q = 1.0;
-  const double power = 1.0;
+  const double power = 6.0;
 
   // set the parameters in compression data
   COMPRESSION_DATA compression_data(g_dims, g_numCols, q, power, nBits);
@@ -123,7 +123,7 @@ int main(int argc, char* argv[]) {
   // Old version to get the distorted matrix. Currenty has memory leak problems
   // for huge matrices!!!
    
-  /* 
+   
   vector<VectorXd> columnList(g_numCols);
   for (int col = 0; col < g_numCols; col++) {
     cout << "Column: " << col << endl;
@@ -137,8 +137,8 @@ int main(int argc, char* argv[]) {
   }
   MatrixXd compressedResult = EIGEN::buildFromColumns(columnList);
 
-  EIGEN::write("U.final.lossless.matrix", compressedResult);
-  */
+  EIGEN::write("U.preadvect.24pow6.matrix", compressedResult);
+  
 
 
 
@@ -147,14 +147,14 @@ int main(int argc, char* argv[]) {
 
   
   
-  const char* filename = "U.final.component";
+  const char* filename = "U.preadvect.component";
   for (int component = 0; component < 3; component++) {
     cout << "Writing component: " << component << endl;
     CompressAndWriteMatrixComponent(filename, g_U, component, compression_data);
   }
   
   
-  
+  /* 
   // preprocessing for the decoder
   int* allDataX;
   int* allDataY;
@@ -180,17 +180,6 @@ int main(int argc, char* argv[]) {
   MatrixXd U_recovered = DecodeFullMatrix(matrixData); 
   EIGEN::write("U.final.lossless.matlab.test.matrix", U_recovered);
   
-  
-  /*
-  VECTOR blockLengths = decompression_dataZ.get_blockLengthsMatrix().getColumn(19);
-  VECTOR blockIndices = decompression_dataZ.get_blockIndicesMatrix().getColumn(19);
-
-  cout << "block 151 is this long: " << blockLengths[151] << endl;
-  vector<int> testRL = RunLengthDecodeBinary(allDataZ, 151, blockLengths, blockIndices);
-
-  VECTOR testRLvec = CastIntToVector(testRL);
-  testRLvec.printVertical = false;
-  cout << "problem block: " << testRLvec << endl;
   */
   
   
@@ -217,15 +206,12 @@ int main(int argc, char* argv[]) {
    
 
   
-  MatrixXd subMatrix = GetSubmatrix(0, g_numRows, matrixData);
-  EIGEN::write("U.sub.test.matrix", subMatrix);
-  
-  
+  // MatrixXd subMatrix = GetSubmatrix(0, g_numRows, matrixData);
+  // EIGEN::write("U.sub.test.matrix", subMatrix);
 
   
   TIMER::printTimings();
   
-    
   return 0;
 }
 

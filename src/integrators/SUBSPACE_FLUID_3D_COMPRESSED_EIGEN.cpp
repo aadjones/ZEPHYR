@@ -830,9 +830,9 @@ void SUBSPACE_FLUID_3D_COMPRESSED_EIGEN::readAdvectionCubature()
     // TODO: insert the decoder for U.preadvect
     // string preadvectFile = _reducedPath + string("U.preadvect.matrix");
 
-    short* allDataX = NULL;
-    short* allDataY = NULL;
-    short* allDataZ = NULL;
+    int* allDataX = NULL;
+    int* allDataY = NULL;
+    int* allDataZ = NULL;
     DECOMPRESSION_DATA decompression_dataX;
     DECOMPRESSION_DATA decompression_dataY;
     DECOMPRESSION_DATA decompression_dataZ;
@@ -1024,9 +1024,9 @@ void SUBSPACE_FLUID_3D_COMPRESSED_EIGEN::buildOutOfCoreMatrices()
   // EIGEN::read(filename, _U);
   
   
-  short* allDataX = NULL;
-  short* allDataY = NULL;
-  short* allDataZ = NULL;
+  int* allDataX = NULL;
+  int* allDataY = NULL;
+  int* allDataZ = NULL;
   DECOMPRESSION_DATA decompression_dataX;
   DECOMPRESSION_DATA decompression_dataY;
   DECOMPRESSION_DATA decompression_dataZ;
@@ -1130,9 +1130,9 @@ void SUBSPACE_FLUID_3D_COMPRESSED_EIGEN::loadCubatureTrainingBases()
 {
   string filename;
   // TODO: insert the decoder for U.preadvect 
-  short* allDataX = NULL;
-  short* allDataY = NULL;
-  short* allDataZ = NULL;
+  int* allDataX = NULL;
+  int* allDataY = NULL;
+  int* allDataZ = NULL;
   DECOMPRESSION_DATA decompression_dataX;
   DECOMPRESSION_DATA decompression_dataY;
   DECOMPRESSION_DATA decompression_dataZ;
@@ -1167,9 +1167,9 @@ void SUBSPACE_FLUID_3D_COMPRESSED_EIGEN::loadReducedRuntimeBases(string path)
   string filename;
   
   // TODO: insert the decoder for U.preadvect
-  short* allDataX = NULL;
-  short* allDataY = NULL;
-  short* allDataZ = NULL;
+  int* allDataX = NULL;
+  int* allDataY = NULL;
+  int* allDataZ = NULL;
   DECOMPRESSION_DATA decompression_dataX;
   DECOMPRESSION_DATA decompression_dataY;
   DECOMPRESSION_DATA decompression_dataZ;
@@ -1198,9 +1198,9 @@ void SUBSPACE_FLUID_3D_COMPRESSED_EIGEN::loadReducedRuntimeBases(string path)
     purge();
     // TODO: what do we do here? do we need U.final in full?
     filename = path + string("U.final.matrix");
-    short* UallDataX = NULL;
-    short* UallDataY = NULL;
-    short* UallDataZ = NULL;
+    int* UallDataX = NULL;
+    int* UallDataY = NULL;
+    int* UallDataZ = NULL;
     DECOMPRESSION_DATA Udecompression_dataX;
     DECOMPRESSION_DATA Udecompression_dataY;
     DECOMPRESSION_DATA Udecompression_dataZ;

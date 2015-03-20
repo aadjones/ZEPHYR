@@ -387,7 +387,16 @@ public:
   FIELD_3D pad_y(int paddingSize) const;
 
   // same as above but in the x direction
-  FIELD_3D pad_x(int paddingSize) const;
+  FIELD_3D pad_x(int paddingSize) const; 
+
+  // pass back a field with a new uni-sided zero padding of size "paddingSize" in the z direction
+  FIELD_3D zeroPad_z(int paddingSize) const;
+  
+  // same as above but in the y direction
+  FIELD_3D zeroPad_y(int paddingSize) const;
+
+  // same as above but in the x direction;
+  FIELD_3D zeroPad_x(int paddingSize) const;
 
   // stomp the border to zero
   void stompBorder(int borderSize);
