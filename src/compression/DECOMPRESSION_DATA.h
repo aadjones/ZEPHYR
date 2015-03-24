@@ -1,4 +1,3 @@
-
 #ifndef DECOMPRESSION_DATA_H
 #define DECOMPRESSION_DATA_H
 

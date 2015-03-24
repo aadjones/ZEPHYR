@@ -1,12 +1,12 @@
-include ../include.mk
+include ../include.ubuntu
 
 # calls:
 CC         = g++
-CFLAGS     = ${CFLAGS_COMMON} -I../../src/cubature -I../../src/Eigen/ -I../../src/compression
+CFLAGS     = ${CFLAGS_COMMON} -I../../src/cubature -I../../src/Eigen/
 LDFLAGS    = ${LDFLAGS_COMMON}
-EXECUTABLE = ../../bin/dctTrialsMulti
+EXECUTABLE = ../../bin/cubatureGeneratorStamStaged
 
-SOURCES    = dctTrialsMulti.cpp \
+SOURCES    = cubatureGeneratorStamStaged.cpp \
 						 ../../src/glvu/glvu.cpp \
 						 ../../src/util/TIMER.cpp \
 						 ../../src/util/SIMPLE_PARSER.cpp \
@@ -14,7 +14,6 @@ SOURCES    = dctTrialsMulti.cpp \
 						 ../../src/linearalgebra/SPARSE_MATRIX_ARRAY.cpp \
 						 ../../src/linearalgebra/VECTOR.cpp \
 						 ../../src/linearalgebra/MATRIX.cpp \
-						 ../../src/linearalgebra/BIG_MATRIX.cpp \
 						 ../../src/linearalgebra/MATRIX3.cpp \
 						 ../../src/linearalgebra/NNLS.cpp \
 						 ../../src/linearalgebra/EIGEN.cpp \
@@ -22,16 +21,7 @@ SOURCES    = dctTrialsMulti.cpp \
 						 ../../src/geometry/FIELD_3D.cpp \
 						 ../../src/geometry/VECTOR3_FIELD_3D.cpp \
 						 ../../src/integrators/SUBSPACE_FLUID_3D_EIGEN.cpp \
-						 ../../src/integrators/FLUID_3D_MIC.cpp \
-						 ../../src/geometry/FIELD_2D.cpp \
-						 ../../src/geometry/VECTOR3_FIELD_2D.cpp \
-						 ../../src/util/MIN_HEAP.cpp \
-						 ../../src/compression/COMPRESSION.cpp \
-						 ../../src/compression/COMPRESSION_DATA.cpp \
-						 ../../src/compression/DECOMPRESSION_DATA.cpp \
-						 ../../src/compression/MATRIX_COMPRESSION_DATA.cpp \
-						 ../../src/geometry/INTEGER_FIELD_3D.cpp
-
+						 ../../src/integrators/FLUID_3D_MIC.cpp 
 OBJECTS    = $(SOURCES:.cpp=.o)
 
 all: $(SOURCES) $(EXECUTABLE)

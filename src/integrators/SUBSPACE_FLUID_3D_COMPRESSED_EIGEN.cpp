@@ -172,47 +172,54 @@ void SUBSPACE_FLUID_3D_COMPRESSED_EIGEN::stepReorderedCubatureStam()
   addVorticity();
   _velocity.axpy(_dt, _force);
 
-  VectorXd flat;
+  // VectorXd flat;
 
   advectHeatAndDensityStam();
-  cout << "did advect heat and density" << endl;
+  // cout << "did advect heat and density" << endl;
   
   VECTOR::printVertical = false;
+
+  // VECTOR3_FIELD_3D velocityPeeled = _velocity.peelBoundary();
+  // VECTOR velocityFlatPeeled = velocityPeeled.flattened();
+  // velocityFlatPeeled.write("velocityFlatPeeledUnstable.field");
+
   TIMER projectionTimer("Velocity projection");
 
   _qDot = PeeledCompressedProject(_velocity, _U_preadvect_data);
-  cout << "did peeled compressed project" << endl;
-  VECTOR qDot = EIGEN::convert(_qDot);
-  cout << "qDot preadvect: " << qDot << "; " << endl;
+  // cout << "did peeled compressed project" << endl;
+  // VECTOR qDot = EIGEN::convert(_qDot);
+  // cout << "qDot preadvect: " << qDot << "; " << endl;
 
   projectionTimer.stop();
 
   reducedAdvectStagedStamFast();
-  cout << "did reduced advect staged" << endl;
+  // cout << "did reduced advect staged" << endl;
 
-  qDot = EIGEN::convert(_qDot);
-  cout << "qDot postadvect: " << qDot << "; " << endl;
+  // qDot = EIGEN::convert(_qDot);
+  // cout << "qDot postadvect: " << qDot << "; " << endl;
   
   TIMER diffusionProjectionTimer("Velocity projection");
   diffusionProjectionTimer.stop();
 
   reducedPeeledDiffusion();
-  cout << "did reduced peeled diffusion" << endl;
+  // cout << "did reduced peeled diffusion" << endl;
 
-  qDot = EIGEN::convert(_qDot);
-  cout << "qDot postdiffuse: " << qDot << "; " << endl;
+  // qDot = EIGEN::convert(_qDot);
+  // cout << "qDot postdiffuse: " << qDot << "; " << endl;
 
   reducedStagedProject();
 
-  cout << "did reduced staged project" << endl;
+  // cout << "did reduced staged project" << endl;
 
-  qDot = EIGEN::convert(_qDot);
-  cout << "qDot post reduced project: " << qDot << "; " << endl;
-  
+  // qDot = EIGEN::convert(_qDot);
+  // cout << "qDot post reduced project: " << qDot << "; " << endl;
+   
   PeeledCompressedUnproject(_velocity, _U_final_data, _qDot);
-  
-  qDot = EIGEN::convert(_qDot);
-  cout << "qDot post unproject: " << qDot << "; " << endl;
+  // VECTOR unprojectFlat = _velocity.flattened();
+  // unprojectFlat.write("unprojectFlatUnstable.vector");
+
+  // qDot = EIGEN::convert(_qDot);
+  // cout << "qDot post unproject: " << qDot << "; " << endl;
 
   // do the full space unprojection
   TIMER unprojectionTimer("Velocity unprojection");

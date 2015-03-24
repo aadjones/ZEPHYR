@@ -364,17 +364,18 @@ void runEverytime()
     fluid->addSmokeColumn();
     fluid->stepReorderedCubatureStam();
     
+    /* 
     char buffer[256];
     string path = snapshotPath;
     sprintf(buffer, "%sfluid.%04i.fluid3d", path.c_str(), steps);
     string filename(buffer);
     ground->readGz(filename);
     cout << " Loaded in ground. " << endl;
-   
+    */
 
     steps++;
 
-    if (steps == 151) {    
+    if (steps == 48) {    
     // if we were already capturing a movie
         if (captureMovie)
         {
@@ -399,7 +400,7 @@ void runEverytime()
     }
 
     // check if we're done
-    if (steps == 50)
+    if (steps == 500)
       exit(0);
     // stop early
     /*

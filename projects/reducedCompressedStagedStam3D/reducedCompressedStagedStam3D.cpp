@@ -367,9 +367,10 @@ void runEverytime()
     static int steps = 0;
     cout << " Simulation step " << steps << endl;
     fluid->addSmokeColumn();
-    cout << " Added smoke column " << endl;
+    // cout << " Added smoke column " << endl;
     fluid->stepReorderedCubatureStam();
-    cout << "did step reordered cubature stam" << endl;
+    // cout << "did step reordered cubature stam" << endl;
+
     /* 
     char buffer[256];
     string path = snapshotPath;
@@ -395,7 +396,7 @@ void runEverytime()
        captureMovie = false;
         }
     }
-    if (steps % 1 == 0)
+    if (steps % 10 == 0)
     {
       VECTOR::printVertical = false;
       TIMER::printTimingsPerFrame(steps);
@@ -406,7 +407,7 @@ void runEverytime()
     }
 
     // check if we're done
-    if (steps == 5)
+    if (steps == 500)
       exit(0);
     // stop early
     /*

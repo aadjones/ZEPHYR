@@ -4,9 +4,9 @@ include ../include.mk
 CC         = g++
 CFLAGS     = ${CFLAGS_COMMON} -I../../src/cubature -I../../src/Eigen/ -I../../src/compression
 LDFLAGS    = ${LDFLAGS_COMMON}
-EXECUTABLE = ../../bin/dctTrialsMulti
+EXECUTABLE = ../../bin/compressMatrices
 
-SOURCES    = dctTrialsMulti.cpp \
+SOURCES    = compressMatrices.cpp \
 						 ../../src/glvu/glvu.cpp \
 						 ../../src/util/TIMER.cpp \
 						 ../../src/util/SIMPLE_PARSER.cpp \

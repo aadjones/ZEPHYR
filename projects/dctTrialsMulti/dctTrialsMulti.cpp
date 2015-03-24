@@ -25,8 +25,6 @@
 
 #include <iostream>
 #include <fftw3.h>
-#include <assert.h>
-#include "jo_jpeg.h"
 #include "EIGEN.h"
 #include "SUBSPACE_FLUID_3D_EIGEN.h"
 #include "FLUID_3D_MIC.h"
@@ -50,8 +48,8 @@ using std::string;
 
 // string path_to_U("/Users/aaron/Desktop/U.final.uncompressed.matrix");
 // string path_to_U("/Volumes/DataDrive/data/reduced.stam.200.vorticity.1.5/U.preadvect.matrix");
-// string path_to_U("U.final.donotmodify.matrix.48");
-string path_to_U("U.preadvect.donotmodify.matrix.48");
+string path_to_U("U.final.donotmodify.matrix.48");
+// string path_to_U("U.preadvect.donotmodify.matrix.48");
 
 // debugging
 // string path_to_U("randTest.matrix");
@@ -123,7 +121,7 @@ int main(int argc, char* argv[]) {
   // Old version to get the distorted matrix. Currenty has memory leak problems
   // for huge matrices!!!
    
-   
+  /* 
   vector<VectorXd> columnList(g_numCols);
   for (int col = 0; col < g_numCols; col++) {
     cout << "Column: " << col << endl;
@@ -138,16 +136,16 @@ int main(int argc, char* argv[]) {
   MatrixXd compressedResult = EIGEN::buildFromColumns(columnList);
 
   EIGEN::write("U.preadvect.24pow6.matrix", compressedResult);
-  
+  */
 
 
 
 
   // write a binary file for each scalar field component
 
+ 
   
-  
-  const char* filename = "U.preadvect.component";
+  const char* filename = "U.final.component";
   for (int component = 0; component < 3; component++) {
     cout << "Writing component: " << component << endl;
     CompressAndWriteMatrixComponent(filename, g_U, component, compression_data);

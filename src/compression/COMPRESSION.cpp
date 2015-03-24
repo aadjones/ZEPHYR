@@ -1184,9 +1184,12 @@ void RunLengthEncodeBinary(const char* filename, int blockNumber, int* zigzagged
       }
     }
     int encodedLength = dataList.size();
+
+    /*
     if (encodedLength > 8 * 8 * 8) {
       cout << "Encoded length is pretty big: " << encodedLength << endl;
     }
+    */
 
     blockLengths[blockNumber] = encodedLength;
 
@@ -1612,9 +1615,12 @@ VectorXd GetRow(int row, MATRIX_COMPRESSION_DATA& data) {
   // int decodeCounter = data.get_decodeCounter();
 
   if (blockNumber == cachedBlockNumber) { // if we've already decoded this block
+    TIMER cacheTimer("cache block");
+
     // cout << "Used cache!" << endl;
 
     if (row % 3 == 0) { // X coordinate
+      TIMER xTimer("x coordinate cached");
       
       // load the previously decoded data
       vector<FIELD_3D> cachedBlocksX = data.get_cachedBlocksX();
@@ -1647,16 +1653,18 @@ VectorXd GetRow(int row, MATRIX_COMPRESSION_DATA& data) {
 
   else { // no cache; have to compute it from scratch
     // cout << "Didn't use cache!" << endl;  
-
+    TIMER uncachedTimer("uncached block");
 
     if (row % 3 == 0) { // X coordinate
+      TIMER x_uncachedTimer("x coordinate uncached");
+
       int* allDataX = data.get_dataX();
       MATRIX blockLengthsMatrix = decompression_dataX.get_blockLengthsMatrix();
       MATRIX blockIndicesMatrix = decompression_dataX.get_blockIndicesMatrix();
       MATRIX sListMatrix = decompression_dataX.get_sListMatrix();
     
       for (int col = 0; col < numCols; col++) {
-
+        TIMER columnTimer("uncached column loop");  
            
         VECTOR blockLengths = blockLengthsMatrix.getColumn(col);
         VECTOR blockIndices = blockIndicesMatrix.getColumn(col);
@@ -2159,13 +2167,15 @@ void PeeledCompressedUnproject(VECTOR3_FIELD_3D& V, MATRIX_COMPRESSION_DATA& U_d
   DECOMPRESSION_DATA dataX = U_data.get_decompression_dataX();
   int totalColumns = dataX.get_numCols();
   VEC3I dims = dataX.get_dims();
-
+  
+  /*
   cout << "xRes: " << xRes << endl;
   cout << "yRes: " << yRes << endl;
   cout << "zRes: " << zRes << endl;
   cout << "dims[0]: " << dims[0] << endl;
   cout << "dims[1]: " << dims[1] << endl;
   cout << "dims[2]: " << dims[2] << endl;
+  */
 
   // verify that the (peeled) dimensions match
   assert( xRes - 2 == dims[0] && yRes - 2 == dims[1] && zRes - 2 == dims[2] );
@@ -2305,10 +2315,14 @@ VectorXd PeeledCompressedProject(VECTOR3_FIELD_3D& V, MATRIX_COMPRESSION_DATA& U
   const int zRes = dims[2];
   const int totalColumns = dataX.get_numCols();
   VectorXd result(totalColumns);
+
+  // move to the peeled coordinates
+  VECTOR3_FIELD_3D V_peeled = V.peelBoundary();
   FIELD_3D V_X, V_Y, V_Z;
   // fill V_X, V_Y, V_Z
-  GetScalarFields(V, V_X, V_Y, V_Z);
-
+  GetScalarFields(V_peeled, V_X, V_Y, V_Z);
+  
+  // GetBlocksEigen zero-pads as not to disturb the integrity of the matrix-vector multiply
   vector<VectorXd> Xpart = GetBlocksEigen(V_X);
   vector<VectorXd> Ypart = GetBlocksEigen(V_Y);
   vector<VectorXd> Zpart = GetBlocksEigen(V_Z);
