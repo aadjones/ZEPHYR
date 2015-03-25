@@ -2,7 +2,7 @@ include ../include.mk
 
 # calls:
 CC         = g++
-CFLAGS     = ${CFLAGS_COMMON} -I../dctTrialsMulti
+CFLAGS     = ${CFLAGS_COMMON} -I../../src/compression
 LDFLAGS    = ${LDFLAGS_COMMON} 
 EXECUTABLE = ../../bin/reducedCompressedStagedStam3D
 
@@ -23,11 +23,11 @@ SOURCES    = reducedCompressedStagedStam3D.cpp \
 						 ../../src/geometry/FIELD_2D.cpp \
 						 ../../src/geometry/VECTOR3_FIELD_2D.cpp \
 						 ../../src/util/MIN_HEAP.cpp \
-						 ../dctTrialsMulti/MATRIX_COMPRESSION_DATA.cpp \
-						 ../dctTrialsMulti/COMPRESSION.cpp \
-						 ../dctTrialsMulti/COMPRESSION_DATA.cpp \
-						 ../dctTrialsMulti/DECOMPRESSION_DATA.cpp \
-						 ../dctTrialsMulti/INTEGER_FIELD_3D.cpp
+						 ../../src/compression/MATRIX_COMPRESSION_DATA.cpp \
+						 ../../src/compression/COMPRESSION.cpp \
+						 ../../src/compression/COMPRESSION_DATA.cpp \
+						 ../../src/compression/DECOMPRESSION_DATA.cpp \
+						 ../../src/geometry/INTEGER_FIELD_3D.cpp
 
 OBJECTS    = $(SOURCES:.cpp=.o)
 
