@@ -200,23 +200,16 @@ INTEGER_FIELD_3D RoundFieldToInt(const FIELD_3D& F) {
 ////////////////////////////////////////////////////////
 // cast an INTEGER_FIELD_3D to a FIELD_3D
 ////////////////////////////////////////////////////////
-FIELD_3D CastIntFieldToDouble(const INTEGER_FIELD_3D& F) {
+void CastIntFieldToDouble(const INTEGER_FIELD_3D& F, FIELD_3D& castedField) {
   TIMER functionTimer(__FUNCTION__);
-  int xRes = F.xRes();
-  int yRes = F.yRes();
-  int zRes = F.zRes();
+  
+  int totalCells = F.totalCells();
 
-  FIELD_3D result(xRes, yRes, zRes);
-
-  for (int x = 0; x < xRes; x++) {
-    for (int y = 0; y < yRes; y++) {
-      for (int z = 0; z < zRes; z++) {
-        double casted = (double) F(x, y, z);
-        result(x, y, z) = casted;
-      }
-    }
+  for (int i = 0; i < totalCells; i++) {
+    double casted = (double) F[i];
+    castedField[i] = casted;
   }
-  return result;
+
 }
 
 
@@ -1021,13 +1014,13 @@ FIELD_3D DecodeBlock(const INTEGER_FIELD_3D& intBlock, int blockNumber, int col,
   const int wRes = intBlock.zRes();
 
   // use the appropriate scale factor to decode
-  MATRIX sListMatrix = decompression_data.get_sListMatrix();
+  const MATRIX& sListMatrix = decompression_data.get_sListMatrix();
   double s = sListMatrix(blockNumber, col);
   
   // dequantize by inverting the scaling by s and contracting by the damping array
-  FIELD_3D dampingArray = decompression_data.get_dampingArray();
+  const FIELD_3D& dampingArray = decompression_data.get_dampingArray();
   FIELD_3D dequantized_F(uRes, vRes, wRes);
-  dequantized_F = CastIntFieldToDouble(intBlock);
+  CastIntFieldToDouble(intBlock, dequantized_F);
   dequantized_F *= (1.0 / s);
   dequantized_F *= dampingArray;
   
@@ -1058,13 +1051,13 @@ FIELD_3D DecodeBlockDecomp(const INTEGER_FIELD_3D& intBlock, int blockNumber, in
   const int wRes = intBlock.zRes();
 
   // use the appropriate scale factor to decode
-  MATRIX sListMatrix = decompression_data.get_sListMatrix();
+  const MATRIX& sListMatrix = decompression_data.get_sListMatrix();
   double s = sListMatrix(blockNumber, col);
   
   // dequantize by inverting the scaling by s and contracting by the damping array
-  FIELD_3D dampingArray = decompression_data.get_dampingArray();
+  const FIELD_3D& dampingArray = decompression_data.get_dampingArray();
   FIELD_3D dequantized_F(uRes, vRes, wRes);
-  dequantized_F = CastIntFieldToDouble(intBlock);
+  CastIntFieldToDouble(intBlock, dequantized_F);
   dequantized_F *= (1.0 / s);
   dequantized_F *= dampingArray;
 
@@ -1096,7 +1089,7 @@ FIELD_3D DecodeBlockSmart(const INTEGER_FIELD_3D& intBlock, int blockNumber, COM
   // dequantize by inverting the scaling by s and contracting by the damping array
   const FIELD_3D& dampingArray = data.get_dampingArray();
   FIELD_3D dequantized_F(uRes, vRes, wRes);
-  dequantized_F = CastIntFieldToDouble(intBlock);
+  CastIntFieldToDouble(intBlock, dequantized_F);
   dequantized_F *= (1.0 / s);
   dequantized_F *= dampingArray;
 
@@ -1128,7 +1121,7 @@ FIELD_3D DecodeBlockOld(const INTEGER_FIELD_3D& intBlock, int blockNumber, COMPR
   // dequantize by inverting the scaling by s and contracting by the damping array
   FIELD_3D dampingArray = data.get_dampingArray();
   FIELD_3D dequantized_F(uRes, vRes, wRes);
-  dequantized_F = CastIntFieldToDouble(intBlock);
+  CastIntFieldToDouble(intBlock, dequantized_F);
   dequantized_F *= (1.0 / s);
   dequantized_F *= dampingArray;
 

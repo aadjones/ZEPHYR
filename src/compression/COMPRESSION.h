@@ -70,7 +70,7 @@ int RoundToInt(const double& x);
 
 INTEGER_FIELD_3D RoundFieldToInt(const FIELD_3D& F);
 
-FIELD_3D CastIntFieldToDouble(const INTEGER_FIELD_3D& F);
+void CastIntFieldToDouble(const INTEGER_FIELD_3D& F, FIELD_3D& castedField);
 
 // get a vector of cumulative sums, but starting with a zeroth entry of zero and skipping the final entry
 vector<int> ModifiedCumSum(vector<int>& V);
