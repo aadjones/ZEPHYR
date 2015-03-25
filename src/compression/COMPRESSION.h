@@ -122,7 +122,7 @@ vector<FIELD_3D> GetBlocks(const FIELD_3D& F);
 vector<VectorXd> GetBlocksEigen(const FIELD_3D& F); 
 
 // Converts a C++ vector of scalar field blocks in row-major order back into a scalar field.
-FIELD_3D AssimilateBlocks(const VEC3I& dims, vector<FIELD_3D> V);
+void AssimilateBlocks(const VEC3I& dims, vector<FIELD_3D> V, FIELD_3D& assimilatedField);
 
 
 // Accepts as input a vector of scalar fields (in practice, 8x8x8 blocks) and performs

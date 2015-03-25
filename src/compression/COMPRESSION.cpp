@@ -90,18 +90,6 @@ int* CastToInt(const VECTOR& x, int* array) {
   return array;
 }
 
-////////////////////////////////////////////////////////
-// fill a buffer of ints from a VECTOR
-////////////////////////////////////////////////////////
-int* CastToShort(const VECTOR& x, int* array) {
-  TIMER functionTimer(__FUNCTION__);
-  for (int i = 0; i < x.size(); i++) {
-    int data_i = (int) x[i];
-    array[i] = data_i;
-  }
-  return array;
-}
-
 
 ////////////////////////////////////////////////////////
 // convert a vector<int> to a VECTOR
@@ -728,7 +716,8 @@ FIELD_3D DoSmartBlockCompression(FIELD_3D& F, COMPRESSION_DATA& compression_data
   DoSmartBlockDCT(blocks, -1);
   cout << "...done!" << endl;
   // reconstruct a FIELD_3D from the vector of blocks
-  FIELD_3D F_compressed = AssimilateBlocks(dimsUpdated, blocks);
+  FIELD_3D F_compressed(xRes, yRes, zRes);
+  AssimilateBlocks(dimsUpdated, blocks, F_compressed);
   // strip off the padding
   FIELD_3D F_compressed_peeled = F_compressed.subfield(0, xResOriginal, 0, yResOriginal, 0, zResOriginal); 
 
@@ -773,7 +762,8 @@ FIELD_3D DoBlockCompression(FIELD_3D& F, COMPRESSION_DATA& compression_data) {
     *itr = compressedBlock;
     blockNumber++;
   }
-  FIELD_3D F_compressed = AssimilateBlocks(dimsUpdated, blocks);
+  FIELD_3D F_compressed(xRes, yRes, zRes);
+  AssimilateBlocks(dimsUpdated, blocks, F_compressed);
   // strip off the padding
   FIELD_3D F_compressed_peeled = F_compressed.subfield(0, xResOriginal, 0, yResOriginal, 0, zResOriginal); 
 
@@ -898,15 +888,15 @@ vector<VectorXd> GetBlocksEigen(const FIELD_3D& F) {
 // reconstruct a FIELD_3D with the passed in dims
 // from a list of 8 x 8 x 8 blocks 
 ////////////////////////////////////////////////////////
-FIELD_3D AssimilateBlocks(const VEC3I& dims, vector<FIELD_3D> V) {
+void AssimilateBlocks(const VEC3I& dims, vector<FIELD_3D> V, FIELD_3D& assimilatedField) {
   TIMER functionTimer(__FUNCTION__);
   const int xRes = dims[0];
   const int yRes = dims[1];
   const int zRes = dims[2];
 
   assert( xRes % 8 == 0 && yRes % 8 == 0 && zRes % 8 == 0 );
+  assert( xRes == assimilatedField.xRes() && yRes == assimilatedField.yRes() && zRes == assimilatedField.zRes() );
 
-  FIELD_3D assimilatedField(xRes, yRes, zRes);
 
   for (int z = 0; z < zRes; z++) {
     for (int y = 0; y < yRes; y++) {
@@ -917,7 +907,6 @@ FIELD_3D AssimilateBlocks(const VEC3I& dims, vector<FIELD_3D> V) {
     }
   }
 
-  return assimilatedField;
 }
 
 
@@ -1916,7 +1905,7 @@ void WriteMetaData(const char* filename, const COMPRESSION_DATA& compression_dat
 
       int* lengthsData = (int*) malloc(sizeof(int) * blocksXcols);
       // fill lengthsData and write it
-      lengthsData = CastToShort(flattened_lengths, lengthsData);
+      lengthsData = CastToInt(flattened_lengths, lengthsData);
       fwrite(lengthsData, sizeof(int), blocksXcols, pFile);
       
       VECTOR flattened_indices = blockIndicesMatrix.flattenedColumn();
@@ -2107,7 +2096,9 @@ FIELD_3D DecodeScalarField(const DECOMPRESSION_DATA& decompression_data, int* co
   DoSmartBlockDCT(blocks, -1);
   
   // reassemble the blocks into one large scalar field
-  FIELD_3D padded_result = AssimilateBlocks(dimsUpdated, blocks);
+  FIELD_3D padded_result(xRes, yRes, zRes);
+  AssimilateBlocks(dimsUpdated, blocks, padded_result);
+
   // strip the padding
   FIELD_3D result = padded_result.subfield(0, xResOriginal, 0, yResOriginal, 0, zResOriginal); 
  
