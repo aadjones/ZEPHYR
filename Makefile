@@ -1,8 +1,8 @@
 SHELL := /bin/bash -e
 
-BINS = fluidStam3D cubatureGeneratorStamStaged reducedStagedStam3D svdOutOfCoreMultiple
+BINS = fluidStam3D cubatureGeneratorStamStaged reducedStagedStam3D svdOutOfCoreMultiple buildProducts compressMatrices reducedCompressedStagedStam3D
 
-SRCS = geometry linearalgebra integrators util glvu cubature
+SRCS = geometry linearalgebra integrators util glvu cubature compression
 
 all : 
 	-for d in $(BINS); do (echo -e "\n==== Entering $$d ====\n";cd ./projects/$$d; make -f Makefile;cd ../..); done
@@ -15,7 +15,7 @@ regressionTest:
 
 clean: 
 	-for d in $(BINS); do (echo -e "\n==== Cleaning $$d ====\n";cd ./projects/$$d; make -f Makefile clean;cd ../..); done 
-	-for d in $(SRCS); do (echo -e "\n==== Cleaning $$d ====\n";cd ./src/$$d; rm *.o; cd ../..); done
+	-for d in $(SRCS); do (echo -e "\n==== Cleaning $$d ====\n";cd ./src/$$d; rm -f *.o; cd ../..); done
 
 objclean:
 	-for d in $(SRCS); do (echo -e "\n==== Cleaning $$d ====\n";cd ./src/$$d; rm -f *.o; cd ../..); done

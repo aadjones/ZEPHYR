@@ -811,7 +811,7 @@ MATRIX& MATRIX::operator+=(const MATRIX& m)
 // self component-wise times
 MATRIX& MATRIX::operator*=(const MATRIX& m)
 {
-  assert(m.cols == _cols && m._rows == _rows);
+  assert(m._cols == _cols && m._rows == _rows);
 
   for (int x = 0; x < _rows * _cols; x++) {
     _matrix[x] *= m._matrix[x];
@@ -822,7 +822,7 @@ MATRIX& MATRIX::operator*=(const MATRIX& m)
 // self component-wise divides--make sure no entries of m are zero!
 MATRIX& MATRIX::operator/=(const MATRIX& m)
 {
-  assert(m.cols == _cols && m._rows == _rows);
+  assert(m._cols == _cols && m._rows == _rows);
 
   for (int x = 0; x < _rows * _cols; x++) {
     _matrix[x] /= m._matrix[x];
