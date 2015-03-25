@@ -88,6 +88,8 @@ VECTOR ZigzagFlatten(const INTEGER_FIELD_3D& F);
 // reconstruct an INTEGER_FIELD_3D of size 8 x 8 x 8 from a zigzag scan
 INTEGER_FIELD_3D ZigzagUnflatten(const VECTOR& V);
 
+void ZigzagUnflattenSmart(const VECTOR& V, const INTEGER_FIELD_3D& zigzagArray, INTEGER_FIELD_3D& unflattened);
+
 // out-of-place, symmetrically normalized, 3d DCT-II of a scalar field
 FIELD_3D DCT(FIELD_3D& F);
 

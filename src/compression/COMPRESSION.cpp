@@ -367,22 +367,31 @@ INTEGER_FIELD_3D ZigzagUnflatten(const VECTOR& V) {
 // like the other 'smart' version, uses the
 // precomputed zigzagArray and simple lookups
 ////////////////////////////////////////////////////////
-INTEGER_FIELD_3D ZigzagUnflattenSmart(const VECTOR& V, const INTEGER_FIELD_3D& zigzagArray) {
+void ZigzagUnflattenSmart(const VECTOR& V, const INTEGER_FIELD_3D& zigzagArray, INTEGER_FIELD_3D& unflattened) {
   TIMER functionTimer(__FUNCTION__);
   // assumes original dimensions were 8 x 8 x 8
   const int xRes = 8;
   const int yRes = 8;
   const int zRes = 8;
-  INTEGER_FIELD_3D result(xRes, yRes, zRes);
+  
+  assert( xRes == unflattened.xRes() && yRes == unflattened.yRes() && zRes == unflattened.zRes() );
+  
+  /*
   for (int z = 0; z < zRes; z++) {
     for (int y = 0; y < yRes; y++) {
       for (int x = 0; x < xRes; x++) {
         int index = zigzagArray(x, y, z);
-        result(x, y, z) = V[index];
+        unflattened(x, y, z) = V[index];
       }
     }
   }
-  return result;
+  */
+  const int totalCells = zigzagArray.totalCells();
+  for (int i = 0; i < totalCells; i++) {
+    int index = zigzagArray[i];
+    unflattened[i] = V[index];
+  }
+
 }
 
 
@@ -1616,7 +1625,8 @@ double DecodeFromRowCol(int row, int col, MATRIX_COMPRESSION_DATA& data) {
 
     VECTOR decoded_runLengthVector = CastIntToVector(decoded_runLength);
     // INTEGER_FIELD_3D unzigzagged = ZigzagUnflatten(decoded_runLengthVector);
-    INTEGER_FIELD_3D unzigzagged = ZigzagUnflattenSmart(decoded_runLengthVector, zigzagArray);
+    INTEGER_FIELD_3D unzigzagged(8, 8, 8);
+    ZigzagUnflattenSmart(decoded_runLengthVector, zigzagArray, unzigzagged);
     FIELD_3D decoded_block = DecodeBlock(unzigzagged, blockNumber, col, dataX); 
     double result = decoded_block[blockIndex];
     return result;
@@ -1637,7 +1647,8 @@ double DecodeFromRowCol(int row, int col, MATRIX_COMPRESSION_DATA& data) {
 
     VECTOR decoded_runLengthVector = CastIntToVector(decoded_runLength);
     // INTEGER_FIELD_3D unzigzagged = ZigzagUnflatten(decoded_runLengthVector);
-    INTEGER_FIELD_3D unzigzagged = ZigzagUnflattenSmart(decoded_runLengthVector, zigzagArray);
+    INTEGER_FIELD_3D unzigzagged(8, 8, 8);
+    ZigzagUnflattenSmart(decoded_runLengthVector, zigzagArray, unzigzagged);
     FIELD_3D decoded_block = DecodeBlock(unzigzagged, blockNumber, col, dataY); 
     double result = decoded_block[blockIndex];
     return result;
@@ -1658,7 +1669,8 @@ double DecodeFromRowCol(int row, int col, MATRIX_COMPRESSION_DATA& data) {
 
     VECTOR decoded_runLengthVector = CastIntToVector(decoded_runLength);
     // INTEGER_FIELD_3D unzigzagged = ZigzagUnflatten(decoded_runLengthVector);
-    INTEGER_FIELD_3D unzigzagged = ZigzagUnflattenSmart(decoded_runLengthVector, zigzagArray);
+    INTEGER_FIELD_3D unzigzagged(8, 8, 8);
+    ZigzagUnflattenSmart(decoded_runLengthVector, zigzagArray, unzigzagged);
     FIELD_3D decoded_block = DecodeBlock(unzigzagged, blockNumber, col, dataZ);
     double result = decoded_block[blockIndex];
     return result;
@@ -1761,7 +1773,8 @@ VectorXd GetRow(int row, MATRIX_COMPRESSION_DATA& data) {
         vector<int> decoded_runLength = RunLengthDecodeBinary(allDataX, blockNumber, blockLengths, blockIndices); 
 
         VECTOR decoded_runLengthVector = CastIntToVector(decoded_runLength);
-        INTEGER_FIELD_3D unzigzagged = ZigzagUnflattenSmart(decoded_runLengthVector, zigzagArray);
+        INTEGER_FIELD_3D unzigzagged(8, 8, 8);
+        ZigzagUnflattenSmart(decoded_runLengthVector, zigzagArray, unzigzagged);
 
         FIELD_3D decoded_block = DecodeBlock(unzigzagged, blockNumber, col, decompression_dataX); 
         
@@ -1794,7 +1807,8 @@ VectorXd GetRow(int row, MATRIX_COMPRESSION_DATA& data) {
         vector<int> decoded_runLength = RunLengthDecodeBinary(allDataY, blockNumber, blockLengths, blockIndices); 
 
         VECTOR decoded_runLengthVector = CastIntToVector(decoded_runLength);
-        INTEGER_FIELD_3D unzigzagged = ZigzagUnflattenSmart(decoded_runLengthVector, zigzagArray);
+        INTEGER_FIELD_3D unzigzagged(8, 8, 8);
+        ZigzagUnflattenSmart(decoded_runLengthVector, zigzagArray, unzigzagged);
         FIELD_3D decoded_block = DecodeBlock(unzigzagged, blockNumber, col, decompression_dataY); 
         // set the cached block
 
@@ -1827,7 +1841,8 @@ VectorXd GetRow(int row, MATRIX_COMPRESSION_DATA& data) {
 
         VECTOR decoded_runLengthVector = CastIntToVector(decoded_runLength);
         // INTEGER_FIELD_3D unzigzagged = ZigzagUnflatten(decoded_runLengthVector);
-        INTEGER_FIELD_3D unzigzagged = ZigzagUnflattenSmart(decoded_runLengthVector, zigzagArray);
+        INTEGER_FIELD_3D unzigzagged(8, 8, 8);
+        ZigzagUnflattenSmart(decoded_runLengthVector, zigzagArray, unzigzagged);
         FIELD_3D decoded_block = DecodeBlock(unzigzagged, blockNumber, col, decompression_dataZ); 
         // set the cached block
 
@@ -2079,7 +2094,8 @@ FIELD_3D DecodeScalarField(const DECOMPRESSION_DATA& decompression_data, int* co
     VECTOR runLengthDecodedVec = CastIntToVector(runLengthDecoded);
     // undo the zigzag scan
     // INTEGER_FIELD_3D unzigzagged = ZigzagUnflatten(runLengthDecodedVec);
-    INTEGER_FIELD_3D unzigzagged = ZigzagUnflattenSmart(runLengthDecodedVec, zigzagArray);
+    INTEGER_FIELD_3D unzigzagged(8, 8, 8);
+    ZigzagUnflattenSmart(runLengthDecodedVec, zigzagArray, unzigzagged);
     // undo the scaling from the quantizer
     FIELD_3D unquantized = DecodeBlockDecomp(unzigzagged, blockNumber, col, decompression_data);
     // push to the block container
@@ -2147,7 +2163,8 @@ vector<VectorXd> DecodeScalarFieldEigen(const DECOMPRESSION_DATA& decompression_
     VECTOR runLengthDecodedVec = CastIntToVector(runLengthDecoded);
     // undo the zigzag scan
     // INTEGER_FIELD_3D unzigzagged = ZigzagUnflatten(runLengthDecodedVec);
-    INTEGER_FIELD_3D unzigzagged = ZigzagUnflattenSmart(runLengthDecodedVec, zigzagArray);
+    INTEGER_FIELD_3D unzigzagged(8, 8, 8);
+    ZigzagUnflattenSmart(runLengthDecodedVec, zigzagArray, unzigzagged);
     // undo the scaling from the quantizer
     FIELD_3D unquantized = DecodeBlockDecomp(unzigzagged, blockNumber, col, decompression_data);
     // push to the block container
