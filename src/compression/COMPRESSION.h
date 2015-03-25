@@ -23,7 +23,7 @@
 // Function signatures
 ////////////////////////////////////////////////////////
 
-/////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
 FIELD_3D DoSmartBlockCompression(FIELD_3D& F, COMPRESSION_DATA& data);
 
 void DoSmartBlockDCT(vector<FIELD_3D>& V, int direction);
@@ -33,8 +33,6 @@ void DecodeBlockSmart();
 FIELD_3D DecodeBlockSmart(const INTEGER_FIELD_3D& intBlock, int blockNumber, COMPRESSION_DATA& data); 
 
 VECTOR3_FIELD_3D SmartBlockCompressVectorField(const VECTOR3_FIELD_3D& V, COMPRESSION_DATA& compression_data);
-
-/////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 
 
@@ -46,10 +44,6 @@ double* CastToDouble(const VECTOR& x, double* array);
 
 // cast a VECTOR (preferably with integer entries to avoid lossiness) to an array of ints
 int* CastToInt(const VECTOR& x, int* array);
-
-int* CastToShort(const VECTOR& x, int* array);
-
-long* CastToLong(const VECTOR& x, long* array);
 
 // cast a C++ vector of integers to a VECTOR of integers
 VECTOR CastIntToVector(const vector<int>& V);
@@ -82,32 +76,15 @@ MATRIX ModifiedCumSum(const MATRIX& M);
 // extract the three component scalar fields from a vector field
 void GetScalarFields(const VECTOR3_FIELD_3D& V, FIELD_3D& X, FIELD_3D& Y, FIELD_3D& Z);
 
-// flatten a FIELD_3D through a zigzag scan
-VECTOR ZigzagFlatten(const INTEGER_FIELD_3D& F);
+VECTOR ZigzagFlattenSmart(const INTEGER_FIELD_3D& F, const INTEGER_FIELD_3D& zigzagArray);
 
 // reconstruct an INTEGER_FIELD_3D of size 8 x 8 x 8 from a zigzag scan
-INTEGER_FIELD_3D ZigzagUnflatten(const VECTOR& V);
-
 void ZigzagUnflattenSmart(const VECTOR& V, const INTEGER_FIELD_3D& zigzagArray, INTEGER_FIELD_3D& unflattened);
 
-// out-of-place, symmetrically normalized, 3d DCT-II of a scalar field
-FIELD_3D DCT(FIELD_3D& F);
 
 // in-place version
 void DCT_in_place(FIELD_3D& F);
 
-// out-of-place, symmetrically normalized, 3d IDCT (aka DCT_III) of a scalar field
-FIELD_3D IDCT(FIELD_3D& F_hat);
-
-
-// 3D, 8x8x8 block DCT compression on the component scalar fields of a vector field. 
-// q is a linear damping parameter and nBits is the desired integer bit depth.
-VECTOR3_FIELD_3D BlockCompressVectorField(const VECTOR3_FIELD_3D& V, COMPRESSION_DATA& compression_data);
-
-// The following few functions are helpers for BlockCompressVectorField:
-
-// 3D, 8x8x8 block DCT compression on a scalar field. Both q and nBits are as above. 
-FIELD_3D DoBlockCompression(FIELD_3D& F, COMPRESSION_DATA& compression_data);
 
 // Calculates the necessary amount of padding in each dimension to ensure that the dimensions
 // of v after padding would then be evenly divisible by 8
@@ -124,11 +101,6 @@ vector<VectorXd> GetBlocksEigen(const FIELD_3D& F);
 // Converts a C++ vector of scalar field blocks in row-major order back into a scalar field.
 void AssimilateBlocks(const VEC3I& dims, vector<FIELD_3D> V, FIELD_3D& assimilatedField);
 
-
-// Accepts as input a vector of scalar fields (in practice, 8x8x8 blocks) and performs
-// the usual symmetrically-normalized 3d DCT-II on each one.
-void DoBlockDCT(vector<FIELD_3D>& V);
-
 // Encodes the passed in scalar field (in practice, an 8x8x8 block) by taking the 3D DCT,
 // normalizes the data by dividing by te DC component, converts to an nBit integer (usually 16),
 // and damps by dividing by (1 + (u + v + w)*q)^power. Returns an INTEGER_FIELD_3D.
@@ -143,7 +115,6 @@ INTEGER_FIELD_3D EncodeBlock(FIELD_3D& F, int blockNumber, COMPRESSION_DATA& com
 // scalar field fed into EncodeBlock.
 FIELD_3D DecodeBlock(const INTEGER_FIELD_3D& intBlock, int blockNumber, int col, const DECOMPRESSION_DATA& decompression_data); 
 
-FIELD_3D DecodeBlockOld(const INTEGER_FIELD_3D& intBlock, int blockNumber, COMPRESSION_DATA& data);
 
 // Writes a binary file using run-length encoding.
 // Input is assume to already have been zigzagged.

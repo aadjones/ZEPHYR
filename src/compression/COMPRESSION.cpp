@@ -118,22 +118,6 @@ vector<int> CastVectorToInt(const VECTOR& V) {
   return result;
 }
 
-/*
-////////////////////////////////////////////////////////
-// convert a vector<int> to a VECTOR 
-////////////////////////////////////////////////////////
-VECTOR CastIntToVector(const vector<int>& V) {
-  TIMER functionTimer(__FUNCTION__);
-  int length = V.size();
-  VECTOR result(length);
-
-  for (int i = 0; i < length; i++) {
-    result[i] = V[i];
-  }
-  return result;
-}
-*/
-
 ////////////////////////////////////////////////////////
 // convert a VECTOR to a vector<double> 
 ////////////////////////////////////////////////////////
@@ -267,35 +251,7 @@ void GetScalarFields(const VECTOR3_FIELD_3D& V, FIELD_3D& X, FIELD_3D& Y, FIELD_
 }
 
 
-////////////////////////////////////////////////////////
-// scans through the passed in INTEGER_FIELD_3D
-// according to what each entry's indices sum to,
-// zig-zag style. ZigzagFlattenSmart is a better
-// implemetation
-////////////////////////////////////////////////////////
-VECTOR ZigzagFlatten(const INTEGER_FIELD_3D& F) {
-  TIMER functionTimer(__FUNCTION__);
-  int xRes = F.xRes();
-  int yRes = F.yRes();
-  int zRes = F.zRes();
-  VECTOR result(xRes * yRes * zRes);
-  int sum;
-  int i = 0;
-  for (sum = 0; sum < xRes + yRes + zRes; sum++) {
-    for (int z = 0; z < zRes; z++) {
-      for (int y = 0; y < yRes; y++) {
-        for (int x = 0; x < xRes; x++) {
-          if (x + y + z == sum) {
-            result[i] = F(x, y, z);
-            i++;
-          }
-        }
-      }
-    }
-  }
-  return result;
 
-}
 
 
 ////////////////////////////////////////////////////////
@@ -382,41 +338,6 @@ void ZigzagUnflattenSmart(const VECTOR& V, const INTEGER_FIELD_3D& zigzagArray, 
 
 }
 
-
-////////////////////////////////////////////////////////
-// obsolete version of DCT since it does too many
-// malloc/frees over and over! 
-////////////////////////////////////////////////////////
-FIELD_3D DCT(FIELD_3D& F) {
-  TIMER functionTimer(__FUNCTION__);
-  double* in;
-  double* out;
-  fftw_plan plan;
-  const int xRes = F.xRes();
-  const int yRes = F.yRes();
-  const int zRes = F.zRes();
-  const int N = xRes * yRes * zRes;
-  in = (double*) fftw_malloc(sizeof(double) * N);
-  out = (double*) fftw_malloc(sizeof(double) * N);
-
-  VECTOR vector_in =  F.flattened();
-  in = CastToDouble(vector_in, in);
-  // data is in column order, so we pass the dimensions in reverse
-  plan = fftw_plan_r2r_3d(zRes, yRes, xRes, in, out, FFTW_REDFT10, FFTW_REDFT10, FFTW_REDFT10, FFTW_ESTIMATE);        // real-to-real 3d un-normalized forward transform (DCT-II)
-  fftw_execute(plan);
-  FIELD_3D F_hat(out, xRes, yRes, zRes);  
-
-  // Normalize---after going forward and backward, fftw scales by 2d in each dimension d.
-  // Hence, in the 3d transform, the input will be scaled by 8*xRes*yRes*zRes.
-  // To normalize symmetrically, we must correspondingly scale  by sqrt(1/(8*xRes*yRes*zRes)).
-  F_hat *= sqrt(0.125 / (xRes * yRes * zRes));
-
-  fftw_destroy_plan(plan);
-  fftw_free(in);
-  fftw_free(out);
-
-  return F_hat;
-}
 
 
 ////////////////////////////////////////////////////////
@@ -513,41 +434,6 @@ void DCT_in_place(FIELD_3D& F) {
 }
 
 
-////////////////////////////////////////////////////////
-// Mostly defunct version since it performs too many
-// malloc/frees when called in succession
-////////////////////////////////////////////////////////
-FIELD_3D IDCT(FIELD_3D& F_hat) {
-  TIMER functionTimer(__FUNCTION__);
-  double* in;
-  double* out;
-  fftw_plan plan;
-  const int xRes = F_hat.xRes();
-  const int yRes = F_hat.yRes();
-  const int zRes = F_hat.zRes();
-  const int N = xRes * yRes * zRes;
-  in = (double*) fftw_malloc(sizeof(double) * N);
-  out = (double*) fftw_malloc(sizeof(double) * N);
-
-  VECTOR vector_in =  F_hat.flattened();
-  in = CastToDouble(vector_in, in);
-  // real-to-real 3d un-normalized forward transform (dct-ii).
-  // pass the dimensions in reverse due to column order.
-  plan = fftw_plan_r2r_3d(zRes, yRes, xRes, in, out, 
-      FFTW_REDFT01, FFTW_REDFT01, FFTW_REDFT01, FFTW_ESTIMATE); 
-  fftw_execute(plan);
-  FIELD_3D F(out, xRes, yRes, zRes); 
-
-  // normalize symmetrically
-  F *= sqrt(0.125 / (xRes * yRes * zRes)); 
-
-  fftw_destroy_plan(plan);
-  fftw_free(in);
-  fftw_free(out);
-  fftw_cleanup();
-
-  return F;
-}
 
 
 ////////////////////////////////////////////////////////
@@ -616,40 +502,6 @@ VECTOR3_FIELD_3D SmartBlockCompressVectorField(const VECTOR3_FIELD_3D& V, COMPRE
 
 
 ////////////////////////////////////////////////////////
-// non 'smart' version which uses poorer memory
-// management with the DCTs
-////////////////////////////////////////////////////////
-VECTOR3_FIELD_3D BlockCompressVectorField(const VECTOR3_FIELD_3D& V, COMPRESSION_DATA& compression_data) { 
-  TIMER functionTimer(__FUNCTION__);
-
-  const int xRes = V.xRes();
-  const int yRes = V.yRes();
-  const int zRes = V.zRes();
-
-  double* X_array = (double*) malloc(sizeof(double) * xRes * yRes * zRes);
-  double* Y_array = (double*) malloc(sizeof(double) * xRes * yRes * zRes);
-  double* Z_array = (double*) malloc(sizeof(double) * xRes * yRes * zRes);
-
-  for (int component = 0; component < 3; component++) {            
-    FIELD_3D scalarComponent = V.scalarField(component);
-    FIELD_3D scalarComponentCompressed = DoBlockCompression(scalarComponent, compression_data);
-    VECTOR scalarComponentCompressedFlattened = scalarComponentCompressed.flattened();
-
-    if (component == 0)      X_array = CastToDouble(scalarComponentCompressedFlattened, X_array);
-    else if (component == 1) Y_array = CastToDouble(scalarComponentCompressedFlattened, Y_array);
-    else                     Z_array = CastToDouble(scalarComponentCompressedFlattened, Z_array);
-  }
-  
-  VECTOR3_FIELD_3D compressed_V(X_array, Y_array, Z_array, xRes, yRes, zRes);
-
-  free(X_array);
-  free(Y_array);
-  free(Z_array);
-
-  return compressed_V;
-}
-
-////////////////////////////////////////////////////////
 // performs 8 x 8 x 8 3D DCT block compression on the
 // passed in FIELD_3D, returning a lossy version 
 ////////////////////////////////////////////////////////
@@ -716,52 +568,6 @@ FIELD_3D DoSmartBlockCompression(FIELD_3D& F, COMPRESSION_DATA& compression_data
   DoSmartBlockDCT(blocks, -1);
   cout << "...done!" << endl;
   // reconstruct a FIELD_3D from the vector of blocks
-  FIELD_3D F_compressed(xRes, yRes, zRes);
-  AssimilateBlocks(dimsUpdated, blocks, F_compressed);
-  // strip off the padding
-  FIELD_3D F_compressed_peeled = F_compressed.subfield(0, xResOriginal, 0, yResOriginal, 0, zResOriginal); 
-
-  return F_compressed_peeled;
-}
-
-////////////////////////////////////////////////////////
-// defunct version which relies on poor memory management 
-////////////////////////////////////////////////////////
-FIELD_3D DoBlockCompression(FIELD_3D& F, COMPRESSION_DATA& compression_data) {
-  TIMER functionTimer(__FUNCTION__);
-
-  int xRes = F.xRes();
-  int xResOriginal = xRes;
-  int yRes = F.yRes();
-  int yResOriginal = yRes;
-  int zRes = F.zRes();
-  int zResOriginal = zRes;
-  
-  VEC3I dimsOriginal(xRes, yRes, zRes);
-  // dummy initializations                                     
-  int xPadding = 0;
-  int yPadding = 0;
-  int zPadding = 0;
-  
-  // fill in the paddings
-  GetPaddings(dimsOriginal, xPadding, yPadding, zPadding);
-  // update to the padded resolutions
-  xRes += xPadding;
-  yRes += yPadding;
-  zRes += zPadding;
-  VEC3I dimsUpdated(xRes, yRes, zRes);
-
-  vector<FIELD_3D> blocks = GetBlocks(F);     
-  DoBlockDCT(blocks);
-
-  int blockNumber = 0;
-  for (auto itr = blocks.begin(); itr != blocks.end(); ++itr) {
-
-    INTEGER_FIELD_3D V = EncodeBlock(*itr, blockNumber, compression_data); 
-    FIELD_3D compressedBlock = DecodeBlockOld(V, blockNumber, compression_data); 
-    *itr = compressedBlock;
-    blockNumber++;
-  }
   FIELD_3D F_compressed(xRes, yRes, zRes);
   AssimilateBlocks(dimsUpdated, blocks, F_compressed);
   // strip off the padding
@@ -935,15 +741,6 @@ void DoSmartBlockDCT(vector<FIELD_3D>& V, int direction) {
   fftw_cleanup();
 }
 
-////////////////////////////////////////////////////////
-// defunct version which uses poor memory management
-////////////////////////////////////////////////////////
-void DoBlockDCT(vector<FIELD_3D>& V) {
-  TIMER functionTimer(__FUNCTION__);
-  for (auto itr = V.begin(); itr != V.end(); ++itr) {
-    DCT_in_place(*itr);
-  }
-}
 
 ////////////////////////////////////////////////////////
 // takes a passed in FIELD_3D (which is intended to be
@@ -1096,37 +893,6 @@ FIELD_3D DecodeBlockSmart(const INTEGER_FIELD_3D& intBlock, int blockNumber, COM
 }
 
 
-////////////////////////////////////////////////////////
-// uses IDCT, no 'col' parameter, and uses compression data
-////////////////////////////////////////////////////////
-FIELD_3D DecodeBlockOld(const INTEGER_FIELD_3D& intBlock, int blockNumber, COMPRESSION_DATA& data) { 
-  TIMER functionTimer(__FUNCTION__);
-
-  int numBlocks = data.get_numBlocks();
-  // make sure we are not accessing an invalid block
-  assert( (blockNumber >= 0) && (blockNumber < numBlocks) );
-
-  // we use u, v, w rather than x, y , z to indicate the spatial frequency domain
-
-  const int uRes = intBlock.xRes();
-  const int vRes = intBlock.yRes();
-  const int wRes = intBlock.zRes();
-
-  // use the appropriate scale factor to decode
-  VECTOR sList = data.get_sList();
-  double s = sList[blockNumber];
-    
-  // dequantize by inverting the scaling by s and contracting by the damping array
-  FIELD_3D dampingArray = data.get_dampingArray();
-  FIELD_3D dequantized_F(uRes, vRes, wRes);
-  CastIntFieldToDouble(intBlock, dequantized_F);
-  dequantized_F *= (1.0 / s);
-  dequantized_F *= dampingArray;
-
-  // take the IDCT
-  FIELD_3D dequantized_F_hat = IDCT(dequantized_F);
-  return dequantized_F_hat;    
-}
 
 
 ////////////////////////////////////////////////////////
@@ -1385,78 +1151,6 @@ vector<int> RunLengthDecodeBinary(const int* allData, int blockNumber, VECTOR& b
 
     return parsedData;
   } 
-
-/*
-////////////////////////////////////////////////////////
-// decode a run-length encoded binary file and return
-// a vector<int> type
-////////////////////////////////////////////////////////
-vector<int> RunLengthDecodeBinary(const int* allData, int blockNumber, VECTOR& blockLengths, VECTOR& blockIndices) {
-
-  TIMER functionTimer(__FUNCTION__);
-  // although blockLengths and blockIndices are passed by reference,
-  // they will not be modified.
-    
-    // what we will be returning
-    vector<int> parsedData;                                
-    
-    int blockSize = blockLengths[blockNumber];
-    if (blockSize > 3 * 8 * 8 * 8) {
-      cout << "bogus block size read in: aborting!" << endl;
-      cout << "block size was thought to be: " << blockSize << endl;
-      exit(1);
-    }
-    int blockIndex = blockIndices[blockNumber];
-    
-    int* blockData = (int*) malloc(blockSize * sizeof(int));
-
-    if (blockData == NULL) {
-      perror("Malloc failed to allocate blockData!");
-      exit(EXIT_FAILURE);
-    }
-     
-    for (int i = 0; i < blockSize; i++) {
-      blockData[i] = allData[blockIndex + i];
-    }
-
-    
-    int i = 0;
-    int runLength = 1;
-    while (i < blockSize) {
-      parsedData.push_back(blockData[i]);          // write the value once
-      if ( (i + 1 < blockSize) && blockData[i] == blockData[i + 1]) {      // if we read an 'escape' value, it indicates a run.
-        i += 2;                                     // advance past the escape value to the run length value.
-        runLength = blockData[i];
-        
-        assert(runLength > 1);
-        if (runLength <= 1 || runLength > 512) {
-          cout << "Parsing error: run length was read in as garbage. Aborting." << endl;
-          cout << "Run length was thought to be: " << runLength << endl;
-          cout << "Previous two values were: " << blockData[i-2] << ", " << blockData[i-1] << endl;
-          cout << "Next value is: " << blockData[i+1] << endl;
-          cout << "Index is currently at: " << i << " of " << blockSize << endl;
-          exit(1);
-        }
-
-        for (int j = 0; j < runLength - 1; j++) {  // write the original value (index i - 2) repeatedly for runLength - 1 times,
-          parsedData.push_back(blockData[i - 2]);  // since we already wrote it once
-        }
-      }
-      i++;
-    }
-
-    free(blockData);
-
-    // ensure that the parse got the whole block
-    assert( parsedData.size() == 8 * 8 * 8 );
-    if ( parsedData.size() != 8 * 8 * 8 ) {
-      cout << "Failed to get 512 entries from the block...aborting!" << endl;
-      cout << "Got " << parsedData.size() << " entries instead." << endl;
-      exit(1);
-    }
-    return parsedData;
-  }  
-*/
 
 ////////////////////////////////////////////////////////
 // deletes a file if it already exists
@@ -2292,81 +1986,6 @@ void PeeledCompressedUnproject(VECTOR3_FIELD_3D& V, MATRIX_COMPRESSION_DATA& U_d
 }
 
 
-
-
-
-
-
-/*
-//////////////////////////////////////////////////////////////////////
-// unproject the reduced coordinate into the peeled cells in this field 
-// using compression data
-//////////////////////////////////////////////////////////////////////
-void PeeledCompressedUnproject(VECTOR3_FIELD_3D& V, MATRIX_COMPRESSION_DATA& U_data, const VectorXd& q) {
-  TIMER functionTimer(__FUNCTION__);
-
-  int xRes = V.xRes();
-  int yRes = V.yRes();
-  int zRes = V.zRes();
-  const int xPeeled = xRes - 2;
-  const int slabPeeled = (xRes - 2) * (yRes - 2);
-  // const int totalColumns = U.cols();
-  DECOMPRESSION_DATA dataX = U_data.get_decompression_dataX();
-  int totalColumns = dataX.get_numCols();
-
-#pragma omp parallel
-#pragma omp for  schedule(static)
-  for (int z = 0; z < zRes - 2; z++)
-  {
-    const int zCached = 3 * z * slabPeeled;
-    for (int y = 0; y < yRes - 2; y++)
-    {
-      const int yzCached = 3 * y * xPeeled + zCached;
-
-      int stride = 2;
-      int xEnd = (xRes - 2) / stride * stride;
-
-      // do the unrolling
-      for (int x = 0; x < xEnd; x += stride)
-      {
-        const int index0 = 3 * x + yzCached;
-        const int index1 = 3 * (x + 1) + yzCached;
-
-        // Real finalX0 = U.row(index0).dot(q);
-        Real finalX0 = (GetRow(index0, U_data)).dot(q);
-        // Real finalY0 = U.row(index0 + 1).dot(q);
-        Real finalY0 = (GetRow(index0 + 1, U_data)).dot(q);
-        // Real finalZ0 = U.row(index0 + 2).dot(q);
-        Real finalZ0 = (GetRow(index0 + 2, U_data)).dot(q);
-        // Real finalX1 = U.row(index1).dot(q);
-        Real finalX1 = (GetRow(index1, U_data)).dot(q);
-        // Real finalY1 = U.row(index1 + 1).dot(q);
-        Real finalY1 = (GetRow(index1 + 1, U_data)).dot(q);
-        // Real finalZ1 = U.row(index1 + 2).dot(q);
-        Real finalZ1 = (GetRow(index1 + 2, U_data)).dot(q);
-
-        V(x + 1, y + 1, z + 1) = VEC3F(finalX0, finalY0, finalZ0);
-        V(x + 2, y + 1, z + 1) = VEC3F(finalX1, finalY1, finalZ1);
-      }
-
-      // catch the leftovers
-      for (int x = xEnd; x < xRes - 2; x++)
-      {
-        const int index = 3 * x + yzCached;
-        // Real finalX = U.row(index).dot(q);
-        Real finalX = (GetRow(index, U_data)).dot(q);
-        // Real finalY = U.row(index + 1).dot(q);
-        Real finalY = (GetRow(index + 1, U_data)).dot(q);
-        // Real finalZ = U.row(index + 2).dot(q);
-        Real finalZ = (GetRow(index + 2, U_data)).dot(q);
-        V(x + 1, y + 1, z + 1) = VEC3F(finalX, finalY, finalZ);
-      }
-
-    }
-  }
-}
-*/
-
 double GetDotProductSum(vector<VectorXd> Vlist, vector<VectorXd> Wlist) {
 
   assert(Vlist.size() == Wlist.size());
@@ -2382,11 +2001,6 @@ double GetDotProductSum(vector<VectorXd> Vlist, vector<VectorXd> Wlist) {
   return dotProductSum;
 
 }
-
- 
-
-
-
 
 
 VectorXd PeeledCompressedProject(VECTOR3_FIELD_3D& V, MATRIX_COMPRESSION_DATA& U_data)
@@ -2439,10 +2053,5 @@ VectorXd PeeledCompressedProject(VECTOR3_FIELD_3D& V, MATRIX_COMPRESSION_DATA& U
   return result;
 
 }
-
-
-
   
-
-   
   
