@@ -50,6 +50,4 @@ bin/runLength.binX
 bin/runLength.binY
 bin/runLength.binZ
 bin/svdOutOfCoreMultiple
-data/
-scratch/
 
