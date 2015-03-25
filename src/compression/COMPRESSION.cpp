@@ -1304,14 +1304,19 @@ vector<int> RunLengthDecodeBinary(const int* allData, int blockNumber, VECTOR& b
   // they will not be modified.
     
     // what we will be returning
-    vector<int> parsedData;                                
+    vector<int> parsedData(512);                              
     
     int blockSize = blockLengths[blockNumber];
+    assert(blockSize >= 0 && blockSize <= 3 * 8 * 8 * 8);
+
+    /*
     if (blockSize > 3 * 8 * 8 * 8) {
       cout << "bogus block size read in: aborting!" << endl;
       cout << "block size was thought to be: " << blockSize << endl;
       exit(1);
     }
+    */
+
     int blockIndex = blockIndices[blockNumber];
     
     /* 
@@ -1329,8 +1334,11 @@ vector<int> RunLengthDecodeBinary(const int* allData, int blockNumber, VECTOR& b
     
     int i = 0;
     int runLength = 1;
+    auto itr = parsedData.begin();
+
     while (i < blockSize) {
-      parsedData.push_back(allData[blockIndex + i]);          // write the value once
+      *itr = allData[blockIndex + i];
+      // parsedData.push_back(allData[blockIndex + i]);          // write the value once
       if ( (i + 1 < blockSize) && allData[blockIndex + i] == allData[blockIndex + i + 1]) {      // if we read an 'escape' value, it indicates a run.
         i += 2;                                     // advance past the escape value to the run length value.
         runLength = allData[blockIndex + i];
@@ -1347,23 +1355,36 @@ vector<int> RunLengthDecodeBinary(const int* allData, int blockNumber, VECTOR& b
           exit(1);
         }
         */
-
+        
+        /*
         for (int j = 0; j < runLength - 1; j++) {  // write the original value (index i - 2) repeatedly for runLength - 1 times,
           parsedData.push_back(allData[blockIndex + i - 2]);  // since we already wrote it once
         }
+        */
+
+        std::fill(itr + 1, itr + 1 + runLength - 1, allData[blockIndex + i - 2]);
+        itr += (runLength - 1);
+
       }
+
       i++;
+      ++itr;
     }
 
     // free(blockData);
 
     // ensure that the parse got the whole block
+
+    /*
     assert( parsedData.size() == 8 * 8 * 8 );
+
     if ( parsedData.size() != 8 * 8 * 8 ) {
       cout << "Failed to get 512 entries from the block...aborting!" << endl;
       cout << "Got " << parsedData.size() << " entries instead." << endl;
       exit(1);
     }
+    */
+
     return parsedData;
   } 
 
