@@ -30,9 +30,9 @@ class MATRIX_COMPRESSION_DATA {
     const DECOMPRESSION_DATA& get_decompression_dataY() const { return _decompression_dataY; }
     const DECOMPRESSION_DATA& get_decompression_dataZ() const { return _decompression_dataZ; }
 
-    const vector<FIELD_3D>& get_cachedBlocksX() const { return _cachedBlocksX; }
-    const vector<FIELD_3D>& get_cachedBlocksY() const { return _cachedBlocksY; }
-    const vector<FIELD_3D>& get_cachedBlocksZ() const { return _cachedBlocksZ; }
+    vector<FIELD_3D>& get_cachedBlocksX() { return _cachedBlocksX; }
+    vector<FIELD_3D>& get_cachedBlocksY() { return _cachedBlocksY; }
+    vector<FIELD_3D>& get_cachedBlocksZ() { return _cachedBlocksZ; }
 
     int get_cachedBlockNumber() const { return _cachedBlockNumber; }
     // int get_decodeCounterX() const { return _decodeCounterX; }
