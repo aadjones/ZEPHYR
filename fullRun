@@ -1,0 +1,11 @@
+#!/bin/bash
+# My first script
+
+./bin/fluidStam3D ./cfg/stam.64.cfg
+./bin/svdOutOfCoreMultiple ./cfg/stam.64.cfg
+./bin/cubatureGeneratorStamStaged ./cfg/stam.64.cfg
+
+./bin/buildProducts ./cfg/stam.64.cfg
+./bin/compressMatrices ./cfg/stam.64.cfg | tee compressionTimings.txt
+./bin/reducedCompressedStagedStam3D ./cfg/stam.64.cfg | tee pipelineTest.txt
+
