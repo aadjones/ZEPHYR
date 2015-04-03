@@ -183,6 +183,17 @@ vector<int> RunLengthDecodeBinaryFast(const int* allData, int blockNumber, int c
 
 double DecodeFromRowColFast(int row, int col, MATRIX_COMPRESSION_DATA& data); 
 
+void DecodeScalarFieldFast(const DECOMPRESSION_DATA& decompression_data, int* const& allData, int col);
+
+
+vector<VectorXd> DecodeScalarFieldEigenFast(const DECOMPRESSION_DATA& decompression_data, int* const& allData, int col); 
+
+void DecodeVectorFieldFast(MATRIX_COMPRESSION_DATA& data, int col, VECTOR3_FIELD_3D& vecfieldToFill); 
+
+MatrixXd DecodeFullMatrixFast(MATRIX_COMPRESSION_DATA& data);  
+
+void DecodeBlockDecomp(const INTEGER_FIELD_3D& intBlock, int blockNumber, int col, const DECOMPRESSION_DATA& decompression_data, FIELD_3D& fieldToFill);
+
 ////////////////////////////////////////////////////////
 // End Function Signatures
 ////////////////////////////////////////////////////////
