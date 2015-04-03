@@ -99,7 +99,7 @@ vector<FIELD_3D> GetBlocks(const FIELD_3D& F);
 vector<VectorXd> GetBlocksEigen(const FIELD_3D& F); 
 
 // Converts a C++ vector of scalar field blocks in row-major order back into a scalar field.
-void AssimilateBlocks(const VEC3I& dims, vector<FIELD_3D> V, FIELD_3D& assimilatedField);
+void AssimilateBlocks(const VEC3I& dims, const vector<FIELD_3D>& V, FIELD_3D& assimilatedField);
 
 // Encodes the passed in scalar field (in practice, an 8x8x8 block) by taking the 3D DCT,
 // normalizes the data by dividing by te DC component, converts to an nBit integer (usually 16),
@@ -178,7 +178,7 @@ void GetRowFast(int row, int matrixRow, MATRIX_COMPRESSION_DATA& data, MatrixXd&
 
 void GetSubmatrixFast(int startRow, int numRows, MATRIX_COMPRESSION_DATA& data, MatrixXd& matrixToFill); 
 
-vector<int> RunLengthDecodeBinaryFast(const int* allData, int blockNumber, int col, const MATRIX& blockLengthsMatrix, const MATRIX& blockIndicesMatrix); 
+void RunLengthDecodeBinaryFast(const int* allData, int blockNumber, int col, const MATRIX& blockLengthsMatrix, const MATRIX& blockIndicesMatrix, vector<int>& parsedData); 
 
 
 double DecodeFromRowColFast(int row, int col, MATRIX_COMPRESSION_DATA& data); 
@@ -186,13 +186,19 @@ double DecodeFromRowColFast(int row, int col, MATRIX_COMPRESSION_DATA& data);
 void DecodeScalarFieldFast(const DECOMPRESSION_DATA& decompression_data, int* const& allData, int col);
 
 
-vector<VectorXd> DecodeScalarFieldEigenFast(const DECOMPRESSION_DATA& decompression_data, int* const& allData, int col); 
+void DecodeScalarFieldEigenFast(const DECOMPRESSION_DATA& decompression_data, int* const& allData, int col); 
 
 void DecodeVectorFieldFast(MATRIX_COMPRESSION_DATA& data, int col, VECTOR3_FIELD_3D& vecfieldToFill); 
 
 MatrixXd DecodeFullMatrixFast(MATRIX_COMPRESSION_DATA& data);  
 
 void DecodeBlockDecomp(const INTEGER_FIELD_3D& intBlock, int blockNumber, int col, const DECOMPRESSION_DATA& decompression_data, FIELD_3D& fieldToFill);
+
+void DecodeBlockFast(const INTEGER_FIELD_3D& intBlock, int blockNumber, int col, const DECOMPRESSION_DATA& decompression_data, FIELD_3D& fieldToFill); 
+
+void IDCT_Smart_Fast(FIELD_3D& F_hat, const DECOMPRESSION_DATA& decompression_data, FIELD_3D& fieldToFill); 
+
+void CastIntToVectorFast(const vector<int>& V, VECTOR& vecToFill); 
 
 ////////////////////////////////////////////////////////
 // End Function Signatures

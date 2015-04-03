@@ -94,6 +94,18 @@ int* CastToInt(const VECTOR& x, int* array) {
 ////////////////////////////////////////////////////////
 // convert a vector<int> to a VECTOR
 ////////////////////////////////////////////////////////
+void CastIntToVectorFast(const vector<int>& V, VECTOR& vecToFill) {
+  TIMER functionTimer(__FUNCTION__);
+  int length = V.size();
+  assert(vecToFill.size() == length);
+
+  for (int i = 0; i < length; i++) {
+    vecToFill[i] = V[i];
+  }
+}
+////////////////////////////////////////////////////////
+// convert a vector<int> to a VECTOR
+////////////////////////////////////////////////////////
 VECTOR CastIntToVector(const vector<int>& V) {
   TIMER functionTimer(__FUNCTION__);
   int length = V.size();
@@ -382,9 +394,8 @@ void DCT_Smart(FIELD_3D& F, fftw_plan& plan, double*& in) {
   int yRes = F.yRes();
   int zRes = F.zRes();
 
-  VECTOR vector_in = F.flattened();
   // fill the 'in' buffer
-  in = CastToDouble(vector_in, in);
+  in = CastToDouble(F.flattened(), in);
 
   fftw_execute(plan);
   // 'in' is now overwritten to the result of the transform
@@ -396,7 +407,7 @@ void DCT_Smart(FIELD_3D& F, fftw_plan& plan, double*& in) {
   F_hat *= sqrt(0.125 / (xRes * yRes * zRes));
 
   // rewrite F with the contents of F_hat
-  F = F_hat;
+  F.swapPointers(F_hat);
 }
 
 ////////////////////////////////////////////////////////
@@ -441,6 +452,32 @@ void DCT_in_place(FIELD_3D& F) {
 // decompression data, so make sure all is initialized
 // before calling this function! 
 ////////////////////////////////////////////////////////
+void IDCT_Smart_Fast(FIELD_3D& F_hat, const DECOMPRESSION_DATA& decompression_data, FIELD_3D& fieldToFill) {
+  TIMER functionTimer(__FUNCTION__);
+ 
+  double* in = decompression_data.get_dct_in();
+  double* out = decompression_data.get_dct_out();
+  fftw_plan plan = decompression_data.get_dct_plan();
+  const int xRes = F_hat.xRes();
+  const int yRes = F_hat.yRes();
+  const int zRes = F_hat.zRes();
+  
+  // VECTOR vector_in = F_hat.flattened();
+  in = CastToDouble(F_hat.flattened(), in);
+   
+
+  fftw_execute(plan);
+  FIELD_3D F(out, xRes, yRes, zRes);
+
+  // normalize symmetrically
+  F *= sqrt(0.125 / (xRes * yRes * zRes));
+  F.swapPointers(fieldToFill);
+}
+////////////////////////////////////////////////////////
+// fetches the plan an input buffer from the passed in
+// decompression data, so make sure all is initialized
+// before calling this function! 
+////////////////////////////////////////////////////////
 FIELD_3D IDCT_Smart(FIELD_3D& F_hat, const DECOMPRESSION_DATA& decompression_data) {
   TIMER functionTimer(__FUNCTION__);
  
@@ -451,8 +488,7 @@ FIELD_3D IDCT_Smart(FIELD_3D& F_hat, const DECOMPRESSION_DATA& decompression_dat
   const int yRes = F_hat.yRes();
   const int zRes = F_hat.zRes();
   
-  VECTOR vector_in = F_hat.flattened();
-  in = CastToDouble(vector_in, in);
+  in = CastToDouble(F_hat.flattened(), in);
 
   fftw_execute(plan);
   FIELD_3D F(out, xRes, yRes, zRes);
@@ -681,8 +717,7 @@ vector<VectorXd> GetBlocksEigen(const FIELD_3D& F) {
     for (int y = 0; y < yRes/8; y++) {
       for (int x = 0; x < xRes/8; x++, index++) {
         FIELD_3D subfield = F_padded.subfield(8*x, 8*(x+1), 8*y, 8*(y+1), 8*z, 8*(z+1));
-        VECTOR subfieldFlat = subfield.flattened();
-        VectorXd subfieldFlatEigen = EIGEN::convert(subfieldFlat);
+        VectorXd subfieldFlatEigen = subfield.flattenedEigen();
         blockList[index] = subfieldFlatEigen;
       }
     }
@@ -694,7 +729,7 @@ vector<VectorXd> GetBlocksEigen(const FIELD_3D& F) {
 // reconstruct a FIELD_3D with the passed in dims
 // from a list of 8 x 8 x 8 blocks 
 ////////////////////////////////////////////////////////
-void AssimilateBlocks(const VEC3I& dims, vector<FIELD_3D> V, FIELD_3D& assimilatedField) {
+void AssimilateBlocks(const VEC3I& dims, const vector<FIELD_3D>& V, FIELD_3D& assimilatedField) {
   TIMER functionTimer(__FUNCTION__);
   const int xRes = dims[0];
   const int yRes = dims[1];
@@ -788,6 +823,38 @@ INTEGER_FIELD_3D EncodeBlock(FIELD_3D& F, int blockNumber, COMPRESSION_DATA& com
   return quantized;
 }
 
+
+void DecodeBlockFast(const INTEGER_FIELD_3D& intBlock, int blockNumber, int col, const DECOMPRESSION_DATA& decompression_data, FIELD_3D& fieldToFill) {
+
+  TIMER functionTimer(__FUNCTION__);
+
+  int numBlocks = decompression_data.get_numBlocks();
+  // make sure we are not accessing an invalid block
+  assert( (blockNumber >= 0) && (blockNumber < numBlocks) );
+
+  // we use u, v, w rather than x, y , z to indicate the spatial frequency domain
+
+  const int uRes = intBlock.xRes();
+  const int vRes = intBlock.yRes();
+  const int wRes = intBlock.zRes();
+
+  // use the appropriate scale factor to decode
+  const MATRIX& sListMatrix = decompression_data.get_sListMatrix();
+  double s = sListMatrix(blockNumber, col);
+  
+  // dequantize by inverting the scaling by s and contracting by the damping array
+  const FIELD_3D& dampingArray = decompression_data.get_dampingArray();
+  FIELD_3D dequantized_F(uRes, vRes, wRes);
+  CastIntFieldToDouble(intBlock, dequantized_F);
+  dequantized_F *= (1.0 / s);
+  dequantized_F *= dampingArray;
+  
+  
+  // take the IDCT
+  // FIELD_3D dequantized_F_hat = IDCT(dequantized_F);
+ 
+  IDCT_Smart_Fast(dequantized_F, decompression_data, fieldToFill);
+}
 
 ////////////////////////////////////////////////////////
 // decodes an INTEGER_FIELD_3D into a FIELD_3D by
@@ -1060,14 +1127,13 @@ void ReadBinaryFileToMemory(const char* filename, int*& allData, DECOMPRESSION_D
 // decode a run-length encoded binary file and return
 // a vector<int> type. fast version!
 ////////////////////////////////////////////////////////
-vector<int> RunLengthDecodeBinaryFast(const int* allData, int blockNumber, int col, const MATRIX& blockLengthsMatrix, const MATRIX& blockIndicesMatrix) {
+void RunLengthDecodeBinaryFast(const int* allData, int blockNumber, int col, const MATRIX& blockLengthsMatrix, const MATRIX& blockIndicesMatrix, vector<int>& parsedData) {
 
   TIMER functionTimer(__FUNCTION__);
   // although blockLengths and blockIndices are passed by reference,
   // they will not be modified.
     
     // what we will be returning
-    vector<int> parsedData(512);                              
     
     int blockSize = blockLengthsMatrix(blockNumber, col);
     assert(blockSize >= 0 && blockSize <= 3 * 8 * 8 * 8);
@@ -1096,7 +1162,6 @@ vector<int> RunLengthDecodeBinaryFast(const int* allData, int blockNumber, int c
       ++itr;
     }
 
-    return parsedData;
   } 
 
 ////////////////////////////////////////////////////////
@@ -1331,8 +1396,11 @@ double DecodeFromRowColFast(int row, int col, MATRIX_COMPRESSION_DATA& data) {
   const DECOMPRESSION_DATA& dataY = data.get_decompression_dataY();
   const DECOMPRESSION_DATA& dataZ = data.get_decompression_dataZ();
 
-  vector<int> decoded_runLength;
+  vector<int> decoded_runLength(512);
+  VECTOR decoded_runLengthVector(512);
   INTEGER_FIELD_3D unzigzagged(8, 8, 8);
+  FIELD_3D decoded_block(8, 8, 8);
+ 
 
   // dummy initialization
   int blockIndex = 0;
@@ -1343,11 +1411,11 @@ double DecodeFromRowColFast(int row, int col, MATRIX_COMPRESSION_DATA& data) {
     const MATRIX& blockIndicesMatrix = dataX.get_blockIndicesMatrix();
         
     
-    decoded_runLength = RunLengthDecodeBinaryFast(allDataX, blockNumber, col, blockLengthsMatrix, blockIndicesMatrix); 
+    RunLengthDecodeBinaryFast(allDataX, blockNumber, col, blockLengthsMatrix, blockIndicesMatrix, decoded_runLength); 
 
-    VECTOR decoded_runLengthVector = CastIntToVector(decoded_runLength);
+    CastIntToVectorFast(decoded_runLength, decoded_runLengthVector);
     ZigzagUnflattenSmart(decoded_runLengthVector, zigzagArray, unzigzagged);
-    FIELD_3D decoded_block = DecodeBlock(unzigzagged, blockNumber, col, dataX); 
+    DecodeBlockFast(unzigzagged, blockNumber, col, dataX, decoded_block); 
     double result = decoded_block[blockIndex];
     return result;
 
@@ -1358,11 +1426,11 @@ double DecodeFromRowColFast(int row, int col, MATRIX_COMPRESSION_DATA& data) {
     const MATRIX& blockLengthsMatrix = dataY.get_blockLengthsMatrix();
     const MATRIX& blockIndicesMatrix = dataY.get_blockIndicesMatrix();
 
-    decoded_runLength = RunLengthDecodeBinaryFast(allDataY, blockNumber, col, blockLengthsMatrix, blockIndicesMatrix); 
+    RunLengthDecodeBinaryFast(allDataY, blockNumber, col, blockLengthsMatrix, blockIndicesMatrix, decoded_runLength); 
 
-    VECTOR decoded_runLengthVector = CastIntToVector(decoded_runLength);
+    CastIntToVectorFast(decoded_runLength, decoded_runLengthVector);
     ZigzagUnflattenSmart(decoded_runLengthVector, zigzagArray, unzigzagged);
-    FIELD_3D decoded_block = DecodeBlock(unzigzagged, blockNumber, col, dataY); 
+    DecodeBlockFast(unzigzagged, blockNumber, col, dataY, decoded_block); 
     double result = decoded_block[blockIndex];
     return result;
   
@@ -1374,11 +1442,11 @@ double DecodeFromRowColFast(int row, int col, MATRIX_COMPRESSION_DATA& data) {
     const MATRIX& blockIndicesMatrix = dataZ.get_blockIndicesMatrix();
 
 
-    decoded_runLength = RunLengthDecodeBinaryFast(allDataZ, blockNumber, col, blockLengthsMatrix, blockIndicesMatrix); 
+    RunLengthDecodeBinaryFast(allDataZ, blockNumber, col, blockLengthsMatrix, blockIndicesMatrix, decoded_runLength); 
 
-    VECTOR decoded_runLengthVector = CastIntToVector(decoded_runLength);
+    CastIntToVectorFast(decoded_runLength, decoded_runLengthVector);
     ZigzagUnflattenSmart(decoded_runLengthVector, zigzagArray, unzigzagged);
-    FIELD_3D decoded_block = DecodeBlock(unzigzagged, blockNumber, col, dataZ);
+    DecodeBlockFast(unzigzagged, blockNumber, col, dataZ, decoded_block);
     double result = decoded_block[blockIndex];
     return result;
   }
@@ -1409,9 +1477,9 @@ double DecodeFromRowCol(int row, int col, MATRIX_COMPRESSION_DATA& data) {
   // fill blockIndex and compute the block number
   int blockNumber = ComputeBlockNumber(row, dims, blockIndex);
   if (row % 3 == 0) { // X coordinate
-    MATRIX blockLengthsMatrix = dataX.get_blockLengthsMatrix();
-    MATRIX blockIndicesMatrix = dataX.get_blockIndicesMatrix();
-    MATRIX sListMatrix = dataX.get_sListMatrix();
+    const MATRIX& blockLengthsMatrix = dataX.get_blockLengthsMatrix();
+    const MATRIX& blockIndicesMatrix = dataX.get_blockIndicesMatrix();
+    const MATRIX& sListMatrix = dataX.get_sListMatrix();
         
     
     VECTOR blockLengths = blockLengthsMatrix.getColumn(col);
@@ -1738,6 +1806,9 @@ void GetRowFast(int row, int matrixRow, MATRIX_COMPRESSION_DATA& data, MatrixXd&
     // cout << "Didn't use cache!" << endl;  
     TIMER uncachedTimer("uncached block");
     INTEGER_FIELD_3D unzigzagged(8, 8, 8);
+    FIELD_3D decoded_block(8, 8, 8);
+    vector<int> decoded_runLength(512);
+    VECTOR decoded_runLengthVector(512);
 
     if (row % 3 == 0) { // X coordinate
       TIMER x_uncachedTimer("x coordinate uncached");
@@ -1749,12 +1820,12 @@ void GetRowFast(int row, int matrixRow, MATRIX_COMPRESSION_DATA& data, MatrixXd&
       for (int col = 0; col < numCols; col++) {
         TIMER columnTimer("uncached column loop");  
            
-        vector<int> decoded_runLength = RunLengthDecodeBinaryFast(allDataX, blockNumber, col, blockLengthsMatrix, blockIndicesMatrix); 
+        RunLengthDecodeBinaryFast(allDataX, blockNumber, col, blockLengthsMatrix, blockIndicesMatrix, decoded_runLength); 
 
-        VECTOR decoded_runLengthVector = CastIntToVector(decoded_runLength);
+        CastIntToVectorFast(decoded_runLength, decoded_runLengthVector);
         ZigzagUnflattenSmart(decoded_runLengthVector, zigzagArray, unzigzagged);
 
-        FIELD_3D decoded_block = DecodeBlock(unzigzagged, blockNumber, col, decompression_dataX); 
+        DecodeBlockFast(unzigzagged, blockNumber, col, decompression_dataX, decoded_block); 
         
         // set the cached block
         vector<FIELD_3D>& cachedBlocksX = data.get_cachedBlocksX();
@@ -1776,15 +1847,14 @@ void GetRowFast(int row, int matrixRow, MATRIX_COMPRESSION_DATA& data, MatrixXd&
       const DECOMPRESSION_DATA& decompression_dataY = data.get_decompression_dataY();
       const MATRIX& blockLengthsMatrix = decompression_dataY.get_blockLengthsMatrix();
       const MATRIX& blockIndicesMatrix = decompression_dataY.get_blockIndicesMatrix();
-      const MATRIX& sListMatrix = decompression_dataY.get_sListMatrix();
 
       for (int col = 0; col < numCols; col++) {
            
-        vector<int> decoded_runLength = RunLengthDecodeBinaryFast(allDataY, blockNumber, col, blockLengthsMatrix, blockIndicesMatrix); 
+        RunLengthDecodeBinaryFast(allDataY, blockNumber, col, blockLengthsMatrix, blockIndicesMatrix, decoded_runLength); 
 
-        VECTOR decoded_runLengthVector = CastIntToVector(decoded_runLength);
+        CastIntToVectorFast(decoded_runLength, decoded_runLengthVector);
         ZigzagUnflattenSmart(decoded_runLengthVector, zigzagArray, unzigzagged);
-        FIELD_3D decoded_block = DecodeBlock(unzigzagged, blockNumber, col, decompression_dataY); 
+        DecodeBlockFast(unzigzagged, blockNumber, col, decompression_dataY, decoded_block); 
         // set the cached block
 
         vector<FIELD_3D>& cachedBlocksY = data.get_cachedBlocksY();
@@ -1803,18 +1873,17 @@ void GetRowFast(int row, int matrixRow, MATRIX_COMPRESSION_DATA& data, MatrixXd&
       TIMER x_uncachedTimer("z coordinate uncached");
 
       int* allDataZ = data.get_dataZ();
-      DECOMPRESSION_DATA decompression_dataZ = data.get_decompression_dataZ();
+      const DECOMPRESSION_DATA& decompression_dataZ = data.get_decompression_dataZ();
       const MATRIX& blockLengthsMatrix = decompression_dataZ.get_blockLengthsMatrix();
       const MATRIX& blockIndicesMatrix = decompression_dataZ.get_blockIndicesMatrix();
-      const MATRIX& sListMatrix = decompression_dataZ.get_sListMatrix();
 
       for (int col = 0; col < numCols; col++) {
            
-        vector<int> decoded_runLength = RunLengthDecodeBinaryFast(allDataZ, blockNumber, col, blockLengthsMatrix, blockIndicesMatrix); 
+      RunLengthDecodeBinaryFast(allDataZ, blockNumber, col, blockLengthsMatrix, blockIndicesMatrix, decoded_runLength); 
 
-        VECTOR decoded_runLengthVector = CastIntToVector(decoded_runLength);
+        CastIntToVectorFast(decoded_runLength, decoded_runLengthVector);
         ZigzagUnflattenSmart(decoded_runLengthVector, zigzagArray, unzigzagged);
-        FIELD_3D decoded_block = DecodeBlock(unzigzagged, blockNumber, col, decompression_dataZ); 
+        DecodeBlockFast(unzigzagged, blockNumber, col, decompression_dataZ, decoded_block); 
         // set the cached block
 
         vector<FIELD_3D>& cachedBlocksZ = data.get_cachedBlocksZ();
@@ -2047,14 +2116,16 @@ void DecodeScalarFieldFast(const DECOMPRESSION_DATA& decompression_data, int* co
 
   const INTEGER_FIELD_3D& zigzagArray = decompression_data.get_zigzagArray();
   INTEGER_FIELD_3D unzigzagged(8, 8, 8);
+  vector<int> runLengthDecoded(512);
+  VECTOR runLengthDecodedVec(512);
 
   // container for the encoded blocks
   vector<FIELD_3D> blocks(numBlocks);
   for (int blockNumber = 0; blockNumber < numBlocks; blockNumber++) {
     // decode the run length scheme
-    vector<int> runLengthDecoded = RunLengthDecodeBinaryFast(allData, blockNumber, col, blockLengthsMatrix, blockIndicesMatrix);
+    RunLengthDecodeBinaryFast(allData, blockNumber, col, blockLengthsMatrix, blockIndicesMatrix, runLengthDecoded);
     // cast to VECTOR to play nice with ZigzagUnflattenSmart
-    VECTOR runLengthDecodedVec = CastIntToVector(runLengthDecoded);
+    CastIntToVectorFast(runLengthDecoded, runLengthDecodedVec);
     // undo the zigzag scan
     ZigzagUnflattenSmart(runLengthDecodedVec, zigzagArray, unzigzagged);
     // undo the scaling from the quantizer and push to the block container
@@ -2103,8 +2174,8 @@ FIELD_3D DecodeScalarField(const DECOMPRESSION_DATA& decompression_data, int* co
 
   int numBlocks = decompression_data.get_numBlocks();
 
-  MATRIX blockLengthsMatrix = decompression_data.get_blockLengthsMatrix();
-  MATRIX blockIndicesMatrix = decompression_data.get_blockIndicesMatrix();
+  const MATRIX& blockLengthsMatrix = decompression_data.get_blockLengthsMatrix();
+  const MATRIX& blockIndicesMatrix = decompression_data.get_blockIndicesMatrix();
 
   VECTOR blockLengths = blockLengthsMatrix.getColumn(col);
   VECTOR blockIndices = blockIndicesMatrix.getColumn(col);
@@ -2149,7 +2220,7 @@ FIELD_3D DecodeScalarField(const DECOMPRESSION_DATA& decompression_data, int* co
 // each flattened out into a VectorXd. this is for use
 // in projection/unprojection
 ////////////////////////////////////////////////////////
-vector<VectorXd> DecodeScalarFieldEigenFast(const DECOMPRESSION_DATA& decompression_data, int* const& allData, int col) {
+void DecodeScalarFieldEigenFast(const DECOMPRESSION_DATA& decompression_data, int* const& allData, int col, vector<VectorXd>& toFill) {
   TIMER functionTimer(__FUNCTION__);
 
   // get the dims from data and construct a field of the appropriate size
@@ -2173,21 +2244,24 @@ vector<VectorXd> DecodeScalarFieldEigenFast(const DECOMPRESSION_DATA& decompress
   VEC3I dimsUpdated(xRes, yRes, zRes);
 
   int numBlocks = decompression_data.get_numBlocks();
+  toFill.resize(numBlocks);
 
   const MATRIX& blockLengthsMatrix = decompression_data.get_blockLengthsMatrix();
   const MATRIX& blockIndicesMatrix = decompression_data.get_blockIndicesMatrix();
 
   const INTEGER_FIELD_3D& zigzagArray = decompression_data.get_zigzagArray();
   INTEGER_FIELD_3D unzigzagged(8, 8, 8);
+  vector<int> runLengthDecoded(512);
+  VECTOR runLengthDecodedVec(512);
 
   // container for the encoded blocks
   vector<FIELD_3D> blocks(numBlocks);
 
   for (int blockNumber = 0; blockNumber < numBlocks; blockNumber++) {
     // decode the run length scheme
-    vector<int> runLengthDecoded = RunLengthDecodeBinaryFast(allData, blockNumber, col, blockLengthsMatrix, blockIndicesMatrix);
+    RunLengthDecodeBinaryFast(allData, blockNumber, col, blockLengthsMatrix, blockIndicesMatrix, runLengthDecoded);
     // cast to VECTOR to play nice with ZigzagUnflattenSmart
-    VECTOR runLengthDecodedVec = CastIntToVector(runLengthDecoded);
+    CastIntToVectorFast(runLengthDecoded, runLengthDecodedVec);
     // undo the zigzag scan
     ZigzagUnflattenSmart(runLengthDecodedVec, zigzagArray, unzigzagged);
     // undo the scaling from the quantizer and push to the block container
@@ -2198,16 +2272,13 @@ vector<VectorXd> DecodeScalarFieldEigenFast(const DECOMPRESSION_DATA& decompress
   // -1 <-- inverse
   DoSmartBlockDCT(blocks, -1);
 
-  vector<VectorXd> blocksEigen(numBlocks);
 
   // this part is inefficient---we should implement a DCT that operates on VectorXd so that
   // we don't have to loop through all the blocks again
   for (int blockNumber = 0; blockNumber < numBlocks; blockNumber++) {
-    VECTOR blockFlat = blocks[blockNumber].flattened();
-    VectorXd blockEigen = EIGEN::convert(blockFlat);
-    blocksEigen[blockNumber] = blockEigen;
+    VectorXd blockEigen= blocks[blockNumber].flattenedEigen();
+    toFill[blockNumber] = blockEigen;
   } 
-  return blocksEigen;
 } 
 
 ////////////////////////////////////////////////////////
@@ -2242,8 +2313,8 @@ vector<VectorXd> DecodeScalarFieldEigen(const DECOMPRESSION_DATA& decompression_
 
   int numBlocks = decompression_data.get_numBlocks();
 
-  MATRIX blockLengthsMatrix = decompression_data.get_blockLengthsMatrix();
-  MATRIX blockIndicesMatrix = decompression_data.get_blockIndicesMatrix();
+  const MATRIX& blockLengthsMatrix = decompression_data.get_blockLengthsMatrix();
+  const MATRIX& blockIndicesMatrix = decompression_data.get_blockIndicesMatrix();
 
   VECTOR blockLengths = blockLengthsMatrix.getColumn(col);
   VECTOR blockIndices = blockIndicesMatrix.getColumn(col);
@@ -2334,11 +2405,11 @@ VECTOR3_FIELD_3D DecodeVectorField(MATRIX_COMPRESSION_DATA& data, int col) {
 void DecodeVectorFieldFast(MATRIX_COMPRESSION_DATA& data, int col, VECTOR3_FIELD_3D& vecfieldToFill) {
   TIMER functionTimer(__FUNCTION__);
   
-  DECOMPRESSION_DATA decompression_dataX = data.get_decompression_dataX();
-  DECOMPRESSION_DATA decompression_dataY = data.get_decompression_dataY();
-  DECOMPRESSION_DATA decompression_dataZ = data.get_decompression_dataZ();
+  const DECOMPRESSION_DATA& decompression_dataX = data.get_decompression_dataX();
+  const DECOMPRESSION_DATA& decompression_dataY = data.get_decompression_dataY();
+  const DECOMPRESSION_DATA& decompression_dataZ = data.get_decompression_dataZ();
 
-  VEC3I dims = decompression_dataX.get_dims();
+  const VEC3I& dims = decompression_dataX.get_dims();
   int xRes = dims[0];
   int yRes = dims[1];
   int zRes = dims[2];
@@ -2419,7 +2490,7 @@ void PeeledCompressedUnproject(VECTOR3_FIELD_3D& V, MATRIX_COMPRESSION_DATA& U_d
   int zRes = V.zRes();
   DECOMPRESSION_DATA dataX = U_data.get_decompression_dataX();
   int totalColumns = dataX.get_numCols();
-  VEC3I dims = dataX.get_dims();
+  const VEC3I& dims = dataX.get_dims();
   
   /*
   cout << "xRes: " << xRes << endl;
@@ -2482,7 +2553,7 @@ VectorXd PeeledCompressedProject(VECTOR3_FIELD_3D& V, MATRIX_COMPRESSION_DATA& U
   DECOMPRESSION_DATA dataZ = U_data.get_decompression_dataZ();
   int* allDataZ = U_data.get_dataZ();
 
-  VEC3I dims = dataX.get_dims();
+  const VEC3I& dims = dataX.get_dims();
   const int xRes = dims[0];
   const int yRes = dims[1];
   const int zRes = dims[2];
@@ -2499,21 +2570,22 @@ VectorXd PeeledCompressedProject(VECTOR3_FIELD_3D& V, MATRIX_COMPRESSION_DATA& U
   vector<VectorXd> Xpart = GetBlocksEigen(V_X);
   vector<VectorXd> Ypart = GetBlocksEigen(V_Y);
   vector<VectorXd> Zpart = GetBlocksEigen(V_Z);
-
+  
+  vector<VectorXd> blocks;
   for (int col = 0; col < totalColumns; col++) {
 
     TIMER columnLoopTimer("peeled project column loop");
-
-    vector<VectorXd> Xblocks = DecodeScalarFieldEigen(dataX, allDataX, col);
-    double dotProductSumX = GetDotProductSum(Xblocks, Xpart);
+    
+    double totalSum = 0.0;
+    DecodeScalarFieldEigenFast(dataX, allDataX, col, blocks);
+    totalSum += GetDotProductSum(blocks, Xpart);
    
-    vector<VectorXd> Yblocks = DecodeScalarFieldEigen(dataY, allDataY, col);
-    double dotProductSumY = GetDotProductSum(Yblocks, Ypart); 
+    DecodeScalarFieldEigenFast(dataY, allDataY, col, blocks);
+    totalSum += GetDotProductSum(blocks, Ypart); 
  
-    vector<VectorXd> Zblocks = DecodeScalarFieldEigen(dataZ, allDataZ, col);
-    double dotProductSumZ = GetDotProductSum(Zblocks, Zpart);
+    DecodeScalarFieldEigenFast(dataZ, allDataZ, col, blocks);
+    totalSum += GetDotProductSum(blocks, Zpart);
 
-    double totalSum = dotProductSumX + dotProductSumY + dotProductSumZ;
     result[col] = totalSum;
 
   }
