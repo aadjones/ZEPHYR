@@ -382,7 +382,7 @@ void runEverytime()
 
     steps++;
 
-    if (steps == 48) {    
+    if (steps == 151) {    
     // if we were already capturing a movie
         if (captureMovie)
         {
