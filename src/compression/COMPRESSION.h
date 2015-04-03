@@ -180,6 +180,9 @@ void GetSubmatrixFast(int startRow, int numRows, MATRIX_COMPRESSION_DATA& data, 
 
 vector<int> RunLengthDecodeBinaryFast(const int* allData, int blockNumber, int col, const MATRIX& blockLengthsMatrix, const MATRIX& blockIndicesMatrix); 
 
+
+double DecodeFromRowColFast(int row, int col, MATRIX_COMPRESSION_DATA& data); 
+
 ////////////////////////////////////////////////////////
 // End Function Signatures
 ////////////////////////////////////////////////////////

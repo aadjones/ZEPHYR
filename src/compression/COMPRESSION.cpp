@@ -1317,6 +1317,77 @@ int ComputeBlockNumber(int row, VEC3I dims, int& blockIndex) {
 ////////////////////////////////////////////////////////
 // given a (row, col), decode it from the lossy matrix
 ////////////////////////////////////////////////////////
+double DecodeFromRowColFast(int row, int col, MATRIX_COMPRESSION_DATA& data) { 
+     
+  TIMER functionTimer(__FUNCTION__);
+
+  DECOMPRESSION_DATA dataX = data.get_decompression_dataX();
+  // using X is arbitrary---it will be the same for all three
+  VEC3I dims = dataX.get_dims();
+  const INTEGER_FIELD_3D& zigzagArray = dataX.get_zigzagArray();
+  
+  int* allDataX = data.get_dataX();
+  int* allDataY = data.get_dataY();
+  int* allDataZ = data.get_dataZ();
+  const DECOMPRESSION_DATA& dataY = data.get_decompression_dataY();
+  const DECOMPRESSION_DATA& dataZ = data.get_decompression_dataZ();
+
+  vector<int> decoded_runLength;
+  INTEGER_FIELD_3D unzigzagged(8, 8, 8);
+
+  // dummy initialization
+  int blockIndex = 0;
+  // fill blockIndex and compute the block number
+  int blockNumber = ComputeBlockNumber(row, dims, blockIndex);
+  if (row % 3 == 0) { // X coordinate
+    const MATRIX& blockLengthsMatrix = dataX.get_blockLengthsMatrix();
+    const MATRIX& blockIndicesMatrix = dataX.get_blockIndicesMatrix();
+        
+    
+    decoded_runLength = RunLengthDecodeBinaryFast(allDataX, blockNumber, col, blockLengthsMatrix, blockIndicesMatrix); 
+
+    VECTOR decoded_runLengthVector = CastIntToVector(decoded_runLength);
+    ZigzagUnflattenSmart(decoded_runLengthVector, zigzagArray, unzigzagged);
+    FIELD_3D decoded_block = DecodeBlock(unzigzagged, blockNumber, col, dataX); 
+    double result = decoded_block[blockIndex];
+    return result;
+
+  }
+
+  else if (row % 3 == 1) { // Y coordinate
+  
+    const MATRIX& blockLengthsMatrix = dataY.get_blockLengthsMatrix();
+    const MATRIX& blockIndicesMatrix = dataY.get_blockIndicesMatrix();
+
+    decoded_runLength = RunLengthDecodeBinaryFast(allDataY, blockNumber, col, blockLengthsMatrix, blockIndicesMatrix); 
+
+    VECTOR decoded_runLengthVector = CastIntToVector(decoded_runLength);
+    ZigzagUnflattenSmart(decoded_runLengthVector, zigzagArray, unzigzagged);
+    FIELD_3D decoded_block = DecodeBlock(unzigzagged, blockNumber, col, dataY); 
+    double result = decoded_block[blockIndex];
+    return result;
+  
+  }
+
+  else { // Z coordinate
+   
+    const MATRIX& blockLengthsMatrix = dataZ.get_blockLengthsMatrix();
+    const MATRIX& blockIndicesMatrix = dataZ.get_blockIndicesMatrix();
+
+
+    decoded_runLength = RunLengthDecodeBinaryFast(allDataZ, blockNumber, col, blockLengthsMatrix, blockIndicesMatrix); 
+
+    VECTOR decoded_runLengthVector = CastIntToVector(decoded_runLength);
+    ZigzagUnflattenSmart(decoded_runLengthVector, zigzagArray, unzigzagged);
+    FIELD_3D decoded_block = DecodeBlock(unzigzagged, blockNumber, col, dataZ);
+    double result = decoded_block[blockIndex];
+    return result;
+  }
+} 
+
+////////////////////////////////////////////////////////
+// given a (row, col), decode it from the lossy matrix
+////////////////////////////////////////////////////////
 double DecodeFromRowCol(int row, int col, MATRIX_COMPRESSION_DATA& data) { 
      
   TIMER functionTimer(__FUNCTION__);
@@ -1413,10 +1484,13 @@ void GetSubmatrixFast(int startRow, int numRows, MATRIX_COMPRESSION_DATA& data, 
      
     
   TIMER functionTimer(__FUNCTION__);
-
+  
+  // only leave this commented out if you don't mind skipping an assertion! 
+  /*
   DECOMPRESSION_DATA decompression_dataX = data.get_decompression_dataX();
   int numCols = decompression_dataX.get_numCols();
   assert( matrixToFill.rows() == numRows && matrixToFill.cols() == numCols );
+  */
 
   for (int i = 0; i < numRows; i++) {
     GetRowFast(startRow + i, i, data, matrixToFill);
