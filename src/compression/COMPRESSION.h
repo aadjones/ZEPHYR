@@ -174,6 +174,12 @@ double GetDotProductSum(vector<VectorXd> Vlist, vector<VectorXd> Wlist);
 
 VectorXd PeeledCompressedProject(VECTOR3_FIELD_3D& V, MATRIX_COMPRESSION_DATA& U_data);
 
+void GetRowFast(int row, int matrixRow, MATRIX_COMPRESSION_DATA& data, MatrixXd& matrixToFill);
+
+void GetSubmatrixFast(int startRow, int numRows, MATRIX_COMPRESSION_DATA& data, MatrixXd& matrixToFill); 
+
+vector<int> RunLengthDecodeBinaryFast(const int* allData, int blockNumber, int col, const MATRIX& blockLengthsMatrix, const MATRIX& blockIndicesMatrix); 
+
 ////////////////////////////////////////////////////////
 // End Function Signatures
 ////////////////////////////////////////////////////////
@@ -181,3 +187,4 @@ VectorXd PeeledCompressedProject(VECTOR3_FIELD_3D& V, MATRIX_COMPRESSION_DATA& U
 
 
 #endif
+

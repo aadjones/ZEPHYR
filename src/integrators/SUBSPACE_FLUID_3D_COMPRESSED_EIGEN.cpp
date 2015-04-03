@@ -448,6 +448,7 @@ MatrixXd SUBSPACE_FLUID_3D_COMPRESSED_EIGEN::cellBasisCompressedPeeled(MATRIX_CO
   const int yRes = dims[1];
   const int zRes = dims[2];
   const int numRows = 3 * xRes * yRes * zRes;
+  const int numCols = dataX.get_numCols();
 
   assert(x >= 0);
   assert(x < _xRes - 2);
@@ -458,7 +459,8 @@ MatrixXd SUBSPACE_FLUID_3D_COMPRESSED_EIGEN::cellBasisCompressedPeeled(MATRIX_CO
   // assert(3 * index < U.rows());
   assert(3 * index < numRows);
   
-  MatrixXd result = GetSubmatrix(3 * index, 3, U_data); 
+  MatrixXd result(3, numCols); 
+  GetSubmatrixFast(3 * index, 3, U_data, result); 
   return result;
   // return EIGEN::getRows(3 * index, 3, U); 
 }
@@ -481,9 +483,11 @@ VectorXd SUBSPACE_FLUID_3D_COMPRESSED_EIGEN::advectCellStamPeeled(MATRIX_COMPRES
   // const int totalColumns = U.cols();
   DECOMPRESSION_DATA dataX = U_data.get_decompression_dataX();
   const int totalColumns = dataX.get_numCols();
-  // VectorXd v = U.block(index3, 0, 3, totalColumns) * qDot;
-  VectorXd v = GetSubmatrix(index3, 3, U_data) * qDot;
+  MatrixXd submatrix(3, totalColumns);
+  
 
+  GetSubmatrixFast(index3, 3, U_data, submatrix);
+  VectorXd v = submatrix * qDot;
   // backtrace
   const VEC3F velocity(v[0], v[1], v[2]);
   Real xTrace = x - dt * velocity[0];
@@ -529,23 +533,31 @@ VectorXd SUBSPACE_FLUID_3D_COMPRESSED_EIGEN::advectCellStamPeeled(MATRIX_COMPRES
   const int i101 = 3 * (x1 + y0Scaled + z1Scaled);
   const int i111 = 3 * (x1 + y1Scaled + z1Scaled);
 
-  // NOTE: it spends most of its time (+50%) here,
-  // const VectorXd v000 = U.block(i000, 0, 3, totalColumns) * qDot;
-  const VectorXd v000 = GetSubmatrix(i000, 3, U_data) * qDot;
-  // const VectorXd v010 = U.block(i010, 0, 3, totalColumns) * qDot;
-  const VectorXd v010 = GetSubmatrix(i010, 3, U_data) * qDot;
-  // const VectorXd v100 = U.block(i100, 0, 3, totalColumns) * qDot;
-  const VectorXd v100 = GetSubmatrix(i100, 3, U_data) * qDot;
-  // const VectorXd v110 = U.block(i110, 0, 3, totalColumns) * qDot;
-  const VectorXd v110 = GetSubmatrix(i110, 3, U_data) * qDot;
-  // const VectorXd v001 = U.block(i001, 0, 3, totalColumns) * qDot;
-  const VectorXd v001 = GetSubmatrix(i001, 3, U_data) * qDot;
-  // const VectorXd v011 = U.block(i011, 0, 3, totalColumns) * qDot;
-  const VectorXd v011 = GetSubmatrix(i011, 3, U_data) * qDot;
-  // const VectorXd v101 = U.block(i101, 0, 3, totalColumns) * qDot;
-  const VectorXd v101 = GetSubmatrix(i101, 3, U_data) * qDot;
-  // const VectorXd v111 = U.block(i111, 0, 3, totalColumns) * qDot;
-  const VectorXd v111 = GetSubmatrix(i111, 3, U_data) * qDot;
+  // NOTE: it spends most of its time (+50%) here
+
+  GetSubmatrixFast(i000, 3, U_data, submatrix);
+  const VectorXd v000 = submatrix * qDot;
+
+  GetSubmatrixFast(i010, 3, U_data, submatrix);
+  const VectorXd v010 = submatrix * qDot;
+
+  GetSubmatrixFast(i100, 3, U_data, submatrix);
+  const VectorXd v100 = submatrix * qDot;
+
+  GetSubmatrixFast(i110, 3, U_data, submatrix);
+  const VectorXd v110 = submatrix * qDot;
+
+  GetSubmatrixFast(i001, 3, U_data, submatrix);
+  const VectorXd v001 = submatrix * qDot;
+
+  GetSubmatrixFast(i011, 3, U_data, submatrix);
+  const VectorXd v011 = submatrix * qDot;
+
+  GetSubmatrixFast(i101, 3, U_data, submatrix);
+  const VectorXd v101 = submatrix * qDot;
+
+  GetSubmatrixFast(i111, 3, U_data, submatrix);
+  const VectorXd v111 = submatrix * qDot;
 
   const Real w000 = u0 * s0 * t0;
   const Real w010 = u0 * s0 * t1;
@@ -732,23 +744,36 @@ VectorXd SUBSPACE_FLUID_3D_COMPRESSED_EIGEN::advectCellStamPeeled(MATRIX_COMPRES
   const int i101 = 3 * (x1 + y0Scaled + z1Scaled);
   const int i111 = 3 * (x1 + y1Scaled + z1Scaled);
 
-  // NOTE: it spends most of its time (+50%) here,
-  // const VectorXd v000 = U.block(i000, 0, 3, totalColumns) * qDot;
-  const VectorXd v000 = GetSubmatrix(i000, 3, U_data) * qDot;
-  // const VectorXd v010 = U.block(i010, 0, 3, totalColumns) * qDot;
-  const VectorXd v010 = GetSubmatrix(i010, 3, U_data) * qDot;
-  // const VectorXd v100 = U.block(i100, 0, 3, totalColumns) * qDot;
-  const VectorXd v100 = GetSubmatrix(i100, 3, U_data) * qDot;
-  // const VectorXd v110 = U.block(i110, 0, 3, totalColumns) * qDot;
-  const VectorXd v110 = GetSubmatrix(i110, 3, U_data) * qDot;
-  // const VectorXd v001 = U.block(i001, 0, 3, totalColumns) * qDot;
-  const VectorXd v001 = GetSubmatrix(i001, 3, U_data) * qDot;
-  // const VectorXd v011 = U.block(i011, 0, 3, totalColumns) * qDot;
-  const VectorXd v011 = GetSubmatrix(i011, 3, U_data) * qDot;
-  // const VectorXd v101 = U.block(i101, 0, 3, totalColumns) * qDot;
-  const VectorXd v101 = GetSubmatrix(i101, 3, U_data) * qDot;
-  // const VectorXd v111 = U.block(i111, 0, 3, totalColumns) * qDot;
-  const VectorXd v111 = GetSubmatrix(i111, 3, U_data) * qDot;
+  // NOTE: it spends most of its time (+50%) here
+  
+  DECOMPRESSION_DATA dataX = U_data.get_decompression_dataX();
+  const int totalCols = dataX.get_numCols();
+
+  MatrixXd submatrix(3, totalCols);
+
+  GetSubmatrixFast(i000, 3, U_data, submatrix);
+  const VectorXd v000 = submatrix * qDot;
+
+  GetSubmatrixFast(i010, 3, U_data, submatrix);
+  const VectorXd v010 = submatrix * qDot;
+
+  GetSubmatrixFast(i100, 3, U_data, submatrix);
+  const VectorXd v100 = submatrix * qDot;
+
+  GetSubmatrixFast(i110, 3, U_data, submatrix);
+  const VectorXd v110 = submatrix * qDot;
+
+  GetSubmatrixFast(i001, 3, U_data, submatrix);
+  const VectorXd v001 = submatrix * qDot;
+
+  GetSubmatrixFast(i011, 3, U_data, submatrix);
+  const VectorXd v011 = submatrix * qDot;
+
+  GetSubmatrixFast(i101, 3, U_data, submatrix);
+  const VectorXd v101 = submatrix * qDot;
+
+  GetSubmatrixFast(i111, 3, U_data, submatrix);
+  const VectorXd v111 = submatrix * qDot;
 
   const Real w000 = u0 * s0 * t0;
   const Real w010 = u0 * s0 * t1;
