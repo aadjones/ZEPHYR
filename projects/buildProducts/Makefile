@@ -2,7 +2,7 @@ include ../include.mk
 
 # calls:
 CC         = g++
-CFLAGS     = ${CFLAGS_COMMON} 
+CFLAGS     = ${CFLAGS_COMMON} -Wno-deprecated
 LDFLAGS    = ${LDFLAGS_COMMON} 
 EXECUTABLE = ../../bin/buildProducts
 

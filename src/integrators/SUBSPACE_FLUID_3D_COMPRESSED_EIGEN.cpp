@@ -150,90 +150,90 @@ SUBSPACE_FLUID_3D_COMPRESSED_EIGEN::~SUBSPACE_FLUID_3D_COMPRESSED_EIGEN()
 // with cubature enabled
 //////////////////////////////////////////////////////////////////////
 void SUBSPACE_FLUID_3D_COMPRESSED_EIGEN::stepReorderedCubatureStam()
-{
-  TIMER functionTimer(__FUNCTION__);
-  Real goalTime = 0.1;
-  Real currentTime = 0;
+  {
+    TIMER functionTimer(__FUNCTION__);
+    Real goalTime = 0.1;
+    Real currentTime = 0;
 
-  // compute the CFL condition
-  _dt = goalTime;
+    // compute the CFL condition
+    _dt = goalTime;
 
-  // wipe forces
-  _force.clear();
+    // wipe forces
+    _force.clear();
 
-  // wipe boundaries
-  _velocity.setZeroBorder();
+    // wipe boundaries
+    _velocity.setZeroBorder();
 
-  // compute the forces
-  addBuoyancy(_heat.data());
-  _velocity.axpy(_dt, _force);
+    // compute the forces
+    addBuoyancy(_heat.data());
+    _velocity.axpy(_dt, _force);
 
-  _force.clear();
-  addVorticity();
-  _velocity.axpy(_dt, _force);
+    _force.clear();
+    addVorticity();
+    _velocity.axpy(_dt, _force);
 
-  // VectorXd flat;
+    // VectorXd flat;
 
-  advectHeatAndDensityStam();
-  // cout << "did advect heat and density" << endl;
-  
-  VECTOR::printVertical = false;
+    advectHeatAndDensityStam();
+    // cout << "did advect heat and density" << endl;
+    
+    VECTOR::printVertical = false;
 
-  // VECTOR3_FIELD_3D velocityPeeled = _velocity.peelBoundary();
-  // VECTOR velocityFlatPeeled = velocityPeeled.flattened();
-  // velocityFlatPeeled.write("velocityFlatPeeledUnstable.field");
+    // VECTOR3_FIELD_3D velocityPeeled = _velocity.peelBoundary();
+    // VECTOR velocityFlatPeeled = velocityPeeled.flattened();
+    // velocityFlatPeeled.write("velocityFlatPeeledUnstable.field");
 
-  TIMER projectionTimer("Velocity projection");
+    TIMER projectionTimer("Velocity projection");
 
-  _qDot = PeeledCompressedProject(_velocity, _U_preadvect_data);
-  // cout << "did peeled compressed project" << endl;
-  // VECTOR qDot = EIGEN::convert(_qDot);
-  // cout << "qDot preadvect: " << qDot << "; " << endl;
+    _qDot = PeeledCompressedProject(_velocity, _U_preadvect_data);
+    // cout << "did peeled compressed project" << endl;
+    // VECTOR qDot = EIGEN::convert(_qDot);
+    // cout << "qDot preadvect: " << qDot << "; " << endl;
 
-  projectionTimer.stop();
+    projectionTimer.stop();
 
-  reducedAdvectStagedStamFast();
-  // cout << "did reduced advect staged" << endl;
+    reducedAdvectStagedStamFast();
+    // cout << "did reduced advect staged" << endl;
 
-  // qDot = EIGEN::convert(_qDot);
-  // cout << "qDot postadvect: " << qDot << "; " << endl;
-  
-  TIMER diffusionProjectionTimer("Velocity projection");
-  diffusionProjectionTimer.stop();
+    // qDot = EIGEN::convert(_qDot);
+    // cout << "qDot postadvect: " << qDot << "; " << endl;
+    
+    TIMER diffusionProjectionTimer("Velocity projection");
+    diffusionProjectionTimer.stop();
 
-  reducedPeeledDiffusion();
-  // cout << "did reduced peeled diffusion" << endl;
+    reducedPeeledDiffusion();
+    // cout << "did reduced peeled diffusion" << endl;
 
-  // qDot = EIGEN::convert(_qDot);
-  // cout << "qDot postdiffuse: " << qDot << "; " << endl;
+    // qDot = EIGEN::convert(_qDot);
+    // cout << "qDot postdiffuse: " << qDot << "; " << endl;
 
-  reducedStagedProject();
+    reducedStagedProject();
 
-  // cout << "did reduced staged project" << endl;
+    // cout << "did reduced staged project" << endl;
 
-  // qDot = EIGEN::convert(_qDot);
-  // cout << "qDot post reduced project: " << qDot << "; " << endl;
-   
-  PeeledCompressedUnproject(_velocity, _U_final_data, _qDot);
-  // VECTOR unprojectFlat = _velocity.flattened();
-  // unprojectFlat.write("unprojectFlatUnstable.vector");
+    // qDot = EIGEN::convert(_qDot);
+    // cout << "qDot post reduced project: " << qDot << "; " << endl;
+     
+    PeeledCompressedUnproject(_velocity, _U_final_data, _qDot);
+    // VECTOR unprojectFlat = _velocity.flattened();
+    // unprojectFlat.write("unprojectFlatUnstable.vector");
 
-  // qDot = EIGEN::convert(_qDot);
-  // cout << "qDot post unproject: " << qDot << "; " << endl;
+    // qDot = EIGEN::convert(_qDot);
+    // cout << "qDot post unproject: " << qDot << "; " << endl;
 
-  // do the full space unprojection
-  TIMER unprojectionTimer("Velocity unprojection");
+    // do the full space unprojection
+    TIMER unprojectionTimer("Velocity unprojection");
 
-  currentTime += _dt;
+    currentTime += _dt;
 
-  cout << " Simulation step " << _totalSteps << " done. " << endl;
+    cout << " Simulation step " << _totalSteps << " done. " << endl;
 
-	_totalTime += goalTime;
-	_totalSteps++;
+    _totalTime += goalTime;
+    _totalSteps++;
 
-  // diff the current sim results against ground truth
-  diffGroundTruth();
-}
+    // diff the current sim results against ground truth
+    diffGroundTruth();
+  }
 
 //////////////////////////////////////////////////////////////////////
 // do a full-rank advection of heat and density
@@ -469,7 +469,7 @@ MatrixXd SUBSPACE_FLUID_3D_COMPRESSED_EIGEN::cellBasisCompressedPeeled(MATRIX_CO
 //////////////////////////////////////////////////////////////////////
 
 // TODO: integrate decoder here!
-VectorXd SUBSPACE_FLUID_3D_COMPRESSED_EIGEN::advectCellStamPeeled(MATRIX_COMPRESSION_DATA& U_data, const Real& dt, const VectorXd& qDot, const int index)
+VectorXd SUBSPACE_FLUID_3D_COMPRESSED_EIGEN::advectCellStamPeeled(MATRIX_COMPRESSION_DATA& U_data, const Real& dt, const VectorXd& qDot, const int index, MatrixXd& submatrix)
 {
   TIMER functionTimer(__FUNCTION__);
   // peeled coordinates were passed in -- need to promote to full grid
@@ -483,8 +483,6 @@ VectorXd SUBSPACE_FLUID_3D_COMPRESSED_EIGEN::advectCellStamPeeled(MATRIX_COMPRES
   // const int totalColumns = U.cols();
   DECOMPRESSION_DATA dataX = U_data.get_decompression_dataX();
   const int totalColumns = dataX.get_numCols();
-  MatrixXd submatrix(3, totalColumns);
-  
 
   GetSubmatrixFast(index3, 3, U_data, submatrix);
   VectorXd v = submatrix * qDot;
@@ -534,7 +532,7 @@ VectorXd SUBSPACE_FLUID_3D_COMPRESSED_EIGEN::advectCellStamPeeled(MATRIX_COMPRES
   const int i111 = 3 * (x1 + y1Scaled + z1Scaled);
 
   // NOTE: it spends most of its time (+50%) here
-
+  TIMER multiplyTimer1("multiplyTimer1");
   GetSubmatrixFast(i000, 3, U_data, submatrix);
   const VectorXd v000 = submatrix * qDot;
 
@@ -558,6 +556,7 @@ VectorXd SUBSPACE_FLUID_3D_COMPRESSED_EIGEN::advectCellStamPeeled(MATRIX_COMPRES
 
   GetSubmatrixFast(i111, 3, U_data, submatrix);
   const VectorXd v111 = submatrix * qDot;
+  multiplyTimer1.stop();
 
   const Real w000 = u0 * s0 * t0;
   const Real w010 = u0 * s0 * t1;
@@ -683,7 +682,7 @@ VectorXd SUBSPACE_FLUID_3D_COMPRESSED_EIGEN::advectCellStamPeeled(const MatrixXd
 //////////////////////////////////////////////////////////////////////
 // advect a single cell
 //////////////////////////////////////////////////////////////////////
-VectorXd SUBSPACE_FLUID_3D_COMPRESSED_EIGEN::advectCellStamPeeled(MATRIX_COMPRESSION_DATA& U_data, const MatrixXd& cellU, const Real& dt, const VectorXd& qDot, const int index)
+VectorXd SUBSPACE_FLUID_3D_COMPRESSED_EIGEN::advectCellStamPeeled(MATRIX_COMPRESSION_DATA& U_data, const MatrixXd& cellU, const Real& dt, const VectorXd& qDot, const int index, MatrixXd& submatrix)
 {
   TIMER functionTimer(__FUNCTION__);
   // peeled coordinates were passed in -- need to promote to full grid
@@ -746,11 +745,10 @@ VectorXd SUBSPACE_FLUID_3D_COMPRESSED_EIGEN::advectCellStamPeeled(MATRIX_COMPRES
 
   // NOTE: it spends most of its time (+50%) here
   
-  DECOMPRESSION_DATA dataX = U_data.get_decompression_dataX();
+  const DECOMPRESSION_DATA& dataX = U_data.get_decompression_dataX();
   const int totalCols = dataX.get_numCols();
 
-  MatrixXd submatrix(3, totalCols);
-
+  TIMER multiplyTimer2("multiplyTimer2");
   GetSubmatrixFast(i000, 3, U_data, submatrix);
   const VectorXd v000 = submatrix * qDot;
 
@@ -774,6 +772,7 @@ VectorXd SUBSPACE_FLUID_3D_COMPRESSED_EIGEN::advectCellStamPeeled(MATRIX_COMPRES
 
   GetSubmatrixFast(i111, 3, U_data, submatrix);
   const VectorXd v111 = submatrix * qDot;
+  multiplyTimer2.stop();
 
   const Real w000 = u0 * s0 * t0;
   const Real w010 = u0 * s0 * t1;
@@ -952,6 +951,12 @@ void SUBSPACE_FLUID_3D_COMPRESSED_EIGEN::reducedAdvectStagedStamFast()
   assert(_advectionCubatureAfter.size() > 0);
   assert(_advectionCubatureBefore.size() > 0);
 
+  const MATRIX_COMPRESSION_DATA& data = (*this).U_final_data();
+  const DECOMPRESSION_DATA& dataX = data.get_decompression_dataX();
+  const int numCols = dataX.get_numCols();
+  
+  MatrixXd submatrix(3, numCols);
+
   // loop through the cubature points
 #pragma omp parallel
 #pragma omp for  schedule(static)
@@ -959,7 +964,7 @@ void SUBSPACE_FLUID_3D_COMPRESSED_EIGEN::reducedAdvectStagedStamFast()
   {
     const int index = _keyAdvectionCells[x];
     // finals[x] = _advectionCubatureAfter[x] * advectCellStamPeeled(_preadvectU, _advectionCubatureBefore[x], dt0, _qDot, index);
-    finals[x] = _advectionCubatureAfter[x] * advectCellStamPeeled(_U_preadvect_data, _advectionCubatureBefore[x], dt0, _qDot, index);
+    finals[x] = _advectionCubatureAfter[x] * advectCellStamPeeled(_U_preadvect_data, _advectionCubatureBefore[x], dt0, _qDot, index, submatrix);
   }
 
   for (int x = 0; x < totalPoints; x++)

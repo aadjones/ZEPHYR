@@ -396,8 +396,11 @@ void DCT_Smart(FIELD_3D& F, fftw_plan& plan, double*& in) {
 
   // fill the 'in' buffer
   in = CastToDouble(F.flattened(), in);
-
+  
+  {
+    TIMER fftTimer("fftw execute");
   fftw_execute(plan);
+  }
   // 'in' is now overwritten to the result of the transform
 
   // read 'in' into F_hat
@@ -465,8 +468,10 @@ void IDCT_Smart_Fast(FIELD_3D& F_hat, const DECOMPRESSION_DATA& decompression_da
   // VECTOR vector_in = F_hat.flattened();
   in = CastToDouble(F_hat.flattened(), in);
    
-
+  {
+    TIMER fftw2Timer("fftw execute idct smart fast");
   fftw_execute(plan);
+  }
   FIELD_3D F(out, xRes, yRes, zRes);
 
   // normalize symmetrically
@@ -1573,7 +1578,7 @@ MatrixXd GetSubmatrix(int startRow, int numRows, MATRIX_COMPRESSION_DATA& data) 
     
   TIMER functionTimer(__FUNCTION__);
 
-  DECOMPRESSION_DATA decompression_dataX = data.get_decompression_dataX();
+  const DECOMPRESSION_DATA& decompression_dataX = data.get_decompression_dataX();
   int numCols = decompression_dataX.get_numCols();
   MatrixXd result(numRows, numCols);
      
@@ -1757,7 +1762,7 @@ void GetRowFast(int row, int matrixRow, MATRIX_COMPRESSION_DATA& data, MatrixXd&
   int numCols = decompression_dataX.get_numCols();   
   assert( matrixToFill.cols() == numCols && matrixToFill.rows() == 3 );
 
-  VectorXd result(numCols);
+  // VectorXd result(numCols);
   const VEC3I& dims = decompression_dataX.get_dims();
   const INTEGER_FIELD_3D& zigzagArray = decompression_dataX.get_zigzagArray();
   int blockIndex = 0;
@@ -1776,29 +1781,29 @@ void GetRowFast(int row, int matrixRow, MATRIX_COMPRESSION_DATA& data, MatrixXd&
       // load the previously decoded data
       vector<FIELD_3D>& cachedBlocksX = data.get_cachedBlocksX();
       for (int col = 0; col < numCols; col++) {
-        FIELD_3D block = cachedBlocksX[col];
+        // FIELD_3D block = cachedBlocksX[col];
         // note that square brackets are necessary to access a field data member by 
         // linear index!!
-        result[col] = block[blockIndex];
+        // result[col] = block[blockIndex];
+        matrixToFill(matrixRow, col) = cachedBlocksX[col][blockIndex];
       }   
-      matrixToFill.row(matrixRow) = result;
     }
     else if (row % 3 == 1) { // Y coordinate
       vector<FIELD_3D>& cachedBlocksY = data.get_cachedBlocksY();
       for (int col = 0; col < numCols; col++) {
         
-        FIELD_3D block = cachedBlocksY[col];
-        result[col] = block[blockIndex];
+        // FIELD_3D block = cachedBlocksY[col];
+        // result[col] = block[blockIndex];
+        matrixToFill(matrixRow, col) = cachedBlocksY[col][blockIndex];
       }
-      matrixToFill.row(matrixRow) = result;
     }
     else { // Z coordinate
       vector<FIELD_3D>& cachedBlocksZ = data.get_cachedBlocksZ();
       for (int col = 0; col < numCols; col++) {
-        FIELD_3D block = cachedBlocksZ[col];
-        result[col] = block[blockIndex];
+        // FIELD_3D block = cachedBlocksZ[col];
+        // result[col] = block[blockIndex];
+        matrixToFill(matrixRow, col) = cachedBlocksZ[col][blockIndex];
       } 
-      matrixToFill.row(matrixRow) = result;
     }
   }
 
@@ -1833,10 +1838,8 @@ void GetRowFast(int row, int matrixRow, MATRIX_COMPRESSION_DATA& data, MatrixXd&
         // update the cache
         cachedBlocksX[col] = decoded_block;
        
-        result[col] = decoded_block[blockIndex];
-      }
-
-      matrixToFill.row(matrixRow) = result;
+        matrixToFill(matrixRow, col) = cachedBlocksX[col][blockIndex];
+      } 
     }
 
     else if (row % 3 == 1) { // Y coordinate
@@ -1861,10 +1864,9 @@ void GetRowFast(int row, int matrixRow, MATRIX_COMPRESSION_DATA& data, MatrixXd&
         // update the cache
         cachedBlocksY[col] = decoded_block;
 
-        result[col] = decoded_block[blockIndex];
+        matrixToFill(matrixRow, col) = cachedBlocksY[col][blockIndex];
       }
 
-      matrixToFill.row(matrixRow) = result;
      
     }
 
@@ -1891,13 +1893,12 @@ void GetRowFast(int row, int matrixRow, MATRIX_COMPRESSION_DATA& data, MatrixXd&
         // update the cache
         cachedBlocksZ[col] = decoded_block;
 
-        result[col] = decoded_block[blockIndex];
+        matrixToFill(matrixRow, col) = cachedBlocksZ[col][blockIndex];
       }
 
       // set the cached block number
       data.set_cachedBlockNumber(blockNumber);
 
-      matrixToFill.row(matrixRow) = result;
     }
   }
 }
