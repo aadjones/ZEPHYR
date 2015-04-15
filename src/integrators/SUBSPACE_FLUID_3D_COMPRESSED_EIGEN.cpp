@@ -534,6 +534,7 @@ VectorXd SUBSPACE_FLUID_3D_COMPRESSED_EIGEN::advectCellStamPeeled(MATRIX_COMPRES
   const int i111 = 3 * (x1 + y1Scaled + z1Scaled);
 
   // NOTE: it spends most of its time (+50%) here
+  TIMER multiplyTimer2("multiplyTimer2");
 
   GetSubmatrixFast(i000, 3, U_data, submatrix);
   const VectorXd v000 = submatrix * qDot;
@@ -558,6 +559,7 @@ VectorXd SUBSPACE_FLUID_3D_COMPRESSED_EIGEN::advectCellStamPeeled(MATRIX_COMPRES
 
   GetSubmatrixFast(i111, 3, U_data, submatrix);
   const VectorXd v111 = submatrix * qDot;
+  multiplyTimer2.stop();
 
   const Real w000 = u0 * s0 * t0;
   const Real w010 = u0 * s0 * t1;
@@ -684,120 +686,124 @@ VectorXd SUBSPACE_FLUID_3D_COMPRESSED_EIGEN::advectCellStamPeeled(const MatrixXd
 // advect a single cell
 //////////////////////////////////////////////////////////////////////
 VectorXd SUBSPACE_FLUID_3D_COMPRESSED_EIGEN::advectCellStamPeeled(MATRIX_COMPRESSION_DATA& U_data, const MatrixXd& cellU, const Real& dt, const VectorXd& qDot, const int index)
-{
-  TIMER functionTimer(__FUNCTION__);
-  // peeled coordinates were passed in -- need to promote to full grid
-  const int decompose = index;
-  const int z = decompose / _slabPeeled + 1;
-  const int y = (decompose % _slabPeeled) / _xPeeled + 1;
-  const int x = (decompose % _slabPeeled) % _xPeeled + 1;
+  {
+    TIMER functionTimer(__FUNCTION__);
+    // peeled coordinates were passed in -- need to promote to full grid
+    const int decompose = index;
+    const int z = decompose / _slabPeeled + 1;
+    const int y = (decompose % _slabPeeled) / _xPeeled + 1;
+    const int x = (decompose % _slabPeeled) % _xPeeled + 1;
 
-  // get the velocity to backtrace
-  VectorXd v = cellU * qDot;
+    // get the velocity to backtrace
+    VectorXd v = cellU * qDot;
 
-  // backtrace
-  const VEC3F velocity(v[0], v[1], v[2]);
-  Real xTrace = x - dt * velocity[0];
-  Real yTrace = y - dt * velocity[1];
-  Real zTrace = z - dt * velocity[2];
+    // backtrace
+    const VEC3F velocity(v[0], v[1], v[2]);
+    Real xTrace = x - dt * velocity[0];
+    Real yTrace = y - dt * velocity[1];
+    Real zTrace = z - dt * velocity[2];
 
-  // clamp backtrace to grid boundaries
-  
-  // keeping this comment block here for reference
-  xTrace = (xTrace < 1.5) ? 1.5 : xTrace;
-  xTrace = (xTrace > _xRes - 2.5) ? _xRes - 2.5 : xTrace;
-  yTrace = (yTrace < 1.5) ? 1.5 : yTrace;
-  yTrace = (yTrace > _yRes - 2.5) ? _yRes - 2.5 : yTrace;
-  zTrace = (zTrace < 1.5) ? 1.5 : zTrace;
-  zTrace = (zTrace > _zRes - 2.5) ? _zRes - 2.5 : zTrace;
+    // clamp backtrace to grid boundaries
+    
+    // keeping this comment block here for reference
+    xTrace = (xTrace < 1.5) ? 1.5 : xTrace;
+    xTrace = (xTrace > _xRes - 2.5) ? _xRes - 2.5 : xTrace;
+    yTrace = (yTrace < 1.5) ? 1.5 : yTrace;
+    yTrace = (yTrace > _yRes - 2.5) ? _yRes - 2.5 : yTrace;
+    zTrace = (zTrace < 1.5) ? 1.5 : zTrace;
+    zTrace = (zTrace > _zRes - 2.5) ? _zRes - 2.5 : zTrace;
 
-  // locate neighbors to interpolate --
-  // since we're in peeled coordinates, the lookup needs to be modified slightly
-  
-  // keeping this comment block here for reference
-  const int x0 = (int)xTrace - 1;
-  const int x1 = x0 + 1;
-  const int y0 = (int)yTrace - 1;
-  const int y1 = y0 + 1;
-  const int z0 = (int)zTrace - 1;
-  const int z1 = z0 + 1;
+    // locate neighbors to interpolate --
+    // since we're in peeled coordinates, the lookup needs to be modified slightly
+    
+    // keeping this comment block here for reference
+    const int x0 = (int)xTrace - 1;
+    const int x1 = x0 + 1;
+    const int y0 = (int)yTrace - 1;
+    const int y1 = y0 + 1;
+    const int z0 = (int)zTrace - 1;
+    const int z1 = z0 + 1;
 
-  // get interpolation weights
-  const Real s1 = (xTrace - 1) - x0;
-  const Real s0 = 1.0f - s1;
-  const Real t1 = (yTrace - 1) - y0;
-  const Real t0 = 1.0f - t1;
-  const Real u1 = (zTrace - 1) - z0;
-  const Real u0 = 1.0f - u1;
+    // get interpolation weights
+    const Real s1 = (xTrace - 1) - x0;
+    const Real s0 = 1.0f - s1;
+    const Real t1 = (yTrace - 1) - y0;
+    const Real t0 = 1.0f - t1;
+    const Real u1 = (zTrace - 1) - z0;
+    const Real u0 = 1.0f - u1;
 
-  const int z0Scaled = z0 * _slabPeeled;
-  const int z1Scaled = z1 * _slabPeeled;
-  const int y0Scaled = y0 * _xPeeled;
-  const int y1Scaled = y1 * _xPeeled;
+    const int z0Scaled = z0 * _slabPeeled;
+    const int z1Scaled = z1 * _slabPeeled;
+    const int y0Scaled = y0 * _xPeeled;
+    const int y1Scaled = y1 * _xPeeled;
 
-  const int i000 = 3 * (x0 + y0Scaled + z0Scaled);
-  const int i010 = 3 * (x0 + y1Scaled + z0Scaled);
-  const int i100 = 3 * (x1 + y0Scaled + z0Scaled);
-  const int i110 = 3 * (x1 + y1Scaled + z0Scaled);
-  const int i001 = 3 * (x0 + y0Scaled + z1Scaled);
-  const int i011 = 3 * (x0 + y1Scaled + z1Scaled);
-  const int i101 = 3 * (x1 + y0Scaled + z1Scaled);
-  const int i111 = 3 * (x1 + y1Scaled + z1Scaled);
+    const int i000 = 3 * (x0 + y0Scaled + z0Scaled);
+    const int i010 = 3 * (x0 + y1Scaled + z0Scaled);
+    const int i100 = 3 * (x1 + y0Scaled + z0Scaled);
+    const int i110 = 3 * (x1 + y1Scaled + z0Scaled);
+    const int i001 = 3 * (x0 + y0Scaled + z1Scaled);
+    const int i011 = 3 * (x0 + y1Scaled + z1Scaled);
+    const int i101 = 3 * (x1 + y0Scaled + z1Scaled);
+    const int i111 = 3 * (x1 + y1Scaled + z1Scaled);
 
-  // NOTE: it spends most of its time (+50%) here
-  
-  DECOMPRESSION_DATA dataX = U_data.get_decompression_dataX();
-  const int totalCols = dataX.get_numCols();
+    // NOTE: it spends most of its time (+50%) here
+    
+    const DECOMPRESSION_DATA& dataX = U_data.get_decompression_dataX();
+    const int totalCols = dataX.get_numCols();
 
-  MatrixXd submatrix(3, totalCols);
+    MatrixXd submatrix(3, totalCols);
+    
+    TIMER multiplyTimer("multiplies + getSubmatrixFast");
+    GetSubmatrixFast(i000, 3, U_data, submatrix);
+    const VectorXd v000 = submatrix * qDot;
 
-  GetSubmatrixFast(i000, 3, U_data, submatrix);
-  const VectorXd v000 = submatrix * qDot;
+    GetSubmatrixFast(i010, 3, U_data, submatrix);
+    const VectorXd v010 = submatrix * qDot;
 
-  GetSubmatrixFast(i010, 3, U_data, submatrix);
-  const VectorXd v010 = submatrix * qDot;
+    GetSubmatrixFast(i100, 3, U_data, submatrix);
+    const VectorXd v100 = submatrix * qDot;
 
-  GetSubmatrixFast(i100, 3, U_data, submatrix);
-  const VectorXd v100 = submatrix * qDot;
+    GetSubmatrixFast(i110, 3, U_data, submatrix);
+    const VectorXd v110 = submatrix * qDot;
 
-  GetSubmatrixFast(i110, 3, U_data, submatrix);
-  const VectorXd v110 = submatrix * qDot;
+    GetSubmatrixFast(i001, 3, U_data, submatrix);
+    const VectorXd v001 = submatrix * qDot;
 
-  GetSubmatrixFast(i001, 3, U_data, submatrix);
-  const VectorXd v001 = submatrix * qDot;
+    GetSubmatrixFast(i011, 3, U_data, submatrix);
+    const VectorXd v011 = submatrix * qDot;
 
-  GetSubmatrixFast(i011, 3, U_data, submatrix);
-  const VectorXd v011 = submatrix * qDot;
+    GetSubmatrixFast(i101, 3, U_data, submatrix);
+    const VectorXd v101 = submatrix * qDot;
 
-  GetSubmatrixFast(i101, 3, U_data, submatrix);
-  const VectorXd v101 = submatrix * qDot;
+    GetSubmatrixFast(i111, 3, U_data, submatrix);
+    const VectorXd v111 = submatrix * qDot;
 
-  GetSubmatrixFast(i111, 3, U_data, submatrix);
-  const VectorXd v111 = submatrix * qDot;
+    multiplyTimer.stop();
 
-  const Real w000 = u0 * s0 * t0;
-  const Real w010 = u0 * s0 * t1;
-  const Real w100 = u0 * s1 * t0;
-  const Real w110 = u0 * s1 * t1;
-  const Real w001 = u1 * s0 * t0;
-  const Real w011 = u1 * s0 * t1;
-  const Real w101 = u1 * s1 * t0;
-  const Real w111 = u1 * s1 * t1;
-  
-  // interpolate
-  // (indices could be computed once)
-  //
-  // NOTE: it's deceptive to think this cuts down on
-  // multiplies, since they will all occur on a VECTOR,
-  // not just a scalar
-  //
-  //return u0 * (s0 * (t0 * v000 + t1 * v010) +
-  //             s1 * (t0 * v100 + t1 * v110)) +
-  //       u1 * (s0 * (t0 * v001 + t1 * v011) +
-  //             s1 * (t0 * v101 + t1 * v111));
-  return w000 * v000 + w010 * v010 + w100 * v100 + w110 * v110 +
-         w001 * v001 + w011 * v011 + w101 * v101 + w111 * v111;
-}
+
+    const Real w000 = u0 * s0 * t0;
+    const Real w010 = u0 * s0 * t1;
+    const Real w100 = u0 * s1 * t0;
+    const Real w110 = u0 * s1 * t1;
+    const Real w001 = u1 * s0 * t0;
+    const Real w011 = u1 * s0 * t1;
+    const Real w101 = u1 * s1 * t0;
+    const Real w111 = u1 * s1 * t1;
+    
+    // interpolate
+    // (indices could be computed once)
+    //
+    // NOTE: it's deceptive to think this cuts down on
+    // multiplies, since they will all occur on a VECTOR,
+    // not just a scalar
+    //
+    //return u0 * (s0 * (t0 * v000 + t1 * v010) +
+    //             s1 * (t0 * v100 + t1 * v110)) +
+    //       u1 * (s0 * (t0 * v001 + t1 * v011) +
+    //             s1 * (t0 * v101 + t1 * v111));
+    return w000 * v000 + w010 * v010 + w100 * v100 + w110 * v110 +
+           w001 * v001 + w011 * v011 + w101 * v101 + w111 * v111;
+  }
 
 //////////////////////////////////////////////////////////////////////
 // read in a cubature scheme
