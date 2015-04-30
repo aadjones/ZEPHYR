@@ -220,6 +220,74 @@ void FLUID_3D_MIC::step()
 }
 
 //////////////////////////////////////////////////////////////////////
+// step simulation once with fanciness like vorticity confinement 
+// and diffusion removed, but with a static spherical obstacle
+//////////////////////////////////////////////////////////////////////
+void FLUID_3D_MIC::stepWithObstacle()
+{
+  Real goalTime = 0.1;
+  Real currentTime = 0;
+
+  // compute the CFL condition
+  _dt = goalTime;
+
+  // wipe forces
+  _force.clear();
+
+  // wipe boundaries
+  _velocity.setZeroBorder();
+  _density.setZeroBorder();
+
+  // compute the forces
+  addBuoyancy(_heat.data());
+  _velocity.axpy(_dt, _force);
+  _force.clear();
+
+  _prevorticity = _velocity;
+
+  addVorticity();
+  _velocity.axpy(_dt, _force);
+
+  VEC3I center(_xRes/2, _yRes/2, _zRes/2);
+  double radius = 0.1;
+
+  /*
+  if (_dirichletIOP.rows() == 0) {
+    buildSparseIOP(_dirichletIOP, center, radius);
+  }
+  */
+
+  // set the interior of the obstacle to zero
+   _velocity.setZeroSphere(center, radius);
+
+  // matrixIOP(center, radius);
+  
+  // store the preprojection
+  _preprojection = _velocity;
+
+  // project via Poisson
+  project();
+
+  // store the postIOP velocity
+  _postIOP = _velocity;
+
+  // advect everything
+  advectStam();
+
+  _prediffusion = _velocity;
+
+  if (_peeledDampingFull.rows() == 0)
+    buildPeeledDampingMatrixFull();
+  VectorXd after = _peeledDampingFull * _velocity.peelBoundary().flattenedEigen();
+  _velocity.setWithPeeled(after);
+
+  currentTime += _dt;
+
+	_totalTime += goalTime;
+	_totalSteps++;
+}
+
+//////////////////////////////////////////////////////////////////////
 // project into divergence free field
 //////////////////////////////////////////////////////////////////////
 void FLUID_3D_MIC::project()
@@ -394,6 +462,7 @@ void FLUID_3D_MIC::setObstacleBoundaries()
 			}
 		}
 }
+
 
 //////////////////////////////////////////////////////////////////////
 // add buoyancy forces
@@ -1125,6 +1194,25 @@ void FLUID_3D_MIC::buildPeeledDampingMatrixFull()
       }
 }
 
+void FLUID_3D_MIC::buildSparseIOP(SPARSE_MATRIX& A, const VEC3I& center, double radius)
+{
+  // assert ( radius < _lengths.maxElement() ); 
+  A.setToIdentity();
+  VEC3F centerCoords = cellCenter(center[0], center[1], center[2]);
+  int index = 0;
+  for (int z = 1; z < _zRes - 1; z++) {
+    for (int y = 1; y < _yRes - 1; y++) {
+      for (int x = 1; x < _xRes - 1; x++) {
+        for (int i = 0; i < 3; i++, index++) {
+          if ( norm2(cellCenter(x, y, z) - centerCoords) < radius * radius ) {
+          A(index, index) = 0.0;
+          }
+        }
+      }
+    }
+  }        
+}
+
 //////////////////////////////////////////////////////////////////////
 // Output directly to the files that will be sent to SVD
 //////////////////////////////////////////////////////////////////////
@@ -1177,7 +1265,8 @@ void FLUID_3D_MIC::appendStreams() const
   string pressureFile = _snapshotPath + string("pressure.matrix.transpose");
 
   // if there's a Neumann matrix at all, it's using IOP
-  bool usingIOP = (_neumannIOP.rows() > 0);
+  // bool usingIOP = (_neumannIOP.rows() > 0);
+  bool usingIOP = true;
 
   fileFinal      = fopen(velocityFinalFile.c_str(), "ab");
   filePreproject = fopen(velocityPreprojectFile.c_str(), "ab");
@@ -1199,6 +1288,7 @@ void FLUID_3D_MIC::appendStreams() const
       finalCols[x] = cols;
   if (finalCols[5] == 0)
     finalCols[5] = scalarCols;
+
 
   if (velocity.norm2() > 1e-7)
   {
@@ -1234,6 +1324,7 @@ void FLUID_3D_MIC::appendStreams() const
     {
       fwrite((void*)(velocity.data()), sizeof(double), cols, fileIOP);
       finalRows[4]++;
+      cout << "IOP rows is now: " << finalRows[4] << endl;
     }
   }
 
@@ -1242,6 +1333,7 @@ void FLUID_3D_MIC::appendStreams() const
   {
     fwrite((void*)(scalar.data()), sizeof(double), scalarCols, filePressure);
     finalRows[5]++;
+    cout << "pressure rows is now: " << finalRows[5] << endl;
   }
 
   scalar = _divergence.peelBoundary().flattened();
@@ -1275,3 +1367,34 @@ void FLUID_3D_MIC::appendStreams() const
   }
   cout << " done. " << endl;
 }
+
+VEC3F FLUID_3D_MIC::cellCenter(int x, int y, int z)
+{
+  TIMER functionTimer(__FUNCTION__);
+  // assuming lengths are all 1.0
+  VEC3F halfLengths(0.5, 0.5, 0.5); 
+
+  // set it to the lower corner
+  VEC3F final = _center - halfLengths;
+
+  double dx = 1.0 / _xRes;
+  double dy = 1.0 / _yRes;
+  double dz = 1.0 / _zRes;
+  // displace to the NNN corner
+  final[0] += x * dx;
+  final[1] += y * dy;
+  final[2] += z * dz;
+
+  // displace it to the cell center
+  final[0] += dx * 0.5;
+  final[1] += dy * 0.5;
+  final[2] += dz * 0.5;
+
+  return final;
+}
+
+
+void FLUID_3D_MIC::matrixIOP(const VEC3I& center, double radius)
+{
+}
+

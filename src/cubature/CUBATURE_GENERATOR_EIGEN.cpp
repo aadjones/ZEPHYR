@@ -405,9 +405,12 @@ void CUBATURE_GENERATOR_EIGEN::generateImportanceSampledCubature()
     exit(0);
   }
 
+  cout << __FILE__ << " " << __FUNCTION__ << " " << __LINE__ << " : " << endl;
   // size of a single advection vector
   int advectionSize = _trainingPostadvection[0].size();
+  cout << "advectionSize is: " << advectionSize << endl;
   
+  cout << __FILE__ << " " << __FUNCTION__ << " " << __LINE__ << " : " << endl;
   // total number of force samples
   int totalSamples = _trainingPostadvection.size();
 
@@ -430,6 +433,7 @@ void CUBATURE_GENERATOR_EIGEN::generateImportanceSampledCubature()
     else
        _postadvectionMagnitudes(x) = 1.0f;
 
+  cout << __FILE__ << " " << __FUNCTION__ << " " << __LINE__ << " : " << endl;
   // stack normalized force samples into one big 'b' vector
   VectorXd b(totalRows);
   int index = 0;

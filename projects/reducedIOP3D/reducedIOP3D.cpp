@@ -368,7 +368,6 @@ void runEverytime()
     static int steps = 0;
     cout << " Simulation step " << steps << endl;
     fluid->addSmokeColumn();
-    // fluid->stepReorderedCubatureStam();
     fluid->stepObstacleReorderedCubatureStam();
     
     /* 

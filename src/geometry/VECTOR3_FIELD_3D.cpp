@@ -3078,6 +3078,22 @@ void VECTOR3_FIELD_3D::copyBorderAll()
 		}
 }
 
+void VECTOR3_FIELD_3D::setZeroSphere(const VEC3I& center, double radius) 
+{
+  assert ( radius < _lengths.maxElement() ); 
+  VEC3F centerCoords = cellCenter(center[0], center[1], center[2]);
+  int index = 0;
+  for (int z = 0; z < _zRes; z++) {
+    for (int y = 0; y < _yRes; y++) {
+      for (int x = 0; x < _xRes; x++, index++) {
+        if ( norm2(cellCenter(x, y, z) - centerCoords) < radius*radius ) {
+          _data[index] = 0.0f;
+        }
+      }
+    }
+  }
+}
+
 //////////////////////////////////////////////////////////////////////
 // BLAS-like interface, output += alpha * input
 //////////////////////////////////////////////////////////////////////

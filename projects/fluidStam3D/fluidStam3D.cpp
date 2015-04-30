@@ -19,6 +19,8 @@
 #include "EIGEN.h"
 
 #include <cmath>
+#include "QUICKTIME_MOVIE.h"
+
 #include <glvu.h>
 #include <VEC3.h>
 #include <iostream>
@@ -36,6 +38,12 @@ using namespace std;
 
 GLVU glvu;
 
+// Quicktime movie to capture to
+QUICKTIME_MOVIE movie;
+
+// currently capturing frames for a movie?
+bool captureMovie = true;
+
 // is the mouse pressed?
 bool mouseClicked = false;
 
@@ -49,6 +57,10 @@ bool animate = true;
 FLUID_3D_MIC* fluid = NULL;
 
 void runEverytime();
+
+VEC3F cellCenter(int x, int y, int z);
+void buildSparseIOP(SPARSE_MATRIX& A, const VEC3I& center, double radius);
+SPARSE_MATRIX fullIOP(3 * 48 * 64 * 48, 3 * 48 * 64 * 48);
 
 vector<VECTOR> snapshots;
 
@@ -128,8 +140,16 @@ void glutDisplay()
       fluid->density().drawBoundingBox();
     glPopMatrix();
 
+    glPushMatrix();
+      glTranslatef(cellCenter(48, 64, 46)[0], cellCenter(48, 64, 48)[1], cellCenter(48, 64, 48)[2]);
+      glutWireSphere(0.1, 10, 10);
+    glPopMatrix();  
+
     //drawAxes();
   glvu.EndFrame();
+  if (captureMovie) {
+    movie.addFrameGL();
+  }
 }
 
 ///////////////////////////////////////////////////////////////////////
@@ -151,6 +171,25 @@ void glutKeyboard(unsigned char key, int x, int y)
     case 'a':
       animate = !animate;
       break;
+    case 'm':
+      // if we were already capturing a movie
+      if (captureMovie)
+      {
+        // write out the movie
+        movie.writeMovie("movie.mov");
+
+        // reset the movie object
+        movie = QUICKTIME_MOVIE();
+
+        // stop capturing frames
+        captureMovie = false;
+      }
+      else
+      {
+        cout << " Starting to capture movie. " << endl;
+        captureMovie = true;
+      }
+      break; 
     case 'q':
       exit(0);
       break;
@@ -258,6 +297,8 @@ int main(int argc, char *argv[])
   SIMPLE_PARSER parser(argv[1]);
 
   int amplify = 4;
+  // what does amplify do??
+
   int xRes = parser.getInt("xRes", 48);
   int yRes = parser.getInt("yRes", 64);
   int zRes = parser.getInt("zRes", 48);
@@ -286,7 +327,7 @@ int main(int argc, char *argv[])
 
   snapshotPath = parser.getString("snapshot path", "./data/dummy/");
   simulationSnapshots = parser.getInt("simulation snapshots", 20);
-
+  
 	fluid = new FLUID_3D_MIC(xRes, yRes, zRes, amplify, &boundaries[0]);
   fluid->vorticityEps() = vorticity;
   fluid->snapshotPath() = snapshotPath;
@@ -319,7 +360,8 @@ void runEverytime()
     // step the sim
     cout << " Simulation step " << steps << " of " << simulationSnapshots << endl;
     fluid->addSmokeColumn();
-    fluid->step();
+    // fluid->step();
+    fluid->stepWithObstacle();
 
     // write to disk
     char buffer[256];
@@ -331,13 +373,51 @@ void runEverytime()
     // check if we're done
     if (steps == simulationSnapshots)
     {
-      TIMER::printTimings();
-      exit(0);
-    }
+      TIMER::printTimings();      
+      // if we were already capturing a movie
+      if (captureMovie)
+      {
+       // write out the movie
+       movie.writeMovie("movieObstacle.mov");
 
+      // reset the movie object
+      movie = QUICKTIME_MOVIE();
+
+     // stop capturing frames
+     captureMovie = false;
+     }
+    exit(0);
+    }
+  
     if (steps % 10 == 0)
       TIMER::printTimings();
 
     steps++;
   }
 }
+
+VEC3F cellCenter(int x, int y, int z) 
+{
+  double dx = 1.0 / 48.0;
+  double dy = 1.0 / 64.0;
+  double dz = 1.0 / 48.0;
+
+  VEC3F halfLengths(0.5, 0.5, 0.5);
+
+  // set it to the lower corner
+  VEC3F final = VEC3F(0.0, 0.0, 0.0) - halfLengths;
+
+  // displace to the NNN corner
+  final[0] += x * dx;
+  final[1] += y * dy;
+  final[2] += z * dz;
+
+  // displace it to the cell center
+  final[0] += dx * 0.5;
+  final[1] += dy * 0.5;
+  final[2] += dz * 0.5;
+
+  return final;
+}
+
+

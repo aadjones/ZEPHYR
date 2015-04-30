@@ -54,7 +54,8 @@ SUBSPACE_FLUID_3D_EIGEN::SUBSPACE_FLUID_3D_EIGEN(int xRes, int yRes, int zRes, c
 
   if (!loadNothing)
   {
-    initOutOfCore();
+    // initOutOfCore();
+    initOutOfCoreIOP();
 
     readAdvectionCubature();
   }
@@ -74,6 +75,7 @@ SUBSPACE_FLUID_3D_EIGEN::SUBSPACE_FLUID_3D_EIGEN(int xRes, int yRes, int zRes, c
 //////////////////////////////////////////////////////////////////////
 void SUBSPACE_FLUID_3D_EIGEN::initOutOfCore()
 {
+
   // init the peeled dimensions
   _xPeeled = _xRes - 2;
   _yPeeled = _yRes - 2;
@@ -129,7 +131,66 @@ void SUBSPACE_FLUID_3D_EIGEN::initOutOfCore()
     }
   }
 }
+void SUBSPACE_FLUID_3D_EIGEN::initOutOfCoreIOP()
+{
+  cout << "Using initOutOfCoreIOP inside constructor!" << endl;
+  // init the peeled dimensions
+  _xPeeled = _xRes - 2;
+  _yPeeled = _yRes - 2;
+  _zPeeled = _zRes - 2;
+  _slabPeeled = _xPeeled * _yPeeled;
 
+  bool pcaBuilt = fileExists(_reducedPath + string("U.final.matrix")) &&
+                  fileExists(_reducedPath + string("U.iop.matrix"))   &&
+                  fileExists(_reducedPath + string("U.preproject.matrix")) &&
+                  fileExists(_reducedPath + string("U.preadvect.matrix")) &&
+                  fileExists(_reducedPath + string("U.prediffuse.matrix")) &&
+                  fileExists(_reducedPath + string("U.pressure.matrix"));
+
+  // check if pre-built matrices exist
+  bool filesBuilt = fileExists(_reducedPath + string("projected.A.matrix")) &&
+                    fileExists(_reducedPath + string("projected.ptof.matrix")) &&
+                    fileExists(_reducedPath + string("projected.vtod.matrix")) &&
+                    fileExists(_reducedPath + string("damping.peeled.matrix")) &&
+                    fileExists(_reducedPath + string("projected.ptov.matrix")) &&
+                    fileExists(_reducedPath + string("U.iop.subspace.matrix")) &&
+                    fileExists(_reducedPath + string("inverseProduct.matrix"));
+
+  if (!filesBuilt)
+    buildOutOfCoreMatricesIOP();
+  else
+  {
+    string filename;
+    
+    filename = _reducedPath + string("projected.ptof.matrix");
+    EIGEN::read(filename, _preprojectToFinal);
+
+    filename = _reducedPath + string("projected.vtod.matrix");
+    EIGEN::read(filename, _reducedVelocityToDivergence);
+
+    filename = _reducedPath + string("projected.ptov.matrix");
+    EIGEN::read(filename, _reducedPressureToVelocity);
+
+    filename = _reducedPath + string("projected.A.matrix");
+    EIGEN::read(filename, _reducedA);
+
+    filename = _reducedPath + string("damping.peeled.matrix");
+    EIGEN::read(filename, _dampingMatrixReduced);
+    
+    filename = _reducedPath + string("inverseProduct.matrix");
+    bool success = EIGEN::read(filename, _inverseProduct);
+
+    if (!success)
+    {
+      // Needs everything prior to be built already
+      MatrixXd inverse = _reducedA.inverse();
+      _inverseProduct = _reducedPressureToVelocity * inverse * _reducedVelocityToDivergence;
+      filename = _reducedPath + string("inverseProduct.matrix");
+      EIGEN::write(filename, _inverseProduct);
+      TIMER::printTimings();
+    }
+  }
+}
 SUBSPACE_FLUID_3D_EIGEN::~SUBSPACE_FLUID_3D_EIGEN()
 {
 }
@@ -224,7 +285,65 @@ void SUBSPACE_FLUID_3D_EIGEN::stepReorderedCubatureStam()
   // diff the current sim results against ground truth
   diffGroundTruth();
 }
+//////////////////////////////////////////////////////////////////////
+// The reduced solver, with peeled boundaries, with an obstacle, 
+// with cubature enabled
+//////////////////////////////////////////////////////////////////////
+void SUBSPACE_FLUID_3D_EIGEN::stepObstacleReorderedCubatureStam()
+{
+  TIMER functionTimer(__FUNCTION__);
+  Real goalTime = 0.1;
+  Real currentTime = 0;
 
+  // compute the CFL condition
+  _dt = goalTime;
+
+  // wipe forces
+  _force.clear();
+
+  // wipe boundaries
+  _velocity.setZeroBorder();
+
+  // compute the forces
+  addBuoyancy(_heat.data());
+  _velocity.axpy(_dt, _force);
+
+  _force.clear();
+  addVorticity();
+  _velocity.axpy(_dt, _force);
+
+  // reduced IOP
+  reducedSetZeroSphere();
+  reducedStagedProject();
+
+  advectHeatAndDensityStam();
+  
+  VECTOR::printVertical = false;
+
+  TIMER projectionTimer("Velocity projection");
+  _qDot = _velocity.peeledProject(_preadvectU);
+  projectionTimer.stop();
+
+  reducedAdvectStagedStamFast();
+  
+  TIMER diffusionProjectionTimer("Velocity projection");
+  diffusionProjectionTimer.stop();
+
+  reducedPeeledDiffusion();
+
+  // do the full space unprojection
+  TIMER unprojectionTimer("Velocity unprojection");
+  _velocity.peeledUnproject(_U, _qDot);
+  currentTime += _dt;
+
+  cout << " Simulation step " << _totalSteps << " done. " << endl;
+
+	_totalTime += goalTime;
+	_totalSteps++;
+
+  // diff the current sim results against ground truth
+  diffGroundTruth();
+}
 //////////////////////////////////////////////////////////////////////
 // do a full-rank advection of heat and density
 //////////////////////////////////////////////////////////////////////
@@ -361,6 +480,14 @@ void SUBSPACE_FLUID_3D_EIGEN::reducedStagedProject()
   _qDot = _preprojectToFinal * _qDot + _inverseProduct * _qDot;
 }
 
+//////////////////////////////////////////////////////////////////////
+// do a reduced zeroing out of the sphere interior for IOP
+//////////////////////////////////////////////////////////////////////
+void SUBSPACE_FLUID_3D_EIGEN::reducedSetZeroSphere()
+{
+  TIMER functionTimer(__FUNCTION__);
+  _qDot = _reducedIOP * _qDot;
+}
 //////////////////////////////////////////////////////////////////////
 // diff the current sim results against ground truth
 //////////////////////////////////////////////////////////////////////
@@ -911,6 +1038,10 @@ void SUBSPACE_FLUID_3D_EIGEN::buildOutOfCoreMatrices()
   computeVelocityToDivergence();
   cout << " Projecting velocity to divergence ... " << flush;
   _reducedVelocityToDivergence = _velocityToDivergence.project(_pressureU, _preprojectU);
+  // for IOP, use this!!
+  // //////////
+  // _reducedVelocityToDivergence = _velocityToDivergence.project(_pressureU, _IOP basis);
+  /////////////
   cout << " done." << endl;
 
   filename = _reducedPath + string("projected.vtod.matrix");
@@ -955,6 +1086,10 @@ void SUBSPACE_FLUID_3D_EIGEN::buildOutOfCoreMatrices()
 
   // need: preproject and U
   EIGEN::transposeProduct(_U, _preprojectU, _preprojectToFinal);
+  // for iop, need this!
+  // ///////////
+  // EIGEN::transposeProduct(_U, _iopU, _preprojectToFinal);
+  // //////////
   filename = _reducedPath + string("projected.ptof.matrix");
   EIGEN::write(filename, _preprojectToFinal);
 
@@ -981,6 +1116,26 @@ void SUBSPACE_FLUID_3D_EIGEN::buildOutOfCoreMatrices()
   purge();
   ptovTimer.stop();
   TIMER::printTimings();
+  
+  TIMER iopTimer("IOP projection"); 
+  // build reduced IOP
+  SPARSE_MATRIX fullIOP(totalCellsD, totalCellsD);
+  VEC3I center(_xRes/2, _yRes/2, _zRes/2);
+  double radius = 0.1;
+  buildSparseIOP(fullIOP, center, radius);
+  // read in the projection matrix
+  filename = _reducedPath + string("U.iop.matrix");
+  EIGEN::read(filename, _projectionIOP); 
+  // projection into the subspace
+  _reducedIOP = fullIOP.project(_projectionIOP, _projectionIOP);
+  filename = _reducedPath + string("U.iop.subspace.matrix");
+  EIGEN::write(filename, _reducedIOP);
+
+  // stomp IOP after writing it
+  // _reducedIOP.resize(0, 0);
+  // purge();
+  iopTimer.stop();
+  TIMER::printTimings();
 
   // Needs everything prior to be built already
   MatrixXd inverse = _reducedA.inverse();
@@ -997,6 +1152,156 @@ void SUBSPACE_FLUID_3D_EIGEN::buildOutOfCoreMatrices()
   TIMER::printTimings();
 }
 
+//////////////////////////////////////////////////////////////////////
+// build the staged bases and the projected matrices
+//////////////////////////////////////////////////////////////////////
+void SUBSPACE_FLUID_3D_EIGEN::buildOutOfCoreMatricesIOP()
+{
+  TIMER functionTimer(__FUNCTION__);
+
+  cout << "=====================================================" << endl;
+  cout << " Building huge projected matrices " << endl;
+  cout << "=====================================================" << endl;
+
+  // in preparation for writing results to files
+  string filename;
+
+  TIMER pressureTimer("Pressure projection");
+  // read in the needed matrices
+  filename = _reducedPath + string("U.pressure.matrix");
+  EIGEN::read(filename, _pressureU);
+
+  int totalCells = (_xRes - 2) * (_yRes - 2) * (_zRes - 2);
+  SPARSE_MATRIX_ARRAY sparseA(totalCells, totalCells);
+  buildFlatA(sparseA, _obstacles);
+  cout << " Projecting the pressure matrix ... " << flush;
+  _reducedA = sparseA.projectVerySparse(_pressureU, _pressureU);
+  sparseA.clear();
+  cout << " done." << endl;
+
+  filename = _reducedPath + string("projected.A.matrix");
+  EIGEN::write(filename, _reducedA);
+  _Asparse.clear();
+  purge();
+  pressureTimer.stop();
+  TIMER::printTimings();
+
+  TIMER vtodTimer("Velocity to div projection");
+  // read in the needed matrices
+  filename = _reducedPath + string("U.iop.matrix");
+  EIGEN::read(filename, _iopU);
+
+  // build reduced velocity to divergence
+  // Need: _pressureU and _preprojectU
+  computeVelocityToDivergence();
+  cout << " Projecting velocity to divergence ... " << flush;
+  // for IOP, use this!!
+  _reducedVelocityToDivergence = _velocityToDivergence.project(_pressureU, _iopU);
+  cout << " done." << endl;
+
+  filename = _reducedPath + string("projected.vtod.matrix");
+  EIGEN::write(filename, _reducedVelocityToDivergence);
+  _velocityToDivergence.clear();
+   
+  // stomp matrices to make room in memory
+  _pressureU.resize(0,0);
+  purge();
+  vtodTimer.stop();
+  TIMER::printTimings();
+
+  TIMER dampingTimer("Damping matrix projection");
+  // read in the needed matrices
+  filename = _reducedPath + string("U.prediffuse.matrix");
+  EIGEN::read(filename, _prediffuseU);
+
+  // NEW
+  cout << " Projecting damping matrix ... " << flush;
+  int totalCellsD = 3 * (_xRes - 2) * (_yRes - 2) * (_zRes - 2);
+  SPARSE_MATRIX_ARRAY sparseD(totalCellsD, totalCellsD);
+  buildPeeledDampingMatrixFlat(sparseD);
+  _dampingMatrixReduced = sparseD.projectVerySparse(_preprojectU, _prediffuseU);
+  filename = _reducedPath + string("damping.peeled.matrix");
+  EIGEN::write(filename, _dampingMatrixReduced);
+  sparseD.clear();
+  cout << "done. " << endl;
+
+  // stomp matrices to make room in memory
+  _prediffuseU.resize(0,0);
+  purge();
+  dampingTimer.stop();
+  TIMER::printTimings();
+
+  TIMER preprojectTimer("Preprojection projection");
+  // read in the needed matrices
+
+  // TODO: do we need U.final in full?
+  filename = _reducedPath + string("U.final.matrix");
+  // EIGEN::readBig(filename, _U);
+  EIGEN::read(filename, _U);
+
+  // for iop, need this!
+  EIGEN::transposeProduct(_U, _iopU, _preprojectToFinal);
+  filename = _reducedPath + string("projected.ptof.matrix");
+  EIGEN::write(filename, _preprojectToFinal);
+
+  // stomp matrices to make room in memory
+  _preprojectU.resize(0,0);
+  purge();
+  preprojectTimer.stop();
+  TIMER::printTimings();
+
+  TIMER ptovTimer("Pressure to velocity projection");
+  // read in the needed matrices
+  filename = _reducedPath + string("U.pressure.matrix");
+  EIGEN::read(filename, _pressureU);
+
+  // build reduced pressure to velocity
+  // Need: pressureU and U
+  computePressureToVelocity();
+  _reducedPressureToVelocity = _pressureToVelocity.project(_U, _pressureU);
+  filename = _reducedPath + string("projected.ptov.matrix");
+  EIGEN::write(filename, _reducedPressureToVelocity);
+
+  // stomp pressure, just in case
+  _pressureU.resize(0,0);
+  purge();
+  ptovTimer.stop();
+  TIMER::printTimings();
+  
+  TIMER iopTimer("IOP projection"); 
+  // build reduced IOP
+  SPARSE_MATRIX fullIOP(totalCellsD, totalCellsD);
+  VEC3I center(_xRes/2, _yRes/2, _zRes/2);
+  double radius = 0.1;
+  buildSparseIOP(fullIOP, center, radius);
+  // read in the projection matrix
+  filename = _reducedPath + string("U.iop.matrix");
+  EIGEN::read(filename, _projectionIOP); 
+  // projection into the subspace
+  _reducedIOP = fullIOP.project(_projectionIOP, _preprojectU);
+  filename = _reducedPath + string("U.iop.subspace.matrix");
+  EIGEN::write(filename, _reducedIOP);
+
+  // stomp IOP after writing it
+  // _reducedIOP.resize(0, 0);
+  // purge();
+  iopTimer.stop();
+  TIMER::printTimings();
+
+  // Needs everything prior to be built already
+  MatrixXd inverse = _reducedA.inverse();
+  _inverseProduct = _reducedPressureToVelocity * inverse * _reducedVelocityToDivergence;
+  filename = _reducedPath + string("inverseProduct.matrix");
+  EIGEN::write(filename, _inverseProduct);
+  TIMER::printTimings();
+
+  // clear out all memory, just to be sure
+  stompAllBases();
+  purge();
+  
+  cout << " Done building matrices " << endl;
+  TIMER::printTimings();
+}
 //////////////////////////////////////////////////////////////////////
 // check of a file exists
 //////////////////////////////////////////////////////////////////////
@@ -1279,3 +1584,46 @@ void SUBSPACE_FLUID_3D_EIGEN::buildFlatA(SPARSE_MATRIX_ARRAY& sparseA, unsigned 
 				}
 			}
 }
+
+void SUBSPACE_FLUID_3D_EIGEN::buildSparseIOP(SPARSE_MATRIX& A, const VEC3I& center, double radius)
+{
+  assert ( radius < _lengths.maxElement() ); 
+  A.setToIdentity();
+  VEC3F centerCoords = cellCenter(center[0], center[1], center[2]);
+  int index = 0;
+  for (int z = 1; z < _zRes - 1; z++) {
+    for (int y = 1; y < _yRes - 1; y++) {
+      for (int x = 1; x < _xRes - 1; x++) {
+        for (int i = 0; i < 3; i++, index++) {
+          if ( norm2(cellCenter(x, y, z) - centerCoords) < radius * radius ) {
+          A(index, index) = 0.0;
+          }
+        }
+      }
+    }
+  }        
+}
+
+VEC3F SUBSPACE_FLUID_3D_EIGEN::cellCenter(int x, int y, int z)
+{
+ VEC3F halfLengths = (Real)0.5 * _lengths;
+
+  // set it to the lower corner
+  VEC3F final = _center - halfLengths;
+
+  double dx = 1.0 / _xRes;
+  double dy = 1.0 / _yRes;
+  double dz = 1.0 / _zRes;
+  // displace to the NNN corner
+  final[0] += x * dx;
+  final[1] += y * dy;
+  final[2] += z * dz;
+
+  // displace it to the cell center
+  final[0] += dx * 0.5;
+  final[1] += dy * 0.5;
+  final[2] += dz * 0.5;
+
+  return final;
+}
+
