@@ -82,7 +82,7 @@ public:
   void loadReducedRuntimeBases(string path = string(""));
 
   // load, and if needed, precompute the matrices needed for IOP
-  void loadReducedIOP(const int snapshots);
+  void loadReducedIOP(string path = string(""));
 
   // read in a cubature scheme
   void readAdvectionCubature();
@@ -257,7 +257,10 @@ protected:
 
   // do a staged reduced order pressure projection
   void reducedStagedProject();
-  
+ 
+  // do a staged reduced order pressure projection for use with IOP 
+  void reducedStagedProjectIOP();
+
   // do a reduced zeroing out the interior of the sphere for IOP
   void reducedSetZeroSphere();
 

@@ -251,27 +251,22 @@ void FLUID_3D_MIC::stepWithObstacle()
   VEC3I center(_xRes/2, _yRes/2, _zRes/2);
   double radius = 0.1;
 
-  /*
-  if (_dirichletIOP.rows() == 0) {
-    buildSparseIOP(_dirichletIOP, center, radius);
-  }
-  */
+
+  // store the preprojection
+  _preprojection = _velocity;
 
   // set the interior of the obstacle to zero
    _velocity.setZeroSphere(center, radius);
 
-  // matrixIOP(center, radius);
   
-  // store the preprojection
-  _preprojection = _velocity;
+  // store the postIOP velocity (QUESTION: before the project?)
+  _postIOP = _velocity;
 
   // project via Poisson
   project();
 
-  // store the postIOP velocity
-  _postIOP = _velocity;
 
-  // advect everything
+  // advect everything. advectStam() sets the value of _preadvect for you.
   advectStam();
 
   _prediffusion = _velocity;
@@ -1333,7 +1328,6 @@ void FLUID_3D_MIC::appendStreams() const
   {
     fwrite((void*)(scalar.data()), sizeof(double), scalarCols, filePressure);
     finalRows[5]++;
-    cout << "pressure rows is now: " << finalRows[5] << endl;
   }
 
   scalar = _divergence.peelBoundary().flattened();

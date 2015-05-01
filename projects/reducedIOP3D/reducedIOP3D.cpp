@@ -338,7 +338,7 @@ int main(int argc, char *argv[])
   cout << " Using discard threshold: " << discardThreshold << endl;
 
 	fluid = new SUBSPACE_FLUID_3D_EIGEN(xRes, yRes, zRes, reducedPath, &boundaries[0]);
-  fluid->loadReducedRuntimeBases();
+  fluid->loadReducedIOP();
 
   fluid->fullRankPath() = snapshotPath;
   fluid->vorticityEps() = vorticity;
@@ -367,6 +367,7 @@ void runEverytime()
   {
     static int steps = 0;
     cout << " Simulation step " << steps << endl;
+    cout << __FILE__ << " " << __FUNCTION__ << " " << __LINE__ << " : " << endl;
     fluid->addSmokeColumn();
     fluid->stepObstacleReorderedCubatureStam();
     
