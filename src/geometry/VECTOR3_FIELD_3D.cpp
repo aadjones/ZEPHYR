@@ -3087,6 +3087,7 @@ void VECTOR3_FIELD_3D::setZeroSphere(const VEC3I& center, double radius)
     for (int y = 0; y < _yRes; y++) {
       for (int x = 0; x < _xRes; x++, index++) {
         if ( norm2(cellCenter(x, y, z) - centerCoords) < radius*radius ) {
+          // this sets the entire VEC3F to (0, 0, 0)
           _data[index] = 0.0f;
         }
       }

@@ -248,7 +248,9 @@ void FLUID_3D_MIC::stepWithObstacle()
   addVorticity();
   _velocity.axpy(_dt, _force);
 
+  // let's try it with a different center?
   VEC3I center(_xRes/2, _yRes/2, _zRes/2);
+  // VEC3I center(_xRes, _yRes, _zRes);
   double radius = 0.1;
 
 
@@ -256,10 +258,23 @@ void FLUID_3D_MIC::stepWithObstacle()
   _preprojection = _velocity;
 
   // set the interior of the obstacle to zero
-   _velocity.setZeroSphere(center, radius);
+  // _velocity.setZeroSphere(center, radius);
 
+  // let's test it with the full matrix
+
+  //////////////////////////////                 
+  // if the matrix isn't built yet, build it
+  if (_peeledIOP.cols() == 0) {
+    buildPeeledSparseIOP(_peeledIOP, center, radius);
+  }
+
+  cout << "_peeledIOP dims: " << "(" << _peeledIOP.rows() << ", " << _peeledIOP.cols() << ")" << endl;
+  VectorXd afterIOP = _peeledIOP * _velocity.peelBoundary().flattenedEigen();
+  cout << "Did sparse matrix-vector multiply for IOP!" << endl;
+  _velocity.setWithPeeled(afterIOP);
+  //////////////////////////////
   
-  // store the postIOP velocity (QUESTION: before the project?)
+  // store the postIOP velocity (QUESTION: before or after the project?)
   _postIOP = _velocity;
 
   // project via Poisson
@@ -271,6 +286,7 @@ void FLUID_3D_MIC::stepWithObstacle()
 
   _prediffusion = _velocity;
 
+  // diffusion aka 'damping'
   if (_peeledDampingFull.rows() == 0)
     buildPeeledDampingMatrixFull();
   VectorXd after = _peeledDampingFull * _velocity.peelBoundary().flattenedEigen();
@@ -1192,6 +1208,27 @@ void FLUID_3D_MIC::buildPeeledDampingMatrixFull()
 void FLUID_3D_MIC::buildSparseIOP(SPARSE_MATRIX& A, const VEC3I& center, double radius)
 {
   // assert ( radius < _lengths.maxElement() ); 
+  A = SPARSE_MATRIX(3 * _totalCells, 3 * _totalCells);
+  A.setToIdentity();
+  VEC3F centerCoords = cellCenter(center[0], center[1], center[2]);
+  int index = 0;
+  for (int z = 1; z < _zRes - 1; z++) {
+    for (int y = 1; y < _yRes - 1; y++) {
+      for (int x = 1; x < _xRes - 1; x++) {
+        for (int i = 0; i < 3; i++, index++) {
+          if ( norm2(cellCenter(x, y, z) - centerCoords) < radius * radius ) {
+          A(index, index) = 0.0;
+          }
+        }
+      }
+    }
+  }        
+}
+
+void FLUID_3D_MIC::buildPeeledSparseIOP(SPARSE_MATRIX& A, const VEC3I& center, double radius) 
+{
+  A = SPARSE_MATRIX(3 * (_xRes - 2) * (_yRes - 2) * (_zRes - 2),
+                    3 * (_xRes - 2) * (_yRes - 2) * (_zRes - 2));
   A.setToIdentity();
   VEC3F centerCoords = cellCenter(center[0], center[1], center[2]);
   int index = 0;

@@ -151,7 +151,7 @@ void glutDisplay()
     glPopMatrix();
     
     glPushMatrix();
-      glTranslatef(cellCenter(48, 64, 46)[0], cellCenter(48, 64, 48)[1], cellCenter(48, 64, 48)[2]);
+      glTranslatef(cellCenter(48, 64, 48)[0], cellCenter(48, 64, 48)[1], cellCenter(48, 64, 48)[2]);
       glutWireSphere(0.1, 10, 10);
     glPopMatrix();  
 

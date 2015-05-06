@@ -224,6 +224,10 @@ protected:
   SPARSE_MATRIX _neumannIOP;
   SPARSE_MATRIX _dirichletIOP;
 
+  // Aaron added _fullIOP and peeledIOP
+  SPARSE_MATRIX _fullIOP;
+  SPARSE_MATRIX _peeledIOP;
+
   // procedurally generated velocity basis
   VECTOR3_FIELD_3D _proceduralVelocity;
 
@@ -258,6 +262,9 @@ protected:
 
   // build the IOP stomping matrix
   void buildSparseIOP(SPARSE_MATRIX& A, const VEC3I& center, double radius);
+
+  // build the peeled IOP stomping matrix
+  void buildPeeledSparseIOP(SPARSE_MATRIX& A, const VEC3I& center, double radius);
 
   // advect using first order semi-Lagrangian
   void advectStam();

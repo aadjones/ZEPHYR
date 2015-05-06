@@ -64,8 +64,6 @@ int zRes = 0;
 void runEverytime();
 
 VEC3F cellCenter(int x, int y, int z);
-// void buildSparseIOP(SPARSE_MATRIX& A, const VEC3I& center, double radius);
-// SPARSE_MATRIX fullIOP(3 * 48 * 64 * 48, 3 * 48 * 64 * 48);
 
 vector<VECTOR> snapshots;
 
@@ -146,7 +144,10 @@ void glutDisplay()
     glPopMatrix();
 
     glPushMatrix();
-      glTranslatef(cellCenter(48, 64, 46)[0], cellCenter(48, 64, 48)[1], cellCenter(48, 64, 48)[2]);
+      // apparently the coordinates' origin is at the bottom left
+      glTranslatef(cellCenter(48, 64, 48)[0], cellCenter(48, 64, 48)[1],
+          cellCenter(48, 64, 48)[2]);
+      cout << "computed cell center for 48, 64, 48: " << cellCenter(48, 64, 48) << endl;
       glutWireSphere(0.1, 10, 10);
     glPopMatrix();  
 
