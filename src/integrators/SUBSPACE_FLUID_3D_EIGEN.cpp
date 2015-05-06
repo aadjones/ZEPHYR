@@ -280,35 +280,64 @@ void SUBSPACE_FLUID_3D_EIGEN::stepObstacleReorderedCubatureStam()
   // wipe forces
   _force.clear();
 
+  // make a copy of velocity and density for ground truth
+  VECTOR3_FIELD_3D velocityTrue = _velocity;
+  FIELD_3D densityTrue = _density;
   // wipe boundaries
   _velocity.setZeroBorder();
+  velocityTrue.setZeroBorder();
 
   ////////////////////////////////////////////////////////////////////
   // QUESTION: do I need to wipe density border as well?
   // (doesn't seem to matter since advectHeatAndDensityStam
   // does it for you)
   _density.setZeroBorder();
+  densityTrue.setZeroBorder();
   ////////////////////////////////////////////////////////////////////
+  cout << "Setting zero border. \n";
+  diffTruth(velocityTrue, densityTrue);
 
   // compute the forces
   addBuoyancy(_heat.data());
   _velocity.axpy(_dt, _force);
+  velocityTrue.axpy(_dt, _force);
   _force.clear();
 
   addVorticity();
   _velocity.axpy(_dt, _force);
+  velocityTrue.axpy(_dt, _force);
+  
+  cout << "Adding forces. \n";
+  diffTruth(velocityTrue, densityTrue); 
+ 
+  VEC3I center(_xRes/2, _yRes/2, _zRes/2);
+  const double radius = 0.1;
+
+  if (_peeledIOP.cols() == 0) {
+    buildPeeledSparseIOP(_peeledIOP, center, radius);
+  }
+  VectorXd afterIOP = _peeledIOP * velocityTrue.peelBoundary().flattenedEigen();
+  velocityTrue.setWithPeeled(afterIOP);
 
   TIMER projectionTimer("Velocity projection");
-
   ////////////////////////////////////////////////////////////////////
   // QUESTION: is this the right initial value for _qDot?
   _qDot = _velocity.peeledProject(_preprojectU);
   ////////////////////////////////////////////////////////////////////
-
   projectionTimer.stop();
 
   // reduced IOP
   reducedSetZeroSphere();
+
+
+  ////////////////////////////////////////////////////////////////////
+  // QUESTION: not sure which basis with which to unproject
+  // _velocity.peeledUnproject(_U, _qDot);
+  _velocity.peeledUnproject(_preadvectU, _qDot);
+  ////////////////////////////////////////////////////////////////////
+  
+  cout << "Stomping bounadries. \n";
+  diffTruth(velocityTrue, densityTrue);
 
   ////////////////////////////////////////////////////////////////////
   // QUESTION: am I using preprojectToPreadvect correctly?
@@ -340,7 +369,7 @@ void SUBSPACE_FLUID_3D_EIGEN::stepObstacleReorderedCubatureStam()
 	_totalSteps++;
 
   // diff the current sim results against ground truth
-  diffGroundTruth();
+  // diffGroundTruth();
 }
 //////////////////////////////////////////////////////////////////////
 // do a full-rank advection of heat and density
@@ -542,6 +571,26 @@ void SUBSPACE_FLUID_3D_EIGEN::diffGroundTruth()
   cout << " velocity relative error: " << _velocityErrorRelative.back() << endl;
 
   diff = _density.peelBoundary().flattenedEigen() - ground.density().peelBoundary().flattenedEigen();
+  _densityErrorAbs.push_back(diff.norm());
+  _densityErrorRelative.push_back(diff.norm() / _density.peelBoundary().flattened().norm2());
+  cout << " density abs error:      " << _densityErrorAbs.back() << endl;
+  cout << " density relative error: " << _densityErrorRelative.back() << endl;
+}
+
+//////////////////////////////////////////////////////////////////////
+// diff the passed in sim results against the true results
+//////////////////////////////////////////////////////////////////////
+void SUBSPACE_FLUID_3D_EIGEN::diffTruth(const VECTOR3_FIELD_3D& testVelocity, 
+    const FIELD_3D& testDensity)
+{
+  cout << "Invoking diffTruth: \n";
+  VectorXd diff = testVelocity.peelBoundary().flattenedEigen() - _velocity.peelBoundary().flattenedEigen();
+  _velocityErrorAbs.push_back(diff.norm());
+  _velocityErrorRelative.push_back(diff.norm() / _velocity.peelBoundary().flattened().norm2());
+  cout << " velocity abs error:      " << _velocityErrorAbs.back() << endl;
+  cout << " velocity relative error: " << _velocityErrorRelative.back() << endl;
+
+  diff = testDensity.peelBoundary().flattenedEigen() - _density.peelBoundary().flattenedEigen();
   _densityErrorAbs.push_back(diff.norm());
   _densityErrorRelative.push_back(diff.norm() / _density.peelBoundary().flattened().norm2());
   cout << " density abs error:      " << _densityErrorAbs.back() << endl;
@@ -1661,6 +1710,25 @@ void SUBSPACE_FLUID_3D_EIGEN::buildFlatA(SPARSE_MATRIX_ARRAY& sparseA, unsigned 
 void SUBSPACE_FLUID_3D_EIGEN::buildSparseIOP(SPARSE_MATRIX& A, const VEC3I& center, double radius)
 {
   assert ( radius < _lengths.maxElement() ); 
+  A.setToIdentity();
+  VEC3F centerCoords = cellCenter(center[0], center[1], center[2]);
+  int index = 0;
+  for (int z = 1; z < _zRes - 1; z++) {
+    for (int y = 1; y < _yRes - 1; y++) {
+      for (int x = 1; x < _xRes - 1; x++) {
+        for (int i = 0; i < 3; i++, index++) {
+          if ( norm2(cellCenter(x, y, z) - centerCoords) < radius * radius ) {
+          A(index, index) = 0.0;
+          }
+        }
+      }
+    }
+  }        
+}
+void SUBSPACE_FLUID_3D_EIGEN::buildPeeledSparseIOP(SPARSE_MATRIX& A, const VEC3I& center, double radius) 
+{
+  A = SPARSE_MATRIX(3 * (_xRes - 2) * (_yRes - 2) * (_zRes - 2),
+                    3 * (_xRes - 2) * (_yRes - 2) * (_zRes - 2));
   A.setToIdentity();
   VEC3F centerCoords = cellCenter(center[0], center[1], center[2]);
   int index = 0;

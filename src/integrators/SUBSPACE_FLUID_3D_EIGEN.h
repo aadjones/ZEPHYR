@@ -265,13 +265,15 @@ protected:
   void reducedSetZeroSphere();
 
   // build a sparse matrix version of IOP
-  void buildSparseIOP(SPARSE_MATRIX& A, const VEC3I& cellCenter, double radius);
+  void buildSparseIOP(SPARSE_MATRIX& A, const VEC3I& center, double radius);
+  void buildPeeledSparseIOP(SPARSE_MATRIX& A, const VEC3I& center, double radius);
 
   // do a full-rank advection of heat and density using semi-Lagrangian
   void advectHeatAndDensityStam();
   
   // diff the current sim results against ground truth
   void diffGroundTruth();
+  void diffTruth(const VECTOR3_FIELD_3D& testVelocity, const FIELD_3D& testDensity);
   
   // do Stam-style adveiction using cubautre
   void reducedAdvectStagedStamFast();
