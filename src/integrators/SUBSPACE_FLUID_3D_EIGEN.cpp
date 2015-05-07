@@ -54,8 +54,14 @@ SUBSPACE_FLUID_3D_EIGEN::SUBSPACE_FLUID_3D_EIGEN(int xRes, int yRes, int zRes, c
 
   if (!loadNothing)
   {
-    // initOutOfCore();
-    initOutOfCoreIOP();
+    if (usingIOP) {
+      initOutOfCoreIOP();
+    }
+    else {
+      cout << "Not using IOP in fluid constructor. \n";
+      initOutOfCore();
+    }
+
 
     readAdvectionCubature();
   }
@@ -263,6 +269,89 @@ void SUBSPACE_FLUID_3D_EIGEN::stepReorderedCubatureStam()
   diffGroundTruth();
 }
 //////////////////////////////////////////////////////////////////////
+// The reduced solver, with peeled boundaries, 
+// with cubature enabled
+//////////////////////////////////////////////////////////////////////
+void SUBSPACE_FLUID_3D_EIGEN::stepReorderedCubatureStamTest()
+{
+  TIMER functionTimer(__FUNCTION__);
+  Real goalTime = 0.1;
+  Real currentTime = 0;
+
+  // compute the CFL condition
+  _dt = goalTime;
+
+  // benchmarks to test against
+  VECTOR3_FIELD_3D velocityTest;
+  FIELD_3D densityTest;
+
+  // wipe forces
+  _force.clear();
+ 
+  // wipe boundaries
+  _velocity.setZeroBorder();
+
+  // compute the forces
+  addBuoyancy(_heat.data());
+  _velocity.axpy(_dt, _force);
+  _force.clear();
+
+  addVorticity();
+  _velocity.axpy(_dt, _force);
+
+  VECTOR::printVertical = false;
+ 
+  // grab the velocity preadvection
+  velocityTest = _velocity; 
+  // do a full-coordinates advection of just heat and density
+  // advectHeatAndDensityStam();
+
+  // for the test, we will do a full-coordinates advection of 
+  // velocity, heat and density
+  advectStam();
+
+  // _velocity is now post-advected
+
+  // grab the post-advection density
+  densityTest = _density;
+ 
+  // next, do a reduced-coordinates advection of velocity 
+  TIMER projectionTimer("Velocity projection");
+
+  _qDot = velocityTest.peeledProject(_preadvectU);
+  
+  projectionTimer.stop();
+ 
+  reducedAdvectStagedStamFast();
+
+  velocityTest.peeledUnproject(_U, _qDot);
+  cout << "Advection test: \n";
+  diffTruth(velocityTest, densityTest);
+
+  TIMER diffusionProjectionTimer("Diffusion projection");
+
+  reducedPeeledDiffusion();
+
+  diffusionProjectionTimer.stop();
+
+  reducedStagedProject();
+
+  // do the full space unprojection
+  TIMER unprojectionTimer("Velocity unprojection");
+  _velocity.peeledUnproject(_U, _qDot);
+  unprojectionTimer.stop();
+
+  currentTime += _dt;
+
+  cout << " Simulation step " << _totalSteps << " done. " << endl;
+
+	_totalTime += goalTime;
+	_totalSteps++;
+
+  // diff the current sim results against ground truth
+  // diffGroundTruth();
+}
+//////////////////////////////////////////////////////////////////////
 // The reduced solver, with peeled boundaries, with an obstacle, 
 // with cubature enabled
 //////////////////////////////////////////////////////////////////////
@@ -323,6 +412,7 @@ void SUBSPACE_FLUID_3D_EIGEN::stepObstacleReorderedCubatureStam()
   ////////////////////////////////////////////////////////////////////
   // QUESTION: is this the right initial value for _qDot?
   _qDot = _velocity.peeledProject(_preprojectU);
+  // _qDot = _velocity.peeledProject(_preadvectU);
   ////////////////////////////////////////////////////////////////////
   projectionTimer.stop();
 
@@ -333,11 +423,16 @@ void SUBSPACE_FLUID_3D_EIGEN::stepObstacleReorderedCubatureStam()
   ////////////////////////////////////////////////////////////////////
   // QUESTION: not sure which basis with which to unproject
   // _velocity.peeledUnproject(_U, _qDot);
-  _velocity.peeledUnproject(_preadvectU, _qDot);
+  // _velocity.peeledUnproject(_preadvectU, _qDot);
+  _velocity.peeledUnproject(_preprojectU, _qDot);
   ////////////////////////////////////////////////////////////////////
   
-  cout << "Stomping bounadries. \n";
+  cout << "Stomping boundaries. \n";
   diffTruth(velocityTrue, densityTrue);
+  
+  // this will modify _velocity
+  project();
+  velocityTrue = _velocity;
 
   ////////////////////////////////////////////////////////////////////
   // QUESTION: am I using preprojectToPreadvect correctly?
@@ -346,6 +441,11 @@ void SUBSPACE_FLUID_3D_EIGEN::stepObstacleReorderedCubatureStam()
   // that's much worse...
   // reducedStagedProject();
   ////////////////////////////////////////////////////////////////////
+  
+  _velocity.peeledUnproject(_preadvectU, _qDot);
+  cout << "Pressure prjoection. \n";
+  diffTruth(velocityTrue, densityTrue);
+  
 
   // reduced advection shouldn't change for IOP
   advectHeatAndDensityStam();

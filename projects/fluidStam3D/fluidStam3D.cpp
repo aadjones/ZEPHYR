@@ -58,10 +58,6 @@ FLUID_3D_MIC* fluid = NULL;
 
 void runEverytime();
 
-VEC3F cellCenter(int x, int y, int z);
-void buildSparseIOP(SPARSE_MATRIX& A, const VEC3I& center, double radius);
-SPARSE_MATRIX fullIOP(3 * 48 * 64 * 48, 3 * 48 * 64 * 48);
-
 vector<VECTOR> snapshots;
 
 // user configuration
@@ -139,11 +135,6 @@ void glutDisplay()
       fluid->density().draw();
       fluid->density().drawBoundingBox();
     glPopMatrix();
-
-    glPushMatrix();
-      glTranslatef(cellCenter(48, 64, 46)[0], cellCenter(48, 64, 48)[1], cellCenter(48, 64, 48)[2]);
-      glutWireSphere(0.1, 10, 10);
-    glPopMatrix();  
 
     //drawAxes();
   glvu.EndFrame();
@@ -360,8 +351,7 @@ void runEverytime()
     // step the sim
     cout << " Simulation step " << steps << " of " << simulationSnapshots << endl;
     fluid->addSmokeColumn();
-    // fluid->step();
-    fluid->stepWithObstacle();
+    fluid->step();
 
     // write to disk
     char buffer[256];
@@ -378,7 +368,7 @@ void runEverytime()
       if (captureMovie)
       {
        // write out the movie
-       movie.writeMovie("movieObstacle.mov");
+       movie.writeMovie("movie.mov");
 
       // reset the movie object
       movie = QUICKTIME_MOVIE();
@@ -395,29 +385,4 @@ void runEverytime()
     steps++;
   }
 }
-
-VEC3F cellCenter(int x, int y, int z) 
-{
-  double dx = 1.0 / 48.0;
-  double dy = 1.0 / 64.0;
-  double dz = 1.0 / 48.0;
-
-  VEC3F halfLengths(0.5, 0.5, 0.5);
-
-  // set it to the lower corner
-  VEC3F final = VEC3F(0.0, 0.0, 0.0) - halfLengths;
-
-  // displace to the NNN corner
-  final[0] += x * dx;
-  final[1] += y * dy;
-  final[2] += z * dz;
-
-  // displace it to the cell center
-  final[0] += dx * 0.5;
-  final[1] += dy * 0.5;
-  final[2] += dz * 0.5;
-
-  return final;
-}
-
 

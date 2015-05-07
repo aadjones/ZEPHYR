@@ -51,6 +51,7 @@ public:
   unsigned int& domainBcBottom() { return _domainBcBottom; };
 
   void stepReorderedCubatureStam();
+  void stepReorderedCubatureStamTest();
   void stepObstacleReorderedCubatureStam();
 
   const MatrixXd& U() const { return _U; };

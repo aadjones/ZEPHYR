@@ -150,10 +150,6 @@ void glutDisplay()
       /////////////////////////////////////////////////////////////////
     glPopMatrix();
     
-    glPushMatrix();
-      glTranslatef(cellCenter(48, 64, 46)[0], cellCenter(48, 64, 48)[1], cellCenter(48, 64, 48)[2]);
-      glutWireSphere(0.1, 10, 10);
-    glPopMatrix();  
 
     //drawAxes();
   glvu.EndFrame();
@@ -368,8 +364,7 @@ void runEverytime()
     static int steps = 0;
     cout << " Simulation step " << steps << endl;
     fluid->addSmokeColumn();
-    // fluid->stepReorderedCubatureStam();
-    fluid->stepObstacleReorderedCubatureStam();
+    fluid->stepReorderedCubatureStamTest();
     
     /* 
     char buffer[256];
@@ -419,26 +414,3 @@ void runEverytime()
   }
 }
 
-VEC3F cellCenter(int x, int y, int z) 
-{
-  double dx = 1.0 / 48.0;
-  double dy = 1.0 / 64.0;
-  double dz = 1.0 / 48.0;
-
-  VEC3F halfLengths(0.5, 0.5, 0.5);
-
-  // set it to the lower corner
-  VEC3F final = VEC3F(0.0, 0.0, 0.0) - halfLengths;
-
-  // displace to the NNN corner
-  final[0] += x * dx;
-  final[1] += y * dy;
-  final[2] += z * dz;
-
-  // displace it to the cell center
-  final[0] += dx * 0.5;
-  final[1] += dy * 0.5;
-  final[2] += dz * 0.5;
-
-  return final;
-}
