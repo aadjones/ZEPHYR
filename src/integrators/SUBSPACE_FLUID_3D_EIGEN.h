@@ -51,6 +51,8 @@ public:
   unsigned int& domainBcBottom() { return _domainBcBottom; };
 
   void stepReorderedCubatureStam();
+  void stepReorderedCubatureStamTest();
+  void stepObstacleReorderedCubatureStam();
 
   const MatrixXd& U() const { return _U; };
   const MatrixXd& preadvectU() const { return _preadvectU; };
@@ -81,13 +83,16 @@ public:
   void loadReducedRuntimeBases(string path = string(""));
 
   // load, and if needed, precompute the matrices needed for IOP
-  void loadReducedIOP(const int snapshots);
+  void loadReducedIOP(string path = string(""));
 
   // read in a cubature scheme
   void readAdvectionCubature();
 
   // build matrices assuming that a limited number of matrices fit in memory
   void buildOutOfCoreMatrices();
+
+  // same as above but for IOP
+  void buildOutOfCoreMatricesIOP();
 
 protected: 
   MatrixXd _U;
@@ -139,6 +144,12 @@ protected:
 
   // matrix to project pressure out of velocity
   SPARSE_MATRIX _pressureToVelocity;
+  
+  // matrix to project the full IOP matrix into the subspace
+  MatrixXd _projectionIOP;
+
+  // reduced matrix version of stomping the interior of an obstacle for IOP
+  MatrixXd _reducedIOP;
 
   // reduced version of _pressureToVelocity
   MatrixXd _reducedPressureToVelocity;
@@ -218,12 +229,16 @@ protected:
   // projected Neumann IOP matrices
   vector<MatrixXd> _projectedNeumann;
 
+  // get the cell center
+  VEC3F cellCenter(int x, int y, int z);
+
   // perform reduced order diffusion with separate boundary slabs
   void reducedPeeledDiffusion();
 
   // initialize the staged version, assuming the Us were computed out of core and will not
   // all fit in memory
   void initOutOfCore();
+  void initOutOfCoreIOP();
 
   // build a peeled version of the damping matrix
   void buildPeeledDampingMatrix();
@@ -243,12 +258,23 @@ protected:
 
   // do a staged reduced order pressure projection
   void reducedStagedProject();
+ 
+  // do a staged reduced order pressure projection for use with IOP 
+  void reducedStagedProjectIOP();
+
+  // do a reduced zeroing out the interior of the sphere for IOP
+  void reducedSetZeroSphere();
+
+  // build a sparse matrix version of IOP
+  void buildSparseIOP(SPARSE_MATRIX& A, const VEC3I& center, double radius);
+  void buildPeeledSparseIOP(SPARSE_MATRIX& A, const VEC3I& center, double radius);
 
   // do a full-rank advection of heat and density using semi-Lagrangian
   void advectHeatAndDensityStam();
   
   // diff the current sim results against ground truth
   void diffGroundTruth();
+  void diffTruth(const VECTOR3_FIELD_3D& testVelocity, const FIELD_3D& testDensity);
   
   // do Stam-style adveiction using cubautre
   void reducedAdvectStagedStamFast();

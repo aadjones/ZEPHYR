@@ -17,6 +17,7 @@
  Copyright 2013 Theodore Kim
  */
 #include "EIGEN.h"
+
 #include <cmath>
 #include "QUICKTIME_MOVIE.h"
 
@@ -29,13 +30,19 @@
 #include <GL/freeglut.h>
 #include <GL/glu.h>
 #endif
-#include "SUBSPACE_FLUID_3D_EIGEN.h"
+#include "FLUID_3D_MIC.h"
 #include "MATRIX.h"
 #include "SIMPLE_PARSER.h"
 
 using namespace std;
 
 GLVU glvu;
+
+// Quicktime movie to capture to
+QUICKTIME_MOVIE movie;
+
+// currently capturing frames for a movie?
+bool captureMovie = true;
 
 // is the mouse pressed?
 bool mouseClicked = false;
@@ -46,28 +53,24 @@ float clickZ;
 // animate it this frame?
 bool animate = true;
 
-// currently capturing frames for a movie?
-bool captureMovie = true;
-
 // fluid being simulated
-SUBSPACE_FLUID_3D_EIGEN* fluid = NULL;
+FLUID_3D_MIC* fluid = NULL;
 
-// ground truth
-FLUID_3D_MIC* ground = NULL;
+// resolutions
+int xRes = 0;
+int yRes = 0;
+int zRes = 0;
 
-// Quicktime movie to capture to
-QUICKTIME_MOVIE movie;
-
-void runOnce();
 void runEverytime();
+
 VEC3F cellCenter(int x, int y, int z);
 
 vector<VECTOR> snapshots;
 
 // user configuration
-string snapshotPath;
-string previewReducedMovie;
-int simulationSnapshots;
+string snapshotPath("./data/snapshots.stam.no.vorticity/");
+string previewMovie("./data/stam.mov");
+int simulationSnapshots = 20;
 
 ///////////////////////////////////////////////////////////////////////
 // draw coordinate axes
@@ -136,24 +139,20 @@ void glutDisplay()
 
     glPushMatrix();
       glTranslatef(0.5, 0.5, 0.5);
-      /////////////////////////////////////////////////////////////////
-      // take difference here
-      /* 
-      auto density = fluid->density();
-      auto ground_density = ground->density();
-      auto diff = density - ground_density;
-      diff.draw();
-      diff.drawBoundingBox();
-      */
       fluid->density().draw();
       fluid->density().drawBoundingBox();
-      /////////////////////////////////////////////////////////////////
     glPopMatrix();
-    
+
+    glPushMatrix();
+      // apparently the coordinates' origin is at the bottom left
+      glTranslatef(cellCenter(48, 64, 48)[0], cellCenter(48, 64, 48)[1],
+          cellCenter(48, 64, 48)[2]);
+      cout << "computed cell center for 48, 64, 48: " << cellCenter(48, 64, 48) << endl;
+      glutWireSphere(0.1, 10, 10);
+    glPopMatrix();  
 
     //drawAxes();
   glvu.EndFrame();
-  // if we're recording a movie, capture a frame
   if (captureMovie) {
     movie.addFrameGL();
   }
@@ -178,28 +177,28 @@ void glutKeyboard(unsigned char key, int x, int y)
     case 'a':
       animate = !animate;
       break;
-    case 'q':
-      exit(0);
-      break;
     case 'm':
-        // if we were already capturing a movie
-        if (captureMovie)
-        {
-         // write out the movie
-         movie.writeMovie("movie.mov");
+      // if we were already capturing a movie
+      if (captureMovie)
+      {
+        // write out the movie
+        movie.writeMovie("movie.mov");
 
         // reset the movie object
         movie = QUICKTIME_MOVIE();
 
-       // stop capturing frames
-       captureMovie = false;
-        }
-        else
-        {
-         cout << " Starting to capture movie. " << endl;
+        // stop capturing frames
+        captureMovie = false;
+      }
+      else
+      {
+        cout << " Starting to capture movie. " << endl;
         captureMovie = true;
-        }
-       break; 
+      }
+      break; 
+    case 'q':
+      exit(0);
+      break;
     default:
       break;
   }
@@ -281,6 +280,7 @@ int glvuWindow()
   float Far = 10.0f;
   glvu.SetAllCams(ModelMin, ModelMax, Eye, LookAtCntr, Up, Yfov, Aspect, Near, Far);
 
+  //glvuVec3f center(0.25, 0.25, 0.25);
   glvuVec3f center(0.5, 0.5, 0.5);
   glvu.SetWorldCenter(center);
 
@@ -302,14 +302,15 @@ int main(int argc, char *argv[])
   }
   SIMPLE_PARSER parser(argv[1]);
 
-  int xRes = parser.getInt("xRes", 48);
-  int yRes = parser.getInt("yRes", 64);
-  int zRes = parser.getInt("zRes", 48);
-  string reducedPath = parser.getString("reduced path", "./data/reduced.dummy/");
-  snapshotPath = parser.getString("snapshot path", "./data/dummy/");
-  simulationSnapshots = parser.getInt("simulation snapshots", 20);
+  int amplify = 4;
+  // what does amplify do??
+
+  xRes = parser.getInt("xRes", 48);
+  yRes = parser.getInt("yRes", 64);
+  zRes = parser.getInt("zRes", 48);
   Real vorticity = parser.getFloat("vorticity", 0);
 
+  cout << " Using resoluion: " << xRes << " " << yRes << " " << zRes << endl;
   cout << " Using vorticity: " << vorticity << endl;
 
   unsigned int boundaries[6];
@@ -330,20 +331,13 @@ int main(int argc, char *argv[])
       cout << "Dirichlet " << endl;
   }
 
-  double discardThreshold = parser.getFloat("discard threshold", 1e-9);
-  cout << " Using discard threshold: " << discardThreshold << endl;
-
-	fluid = new SUBSPACE_FLUID_3D_EIGEN(xRes, yRes, zRes, reducedPath, &boundaries[0]);
-  fluid->loadReducedRuntimeBases();
-
-  fluid->fullRankPath() = snapshotPath;
+  snapshotPath = parser.getString("snapshot path", "./data/dummy/");
+  simulationSnapshots = parser.getInt("simulation snapshots", 20);
+  
+	fluid = new FLUID_3D_MIC(xRes, yRes, zRes, amplify, &boundaries[0]);
   fluid->vorticityEps() = vorticity;
+  fluid->snapshotPath() = snapshotPath;
   
-  // ground = new FLUID_3D_MIC(xRes, yRes, zRes, 0);
- 
-  
-  TIMER::printTimings();
- 
   glutInit(&argc, argv);
   glvuWindow();
 
@@ -352,65 +346,83 @@ int main(int argc, char *argv[])
 
 //////////////////////////////////////////////////////////////////////////////
 //////////////////////////////////////////////////////////////////////////////
-
-void runOnce()
-  {
-  }
-
 void runEverytime()
 {
+  static bool firstTime = true;
+
+  if (firstTime)
+  {
+    string mkdir("mkdir ");
+    mkdir = mkdir + snapshotPath;
+    system(mkdir.c_str());
+
+    firstTime = false;
+  }
+
   if (animate)
   {
     static int steps = 0;
-    cout << " Simulation step " << steps << endl;
+
+    // step the sim
+    cout << " Simulation step " << steps << " of " << simulationSnapshots << endl;
     fluid->addSmokeColumn();
-    fluid->stepReorderedCubatureStamTest();
-    
-    /* 
+    fluid->stepWithObstacle();
+
+    // write to disk
     char buffer[256];
-    string path = snapshotPath;
-    sprintf(buffer, "%sfluid.%04i.fluid3d", path.c_str(), steps);
+    sprintf(buffer, "%sfluid.%04i.fluid3d", snapshotPath.c_str(), steps);
     string filename(buffer);
-    ground->readGz(filename);
-    cout << " Loaded in ground. " << endl;
-    */
-
-    steps++;
-
-    if (steps == 150) {    
-    // if we were already capturing a movie
-        if (captureMovie)
-        {
-         // write out the movie
-         movie.writeMovie("movie.mov");
-
-        // reset the movie object
-        movie = QUICKTIME_MOVIE();
-
-       // stop capturing frames
-       captureMovie = false;
-        }
-    }
-    if (steps % 10 == 0)
-    {
-      VECTOR::printVertical = false;
-      TIMER::printTimingsPerFrame(steps);
-      cout << " velocityAbs = " << VECTOR(fluid->velocityErrorAbs()) << ";" << endl;
-      cout << " velocityRelative = " << VECTOR(fluid->velocityErrorRelative()) << ";" << endl;
-      cout << " densityAbs = " << VECTOR(fluid->densityErrorAbs()) << ";" << endl;
-      cout << " densityRelative = " << VECTOR(fluid->densityErrorRelative()) << ";" << endl;
-    }
-
+    fluid->writeGz(filename);
+    fluid->appendStreams();
+   
     // check if we're done
-    if (steps == 151)
-      exit(0);
-    // stop early
-    /*
-    if (steps == 4) {
-    cout << "Stopping early!" << endl;
+    if (steps == simulationSnapshots)
+    {
+      TIMER::printTimings();      
+      // if we were already capturing a movie
+      if (captureMovie)
+      {
+       // write out the movie
+       movie.writeMovie("movieObstacle.mov");
+
+      // reset the movie object
+      movie = QUICKTIME_MOVIE();
+
+     // stop capturing frames
+     captureMovie = false;
+     }
     exit(0);
     }
-    */
+  
+    if (steps % 10 == 0)
+      TIMER::printTimings();
+
+    steps++;
   }
 }
+
+VEC3F cellCenter(int x, int y, int z) 
+{
+  double dx = 1.0 / 48.0;
+  double dy = 1.0 / 64.0;
+  double dz = 1.0 / 48.0;
+
+  VEC3F halfLengths(0.5, 0.5, 0.5);
+
+  // set it to the lower corner
+  VEC3F final = VEC3F(0.0, 0.0, 0.0) - halfLengths;
+
+  // displace to the NNN corner
+  final[0] += x * dx;
+  final[1] += y * dy;
+  final[2] += z * dz;
+
+  // displace it to the cell center
+  final[0] += dx * 0.5;
+  final[1] += dy * 0.5;
+  final[2] += dz * 0.5;
+
+  return final;
+}
+
 

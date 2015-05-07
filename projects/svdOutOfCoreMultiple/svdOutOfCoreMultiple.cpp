@@ -93,6 +93,7 @@ int main(int argc, char *argv[])
   double discardThreshold = parser.getFloat("discard threshold", 1e-9);
 
   bool usingIOP = parser.getBool("iop", false);
+  // bool usingIOP = true;
 
   if (usingIOP)
     cout << " Using IOP " << endl;

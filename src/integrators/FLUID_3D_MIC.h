@@ -44,6 +44,7 @@ public:
   void addSmokeTestCase(Real* field, VEC3I res);
 
   void step();
+  void stepWithObstacle();
 
   int xRes() const { return _xRes; };
   int yRes() const { return _yRes; };
@@ -221,6 +222,11 @@ protected:
 
   // Neumann matrix for IOP
   SPARSE_MATRIX _neumannIOP;
+  SPARSE_MATRIX _dirichletIOP;
+
+  // Aaron added _fullIOP and peeledIOP
+  SPARSE_MATRIX _fullIOP;
+  SPARSE_MATRIX _peeledIOP;
 
   // procedurally generated velocity basis
   VECTOR3_FIELD_3D _proceduralVelocity;
@@ -245,6 +251,7 @@ protected:
   // solver stuff
   void project();
   void projectIOP();
+  void matrixIOP(const VEC3I& center, double radius);
   void solvePoisson(FIELD_3D& field, FIELD_3D& b, unsigned char* skip, bool heat = false);
 	
   // handle obstacle boundaries
@@ -253,8 +260,15 @@ protected:
   // build the damping matrix
   void buildPeeledDampingMatrixFull();
 
+  // build the IOP stomping matrix
+  void buildSparseIOP(SPARSE_MATRIX& A, const VEC3I& center, double radius);
+
+  // build the peeled IOP stomping matrix
+  void buildPeeledSparseIOP(SPARSE_MATRIX& A, const VEC3I& center, double radius);
+
   // advect using first order semi-Lagrangian
   void advectStam();
+  VEC3F cellCenter(int x, int y, int z);
 };
 
 #endif

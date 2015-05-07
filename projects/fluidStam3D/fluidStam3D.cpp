@@ -19,6 +19,8 @@
 #include "EIGEN.h"
 
 #include <cmath>
+#include "QUICKTIME_MOVIE.h"
+
 #include <glvu.h>
 #include <VEC3.h>
 #include <iostream>
@@ -35,6 +37,12 @@
 using namespace std;
 
 GLVU glvu;
+
+// Quicktime movie to capture to
+QUICKTIME_MOVIE movie;
+
+// currently capturing frames for a movie?
+bool captureMovie = true;
 
 // is the mouse pressed?
 bool mouseClicked = false;
@@ -130,6 +138,9 @@ void glutDisplay()
 
     //drawAxes();
   glvu.EndFrame();
+  if (captureMovie) {
+    movie.addFrameGL();
+  }
 }
 
 ///////////////////////////////////////////////////////////////////////
@@ -151,6 +162,25 @@ void glutKeyboard(unsigned char key, int x, int y)
     case 'a':
       animate = !animate;
       break;
+    case 'm':
+      // if we were already capturing a movie
+      if (captureMovie)
+      {
+        // write out the movie
+        movie.writeMovie("movie.mov");
+
+        // reset the movie object
+        movie = QUICKTIME_MOVIE();
+
+        // stop capturing frames
+        captureMovie = false;
+      }
+      else
+      {
+        cout << " Starting to capture movie. " << endl;
+        captureMovie = true;
+      }
+      break; 
     case 'q':
       exit(0);
       break;
@@ -258,6 +288,8 @@ int main(int argc, char *argv[])
   SIMPLE_PARSER parser(argv[1]);
 
   int amplify = 4;
+  // what does amplify do??
+
   int xRes = parser.getInt("xRes", 48);
   int yRes = parser.getInt("yRes", 64);
   int zRes = parser.getInt("zRes", 48);
@@ -286,7 +318,7 @@ int main(int argc, char *argv[])
 
   snapshotPath = parser.getString("snapshot path", "./data/dummy/");
   simulationSnapshots = parser.getInt("simulation snapshots", 20);
-
+  
 	fluid = new FLUID_3D_MIC(xRes, yRes, zRes, amplify, &boundaries[0]);
   fluid->vorticityEps() = vorticity;
   fluid->snapshotPath() = snapshotPath;
@@ -331,13 +363,26 @@ void runEverytime()
     // check if we're done
     if (steps == simulationSnapshots)
     {
-      TIMER::printTimings();
-      exit(0);
-    }
+      TIMER::printTimings();      
+      // if we were already capturing a movie
+      if (captureMovie)
+      {
+       // write out the movie
+       movie.writeMovie("movie.mov");
 
+      // reset the movie object
+      movie = QUICKTIME_MOVIE();
+
+     // stop capturing frames
+     captureMovie = false;
+     }
+    exit(0);
+    }
+  
     if (steps % 10 == 0)
       TIMER::printTimings();
 
     steps++;
   }
 }
+

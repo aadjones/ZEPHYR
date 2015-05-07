@@ -204,6 +204,8 @@ public:
   void copyBorderY();
   void copyBorderZ();
   void copyBorderAll();
+  
+  void setZeroSphere(const VEC3I& center, double radius);
 
   // BLAS-like interface, output += alpha * input
   void axpy(const Real& alpha, const VECTOR3_FIELD_3D& field);

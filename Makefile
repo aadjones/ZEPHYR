@@ -1,6 +1,6 @@
 SHELL := /bin/bash -e
 
-BINS = fluidStam3D cubatureGeneratorStamStaged reducedStagedStam3D svdOutOfCoreMultiple buildProducts compressMatrices reducedCompressedStagedStam3D
+BINS = fluidStam3D cubatureGeneratorStamStaged reducedStagedStam3D svdOutOfCoreMultiple buildProducts compressMatrices reducedCompressedStagedStam3D fluidIOP3D reducedIOP3D
 
 SRCS = geometry linearalgebra integrators util glvu cubature compression
 

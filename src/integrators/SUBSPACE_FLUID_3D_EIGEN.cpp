@@ -54,7 +54,14 @@ SUBSPACE_FLUID_3D_EIGEN::SUBSPACE_FLUID_3D_EIGEN(int xRes, int yRes, int zRes, c
 
   if (!loadNothing)
   {
-    initOutOfCore();
+    if (usingIOP) {
+      initOutOfCoreIOP();
+    }
+    else {
+      cout << "Not using IOP in fluid constructor. \n";
+      initOutOfCore();
+    }
+
 
     readAdvectionCubature();
   }
@@ -74,6 +81,7 @@ SUBSPACE_FLUID_3D_EIGEN::SUBSPACE_FLUID_3D_EIGEN(int xRes, int yRes, int zRes, c
 //////////////////////////////////////////////////////////////////////
 void SUBSPACE_FLUID_3D_EIGEN::initOutOfCore()
 {
+
   // init the peeled dimensions
   _xPeeled = _xRes - 2;
   _yPeeled = _yRes - 2;
@@ -129,7 +137,68 @@ void SUBSPACE_FLUID_3D_EIGEN::initOutOfCore()
     }
   }
 }
+void SUBSPACE_FLUID_3D_EIGEN::initOutOfCoreIOP()
+{
+  cout << "Using initOutOfCoreIOP inside constructor!" << endl;
+  // init the peeled dimensions
+  _xPeeled = _xRes - 2;
+  _yPeeled = _yRes - 2;
+  _zPeeled = _zRes - 2;
+  _slabPeeled = _xPeeled * _yPeeled;
 
+  bool pcaBuilt = fileExists(_reducedPath + string("U.final.matrix")) &&
+                  fileExists(_reducedPath + string("U.iop.matrix"))   &&
+                  fileExists(_reducedPath + string("U.preproject.matrix")) &&
+                  fileExists(_reducedPath + string("U.preadvect.matrix")) &&
+                  fileExists(_reducedPath + string("U.prediffuse.matrix")) &&
+                  fileExists(_reducedPath + string("U.pressure.matrix"));
+
+  // check if pre-built matrices exist
+  bool filesBuilt = fileExists(_reducedPath + string("projected.A.matrix")) &&
+                    fileExists(_reducedPath + string("projected.ptof.matrix")) &&
+                    fileExists(_reducedPath + string("projected.vtod.matrix")) &&
+                    fileExists(_reducedPath + string("damping.peeled.matrix")) &&
+                    fileExists(_reducedPath + string("projected.ptov.matrix")) &&
+                    fileExists(_reducedPath + string("U.iop.subspace.matrix")) &&
+                    fileExists(_reducedPath + string("inverseProduct.matrix"));
+
+  if (!filesBuilt)
+    buildOutOfCoreMatricesIOP();
+  else
+  {
+    string filename;
+    
+    filename = _reducedPath + string("projected.ptof.matrix");
+    // actually using preproject to preadvect rather than
+    // preproject to final here
+    EIGEN::read(filename, _preprojectToPreadvect);
+
+    filename = _reducedPath + string("projected.vtod.matrix");
+    EIGEN::read(filename, _reducedVelocityToDivergence);
+
+    filename = _reducedPath + string("projected.ptov.matrix");
+    EIGEN::read(filename, _reducedPressureToVelocity);
+
+    filename = _reducedPath + string("projected.A.matrix");
+    EIGEN::read(filename, _reducedA);
+
+    filename = _reducedPath + string("damping.peeled.matrix");
+    EIGEN::read(filename, _dampingMatrixReduced);
+    
+    filename = _reducedPath + string("inverseProduct.matrix");
+    bool success = EIGEN::read(filename, _inverseProduct);
+
+    if (!success)
+    {
+      // Needs everything prior to be built already
+      MatrixXd inverse = _reducedA.inverse();
+      _inverseProduct = _reducedPressureToVelocity * inverse * _reducedVelocityToDivergence;
+      filename = _reducedPath + string("inverseProduct.matrix");
+      EIGEN::write(filename, _inverseProduct);
+      TIMER::printTimings();
+    }
+  }
+}
 SUBSPACE_FLUID_3D_EIGEN::~SUBSPACE_FLUID_3D_EIGEN()
 {
 }
@@ -161,58 +230,33 @@ void SUBSPACE_FLUID_3D_EIGEN::stepReorderedCubatureStam()
   addVorticity();
   _velocity.axpy(_dt, _force);
 
-  // VectorXd flat;
   VECTOR::printVertical = false;
 
   advectHeatAndDensityStam();
-  // cout << "Did advectHeatAndDensityStam" << endl;
-  // VECTOR3_FIELD_3D velocityPeeled = _velocity.peelBoundary();
-  // VECTOR velocityFlatPeeled = velocityPeeled.flattened();
-  // cout << "_velocity: " << init_velocityFlatPeeled << endl;
-  // velocityFlatPeeled.write("velocityPeeled.field");
   
   
 
   TIMER projectionTimer("Velocity projection");
   _qDot = _velocity.peeledProject(_preadvectU);
-  // cout << "Did peeled project" << endl;
   
-  // VECTOR qDot = EIGEN::convert(_qDot);
-  // cout << "qDot preadvect: " << qDot << "; " << endl;
 
   projectionTimer.stop();
 
   reducedAdvectStagedStamFast();
-  // cout << "Did reducedAdvectStagedStamFast" << endl;
 
-  // qDot = EIGEN::convert(_qDot);
-  // cout << "qDot postadvect: " << qDot << "; " << endl;
   
-  TIMER diffusionProjectionTimer("Velocity projection");
-  diffusionProjectionTimer.stop();
+  TIMER diffusionProjectionTimer("Diffusion projection");
 
   reducedPeeledDiffusion();
-  // cout << "Did reducedPeeledDiffusion" << endl;
 
-  // qDot = EIGEN::convert(_qDot);
-  // cout << "qDot postdiffuse: " << qDot << "; " << endl;
+  diffusionProjectionTimer.stop();
 
   reducedStagedProject();
-  // cout << "did reducedStagedProject" << endl;
-
-  // qDot = EIGEN::convert(_qDot);
-  // cout << "qDot post reduced project: " << qDot << "; " << endl;
-  
-  _velocity.peeledUnproject(_U, _qDot);
-  // cout << "Did peeledUnproject" << endl;
-  // qDot = EIGEN::convert(_qDot);
-  // cout << "qDot post unproject: " << qDot << "; " << endl;
-
-  // VECTOR velocityFlat = _velocity.flattened();
-  // velocityFlat.write("velocityUnproject.vector");
 
   // do the full space unprojection
   TIMER unprojectionTimer("Velocity unprojection");
+  _velocity.peeledUnproject(_U, _qDot);
+  unprojectionTimer.stop();
 
   currentTime += _dt;
 
@@ -224,7 +268,209 @@ void SUBSPACE_FLUID_3D_EIGEN::stepReorderedCubatureStam()
   // diff the current sim results against ground truth
   diffGroundTruth();
 }
+//////////////////////////////////////////////////////////////////////
+// The reduced solver, with peeled boundaries, 
+// with cubature enabled
+//////////////////////////////////////////////////////////////////////
+void SUBSPACE_FLUID_3D_EIGEN::stepReorderedCubatureStamTest()
+{
+  TIMER functionTimer(__FUNCTION__);
+  Real goalTime = 0.1;
+  Real currentTime = 0;
 
+  // compute the CFL condition
+  _dt = goalTime;
+
+  // benchmarks to test against
+  VECTOR3_FIELD_3D velocityTest;
+  FIELD_3D densityTest;
+
+  // wipe forces
+  _force.clear();
+ 
+  // wipe boundaries
+  _velocity.setZeroBorder();
+
+  // compute the forces
+  addBuoyancy(_heat.data());
+  _velocity.axpy(_dt, _force);
+  _force.clear();
+
+  addVorticity();
+  _velocity.axpy(_dt, _force);
+
+  VECTOR::printVertical = false;
+ 
+  // grab the velocity preadvection
+  velocityTest = _velocity; 
+  // do a full-coordinates advection of just heat and density
+  // advectHeatAndDensityStam();
+
+  // for the test, we will do a full-coordinates advection of 
+  // velocity, heat and density
+  advectStam();
+
+  // _velocity is now post-advected
+
+  // grab the post-advection density
+  densityTest = _density;
+ 
+  // next, do a reduced-coordinates advection of velocity 
+  TIMER projectionTimer("Velocity projection");
+
+  _qDot = velocityTest.peeledProject(_preadvectU);
+  
+  projectionTimer.stop();
+ 
+  reducedAdvectStagedStamFast();
+
+  velocityTest.peeledUnproject(_U, _qDot);
+  cout << "Advection test: \n";
+  diffTruth(velocityTest, densityTest);
+
+  TIMER diffusionProjectionTimer("Diffusion projection");
+
+  reducedPeeledDiffusion();
+
+  diffusionProjectionTimer.stop();
+
+  reducedStagedProject();
+
+  // do the full space unprojection
+  TIMER unprojectionTimer("Velocity unprojection");
+  _velocity.peeledUnproject(_U, _qDot);
+  unprojectionTimer.stop();
+
+  currentTime += _dt;
+
+  cout << " Simulation step " << _totalSteps << " done. " << endl;
+
+	_totalTime += goalTime;
+	_totalSteps++;
+
+  // diff the current sim results against ground truth
+  // diffGroundTruth();
+}
+//////////////////////////////////////////////////////////////////////
+// The reduced solver, with peeled boundaries, with an obstacle, 
+// with cubature enabled
+//////////////////////////////////////////////////////////////////////
+void SUBSPACE_FLUID_3D_EIGEN::stepObstacleReorderedCubatureStam()
+{
+  TIMER functionTimer(__FUNCTION__);
+  VECTOR::printVertical = false;
+
+  Real goalTime = 0.1;
+  Real currentTime = 0;
+
+  // compute the CFL condition
+  _dt = goalTime;
+
+  // wipe forces
+  _force.clear();
+
+  // make a copy of velocity and density for ground truth
+  VECTOR3_FIELD_3D velocityTrue = _velocity;
+  FIELD_3D densityTrue = _density;
+  // wipe boundaries
+  _velocity.setZeroBorder();
+  velocityTrue.setZeroBorder();
+
+  ////////////////////////////////////////////////////////////////////
+  // QUESTION: do I need to wipe density border as well?
+  // (doesn't seem to matter since advectHeatAndDensityStam
+  // does it for you)
+  _density.setZeroBorder();
+  densityTrue.setZeroBorder();
+  ////////////////////////////////////////////////////////////////////
+  cout << "Setting zero border. \n";
+  diffTruth(velocityTrue, densityTrue);
+
+  // compute the forces
+  addBuoyancy(_heat.data());
+  _velocity.axpy(_dt, _force);
+  velocityTrue.axpy(_dt, _force);
+  _force.clear();
+
+  addVorticity();
+  _velocity.axpy(_dt, _force);
+  velocityTrue.axpy(_dt, _force);
+  
+  cout << "Adding forces. \n";
+  diffTruth(velocityTrue, densityTrue); 
+ 
+  VEC3I center(_xRes/2, _yRes/2, _zRes/2);
+  const double radius = 0.1;
+
+  if (_peeledIOP.cols() == 0) {
+    buildPeeledSparseIOP(_peeledIOP, center, radius);
+  }
+  VectorXd afterIOP = _peeledIOP * velocityTrue.peelBoundary().flattenedEigen();
+  velocityTrue.setWithPeeled(afterIOP);
+
+  TIMER projectionTimer("Velocity projection");
+  ////////////////////////////////////////////////////////////////////
+  // QUESTION: is this the right initial value for _qDot?
+  _qDot = _velocity.peeledProject(_preprojectU);
+  // _qDot = _velocity.peeledProject(_preadvectU);
+  ////////////////////////////////////////////////////////////////////
+  projectionTimer.stop();
+
+  // reduced IOP
+  reducedSetZeroSphere();
+
+
+  ////////////////////////////////////////////////////////////////////
+  // QUESTION: not sure which basis with which to unproject
+  // _velocity.peeledUnproject(_U, _qDot);
+  // _velocity.peeledUnproject(_preadvectU, _qDot);
+  _velocity.peeledUnproject(_preprojectU, _qDot);
+  ////////////////////////////////////////////////////////////////////
+  
+  cout << "Stomping boundaries. \n";
+  diffTruth(velocityTrue, densityTrue);
+  
+  // this will modify _velocity
+  project();
+  velocityTrue = _velocity;
+
+  ////////////////////////////////////////////////////////////////////
+  // QUESTION: am I using preprojectToPreadvect correctly?
+  reducedStagedProjectIOP();
+  // let's try it with the preprojectToFinal instead
+  // that's much worse...
+  // reducedStagedProject();
+  ////////////////////////////////////////////////////////////////////
+  
+  _velocity.peeledUnproject(_preadvectU, _qDot);
+  cout << "Pressure prjoection. \n";
+  diffTruth(velocityTrue, densityTrue);
+  
+
+  // reduced advection shouldn't change for IOP
+  advectHeatAndDensityStam();
+  reducedAdvectStagedStamFast();
+ 
+  // reduced diffusion is also the same 
+  TIMER diffusionProjectionTimer("Diffusion projection");
+  reducedPeeledDiffusion();
+  diffusionProjectionTimer.stop();
+
+  // do the full space unprojection
+  TIMER unprojectionTimer("Velocity unprojection");
+  _velocity.peeledUnproject(_U, _qDot);
+  unprojectionTimer.stop();
+
+  currentTime += _dt;
+
+  cout << " Simulation step " << _totalSteps << " done. " << endl;
+
+	_totalTime += goalTime;
+	_totalSteps++;
+
+  // diff the current sim results against ground truth
+  // diffGroundTruth();
+}
 //////////////////////////////////////////////////////////////////////
 // do a full-rank advection of heat and density
 //////////////////////////////////////////////////////////////////////
@@ -358,9 +604,43 @@ void SUBSPACE_FLUID_3D_EIGEN::computePressureToVelocity()
 void SUBSPACE_FLUID_3D_EIGEN::reducedStagedProject()
 {
   TIMER functionTimer(__FUNCTION__);
+  cout << "_preprojectToFinal.cols: " << _preprojectToFinal.cols() << endl;
+  cout << "_qDot.size: " << _qDot.size() << endl;
   _qDot = _preprojectToFinal * _qDot + _inverseProduct * _qDot;
 }
 
+//////////////////////////////////////////////////////////////////////
+// do a staged reduced order pressure projection for IOP
+//////////////////////////////////////////////////////////////////////
+void SUBSPACE_FLUID_3D_EIGEN::reducedStagedProjectIOP()
+{
+  TIMER functionTimer(__FUNCTION__);
+  cout << "_preprojectToPreadvect.cols: " << _preprojectToPreadvect.cols() << endl;
+  cout << "_qDot.size: " << _qDot.size() << endl;
+  cout << "_inverseProduct rows, cols: " << "(" << _inverseProduct.rows() << ", " << _inverseProduct.cols() << ")" << endl;
+  _qDot = _preprojectToPreadvect * _qDot + _inverseProduct * _qDot;
+}
+
+//////////////////////////////////////////////////////////////////////
+// do a reduced zeroing out of the sphere interior for IOP
+//////////////////////////////////////////////////////////////////////
+void SUBSPACE_FLUID_3D_EIGEN::reducedSetZeroSphere()
+{
+  TIMER functionTimer(__FUNCTION__);
+
+  cout << "_qDot.size in reducedZeroSphere: " << _qDot.size() << endl;
+  if (_reducedIOP.cols() == 0) {
+    string filename;
+    filename = _reducedPath + string("U.iop.subspace.matrix");
+    if (fileExists(filename)) {
+      EIGEN::read(filename, _reducedIOP);
+    }
+  }
+
+  cout << "_reducedIOP.cols: " << _reducedIOP.cols() << endl;
+  _qDot = _reducedIOP * _qDot;
+  
+}
 //////////////////////////////////////////////////////////////////////
 // diff the current sim results against ground truth
 //////////////////////////////////////////////////////////////////////
@@ -391,6 +671,26 @@ void SUBSPACE_FLUID_3D_EIGEN::diffGroundTruth()
   cout << " velocity relative error: " << _velocityErrorRelative.back() << endl;
 
   diff = _density.peelBoundary().flattenedEigen() - ground.density().peelBoundary().flattenedEigen();
+  _densityErrorAbs.push_back(diff.norm());
+  _densityErrorRelative.push_back(diff.norm() / _density.peelBoundary().flattened().norm2());
+  cout << " density abs error:      " << _densityErrorAbs.back() << endl;
+  cout << " density relative error: " << _densityErrorRelative.back() << endl;
+}
+
+//////////////////////////////////////////////////////////////////////
+// diff the passed in sim results against the true results
+//////////////////////////////////////////////////////////////////////
+void SUBSPACE_FLUID_3D_EIGEN::diffTruth(const VECTOR3_FIELD_3D& testVelocity, 
+    const FIELD_3D& testDensity)
+{
+  cout << "Invoking diffTruth: \n";
+  VectorXd diff = testVelocity.peelBoundary().flattenedEigen() - _velocity.peelBoundary().flattenedEigen();
+  _velocityErrorAbs.push_back(diff.norm());
+  _velocityErrorRelative.push_back(diff.norm() / _velocity.peelBoundary().flattened().norm2());
+  cout << " velocity abs error:      " << _velocityErrorAbs.back() << endl;
+  cout << " velocity relative error: " << _velocityErrorRelative.back() << endl;
+
+  diff = testDensity.peelBoundary().flattenedEigen() - _density.peelBoundary().flattenedEigen();
   _densityErrorAbs.push_back(diff.norm());
   _densityErrorRelative.push_back(diff.norm() / _density.peelBoundary().flattened().norm2());
   cout << " density abs error:      " << _densityErrorAbs.back() << endl;
@@ -911,6 +1211,10 @@ void SUBSPACE_FLUID_3D_EIGEN::buildOutOfCoreMatrices()
   computeVelocityToDivergence();
   cout << " Projecting velocity to divergence ... " << flush;
   _reducedVelocityToDivergence = _velocityToDivergence.project(_pressureU, _preprojectU);
+  // for IOP, use this!!
+  // //////////
+  // _reducedVelocityToDivergence = _velocityToDivergence.project(_pressureU, _IOP basis);
+  /////////////
   cout << " done." << endl;
 
   filename = _reducedPath + string("projected.vtod.matrix");
@@ -955,6 +1259,10 @@ void SUBSPACE_FLUID_3D_EIGEN::buildOutOfCoreMatrices()
 
   // need: preproject and U
   EIGEN::transposeProduct(_U, _preprojectU, _preprojectToFinal);
+  // for iop, need this!
+  // ///////////
+  // EIGEN::transposeProduct(_U, _iopU, _preprojectToFinal);
+  // //////////
   filename = _reducedPath + string("projected.ptof.matrix");
   EIGEN::write(filename, _preprojectToFinal);
 
@@ -981,6 +1289,7 @@ void SUBSPACE_FLUID_3D_EIGEN::buildOutOfCoreMatrices()
   purge();
   ptovTimer.stop();
   TIMER::printTimings();
+  
 
   // Needs everything prior to be built already
   MatrixXd inverse = _reducedA.inverse();
@@ -997,6 +1306,189 @@ void SUBSPACE_FLUID_3D_EIGEN::buildOutOfCoreMatrices()
   TIMER::printTimings();
 }
 
+//////////////////////////////////////////////////////////////////////
+// build the staged bases and the projected matrices
+//////////////////////////////////////////////////////////////////////
+void SUBSPACE_FLUID_3D_EIGEN::buildOutOfCoreMatricesIOP()
+{
+  TIMER functionTimer(__FUNCTION__);
+
+  cout << "=====================================================" << endl;
+  cout << " Building huge projected matrices " << endl;
+  cout << "=====================================================" << endl;
+
+  // in preparation for writing results to files
+  string filename;
+
+  TIMER pressureTimer("Pressure projection");
+  // read in the needed matrices
+  filename = _reducedPath + string("U.pressure.matrix");
+  EIGEN::read(filename, _pressureU);
+
+  int totalCells = (_xRes - 2) * (_yRes - 2) * (_zRes - 2);
+  SPARSE_MATRIX_ARRAY sparseA(totalCells, totalCells);
+  //////////////////////////////////////////////////
+  // QUESTION: do I need to account for obstacles here?
+  buildFlatA(sparseA, _obstacles);
+  // (builds Poisson)
+  //////////////////////////////////////////////////
+  cout << " Projecting the pressure matrix ... " << flush;
+  _reducedA = sparseA.projectVerySparse(_pressureU, _pressureU);
+  sparseA.clear();
+  cout << " done." << endl;
+
+  filename = _reducedPath + string("projected.A.matrix");
+  EIGEN::write(filename, _reducedA);
+  _Asparse.clear();
+  purge();
+  pressureTimer.stop();
+  TIMER::printTimings();
+
+  TIMER vtodTimer("Velocity to div projection");
+  // read in the needed matrices
+  filename = _reducedPath + string("U.iop.matrix");
+  EIGEN::read(filename, _iopU);
+
+  // build reduced velocity to divergence
+  // Need: _pressureU and _iopU
+  computeVelocityToDivergence();
+  cout << " Projecting velocity to divergence ... " << flush;
+  // for IOP, use this!!
+  _reducedVelocityToDivergence = _velocityToDivergence.project(_pressureU, _iopU);
+  cout << " done." << endl;
+
+  filename = _reducedPath + string("projected.vtod.matrix");
+  EIGEN::write(filename, _reducedVelocityToDivergence);
+  _velocityToDivergence.clear();
+   
+  // stomp matrices to make room in memory
+  _pressureU.resize(0,0);
+  purge();
+  vtodTimer.stop();
+  TIMER::printTimings();
+
+  TIMER dampingTimer("Damping matrix projection");
+  // read in the needed matrices
+  filename = _reducedPath + string("U.prediffuse.matrix");
+  EIGEN::read(filename, _prediffuseU);
+
+  // NEW
+  cout << " Projecting damping matrix ... " << flush;
+  
+  // read into _preprojectU
+  // QUESTION: should I be using this or IOP for computing 
+  // _dampingMatrixReduced?
+
+  filename = _reducedPath + string("U.final.matrix");
+  EIGEN::read(filename, _U);
+
+  int totalCellsD = 3 * (_xRes - 2) * (_yRes - 2) * (_zRes - 2);
+  SPARSE_MATRIX_ARRAY sparseD(totalCellsD, totalCellsD);
+  buildPeeledDampingMatrixFlat(sparseD);
+  cout << "sparseD.rows: " << sparseD.rows() << endl;
+  cout << "left -> _U.rows: " << _U.rows() << endl;
+  cout << "right -> _prediffuseU.rows: " << _prediffuseU.rows() << endl;
+  _dampingMatrixReduced = sparseD.projectVerySparse(_U, _prediffuseU);
+  cout << "got past _dampingMatrixReduced = sparseD.projectVerySparse" << endl;
+  filename = _reducedPath + string("damping.peeled.matrix");
+  EIGEN::write(filename, _dampingMatrixReduced);
+  sparseD.clear();
+  cout << "done. " << endl;
+
+  // stomp matrices to make room in memory
+  _prediffuseU.resize(0,0);
+  purge();
+  dampingTimer.stop();
+  TIMER::printTimings();
+
+  TIMER preprojectTimer("Preprojection projection");
+  // read in the needed matrices
+
+  filename = _reducedPath + string("U.preadvect.matrix");
+  EIGEN::read(filename, _preadvectU);
+
+  // for iop, need this!
+  // let's try it with preprojectToFinal instead. 
+  // that was much worse...
+  
+  EIGEN::transposeProduct(_preadvectU, _iopU, _preprojectToPreadvect);
+  filename = _reducedPath + string("projected.ptof.matrix");
+  EIGEN::write(filename, _preprojectToPreadvect);
+ 
+  /////////////
+  // trying it with preprojectToFinal instead
+  /*
+  EIGEN::transposeProduct(_U, _iopU, _preprojectToFinal);
+  EIGEN::write(filename, _preprojectToFinal);
+  */
+  /////////////
+
+  // stomp matrices to make room in memory
+  _preprojectU.resize(0,0);
+  purge();
+  preprojectTimer.stop();
+  TIMER::printTimings();
+
+  TIMER ptovTimer("Pressure to velocity projection");
+  // read in the needed matrices
+  filename = _reducedPath + string("U.pressure.matrix");
+  EIGEN::read(filename, _pressureU);
+
+  // build reduced pressure to velocity
+  // Need: pressureU and U
+  computePressureToVelocity();
+  _reducedPressureToVelocity = _pressureToVelocity.project(_U, _pressureU);
+  filename = _reducedPath + string("projected.ptov.matrix");
+  EIGEN::write(filename, _reducedPressureToVelocity);
+
+  // stomp pressure, just in case
+  _pressureU.resize(0,0);
+  purge();
+  ptovTimer.stop();
+  TIMER::printTimings();
+  
+  TIMER iopTimer("IOP projection"); 
+  // build reduced IOP
+  SPARSE_MATRIX peeledIOP(totalCellsD, totalCellsD);
+  VEC3I center(_xRes/2, _yRes/2, _zRes/2);
+  double radius = 0.1;
+  buildSparseIOP(peeledIOP, center, radius);
+  // read in the projection matrix
+  filename = _reducedPath + string("U.iop.matrix");
+  EIGEN::read(filename, _projectionIOP); 
+  filename = _reducedPath + string("U.preproject.matrix");
+  EIGEN::read(filename, _preprojectU);
+  // projection into the subspace
+  cout << "peeledIOP.rows: " << peeledIOP.rows() << endl;
+  cout << "peeledIOP.cols: " << peeledIOP.cols() << endl;
+  cout << "_projectionIOP.rows" << _projectionIOP.rows() << endl;
+  cout << "_projectionIOP.cols" << _projectionIOP.cols() << endl;
+  cout << "_preprojectU.rows" << _preprojectU.rows() << endl;
+  cout << "_preprojectU.cols" << _preprojectU.cols() << endl;
+  _reducedIOP = peeledIOP.project(_projectionIOP, _preprojectU);
+  filename = _reducedPath + string("U.iop.subspace.matrix");
+  EIGEN::write(filename, _reducedIOP);
+
+  // stomp IOP after writing it
+  // _reducedIOP.resize(0, 0);
+  // purge();
+  iopTimer.stop();
+  TIMER::printTimings();
+
+  // Needs everything prior to be built already
+  MatrixXd inverse = _reducedA.inverse();
+  _inverseProduct = _reducedPressureToVelocity * inverse * _reducedVelocityToDivergence;
+  filename = _reducedPath + string("inverseProduct.matrix");
+  EIGEN::write(filename, _inverseProduct);
+  TIMER::printTimings();
+
+  // clear out all memory, just to be sure
+  stompAllBases();
+  purge();
+  
+  cout << " Done building matrices " << endl;
+  TIMER::printTimings();
+}
 //////////////////////////////////////////////////////////////////////
 // check of a file exists
 //////////////////////////////////////////////////////////////////////
@@ -1067,6 +1559,41 @@ void SUBSPACE_FLUID_3D_EIGEN::loadReducedRuntimeBases(string path)
 
   TIMER::printTimings();
   if (_preadvectU.rows() > 1000000)
+    purge();
+}
+//////////////////////////////////////////////////////////////////////
+// load the IOP bases needed for cubature runtime
+//
+// the path variable is there in case we want to load off the SSD
+//////////////////////////////////////////////////////////////////////
+void SUBSPACE_FLUID_3D_EIGEN::loadReducedIOP(string path)
+{
+  TIMER functionTimer(__FUNCTION__);
+  if (path.length() == 0)
+    path = _reducedPath;
+
+  string filename;
+  
+  filename = path + string("U.preproject.matrix");
+  EIGEN::read(filename, _preprojectU);
+ 
+  if (_preprojectU.rows() > 1000000) 
+    purge();
+ 
+  ///////////////////////////////////////////////////////////////////// 
+  // QUESTION: This is probably wrong but I don't see how to avoid it! 
+  ///////////////////////////////////////////////////////////////////// 
+  filename = path + string("U.preadvect.matrix");
+  EIGEN::read(filename, _preadvectU);
+  ///////////////////////////////////////////////////////////////////// 
+  ///////////////////////////////////////////////////////////////////// 
+  
+  filename = path + string("U.final.matrix");
+  EIGEN::read(filename, _U);
+  
+
+  TIMER::printTimings();
+  if (_preprojectU.rows() > 1000000)
     purge();
 }
 
@@ -1279,3 +1806,65 @@ void SUBSPACE_FLUID_3D_EIGEN::buildFlatA(SPARSE_MATRIX_ARRAY& sparseA, unsigned 
 				}
 			}
 }
+
+void SUBSPACE_FLUID_3D_EIGEN::buildSparseIOP(SPARSE_MATRIX& A, const VEC3I& center, double radius)
+{
+  assert ( radius < _lengths.maxElement() ); 
+  A.setToIdentity();
+  VEC3F centerCoords = cellCenter(center[0], center[1], center[2]);
+  int index = 0;
+  for (int z = 1; z < _zRes - 1; z++) {
+    for (int y = 1; y < _yRes - 1; y++) {
+      for (int x = 1; x < _xRes - 1; x++) {
+        for (int i = 0; i < 3; i++, index++) {
+          if ( norm2(cellCenter(x, y, z) - centerCoords) < radius * radius ) {
+          A(index, index) = 0.0;
+          }
+        }
+      }
+    }
+  }        
+}
+void SUBSPACE_FLUID_3D_EIGEN::buildPeeledSparseIOP(SPARSE_MATRIX& A, const VEC3I& center, double radius) 
+{
+  A = SPARSE_MATRIX(3 * (_xRes - 2) * (_yRes - 2) * (_zRes - 2),
+                    3 * (_xRes - 2) * (_yRes - 2) * (_zRes - 2));
+  A.setToIdentity();
+  VEC3F centerCoords = cellCenter(center[0], center[1], center[2]);
+  int index = 0;
+  for (int z = 1; z < _zRes - 1; z++) {
+    for (int y = 1; y < _yRes - 1; y++) {
+      for (int x = 1; x < _xRes - 1; x++) {
+        for (int i = 0; i < 3; i++, index++) {
+          if ( norm2(cellCenter(x, y, z) - centerCoords) < radius * radius ) {
+          A(index, index) = 0.0;
+          }
+        }
+      }
+    }
+  }        
+}
+
+VEC3F SUBSPACE_FLUID_3D_EIGEN::cellCenter(int x, int y, int z)
+{
+ VEC3F halfLengths = (Real)0.5 * _lengths;
+
+  // set it to the lower corner
+  VEC3F final = _center - halfLengths;
+
+  double dx = 1.0 / _xRes;
+  double dy = 1.0 / _yRes;
+  double dz = 1.0 / _zRes;
+  // displace to the NNN corner
+  final[0] += x * dx;
+  final[1] += y * dy;
+  final[2] += z * dz;
+
+  // displace it to the cell center
+  final[0] += dx * 0.5;
+  final[1] += dy * 0.5;
+  final[2] += dz * 0.5;
+
+  return final;
+}
+
