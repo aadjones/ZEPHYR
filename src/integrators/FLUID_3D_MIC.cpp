@@ -1315,7 +1315,7 @@ void FLUID_3D_MIC::appendStreams() const
   int scalarCols = cols / 3;
 
   // set the rows and cols, in case this is the first time
-  for (int x = 0; x < 5; x++)
+  for (int x = 0; x < 6; x++)
     if (finalCols[x] == 0)
       finalCols[x] = cols;
   if (finalCols[5] == 0)
