@@ -373,7 +373,7 @@ void runEverytime()
     sprintf(buffer, "%sfluid.%04i.fluid3d", snapshotPath.c_str(), steps);
     string filename(buffer);
     fluid->writeGz(filename);
-    fluid->appendStreams();
+    fluid->appendStreamsIOP();
    
     // check if we're done
     if (steps == simulationSnapshots)
