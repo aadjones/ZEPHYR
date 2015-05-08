@@ -82,6 +82,9 @@ public:
   // load the bases needed for cubature runtime
   void loadReducedRuntimeBases(string path = string(""));
 
+  // load ALL the bases needed for cubature runtime debugging
+  void loadReducedRuntimeBasesAll(string path = string(""));
+
   // load, and if needed, precompute the matrices needed for IOP
   void loadReducedIOP(string path = string(""));
 

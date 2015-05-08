@@ -275,6 +275,8 @@ void SUBSPACE_FLUID_3D_EIGEN::stepReorderedCubatureStam()
 void SUBSPACE_FLUID_3D_EIGEN::stepReorderedCubatureStamTest()
 {
   TIMER functionTimer(__FUNCTION__);
+  VECTOR::printVertical = false;
+
   Real goalTime = 0.1;
   Real currentTime = 0;
 
@@ -299,15 +301,16 @@ void SUBSPACE_FLUID_3D_EIGEN::stepReorderedCubatureStamTest()
   addVorticity();
   _velocity.axpy(_dt, _force);
 
-  VECTOR::printVertical = false;
  
   // grab the velocity preadvection
   velocityTest = _velocity; 
+
   // do a full-coordinates advection of just heat and density
   // advectHeatAndDensityStam();
 
   // for the test, we will do a full-coordinates advection of 
   // velocity, heat and density
+
   advectStam();
 
   // _velocity is now post-advected
@@ -315,17 +318,22 @@ void SUBSPACE_FLUID_3D_EIGEN::stepReorderedCubatureStamTest()
   // grab the post-advection density
   densityTest = _density;
  
-  // next, do a reduced-coordinates advection of velocity 
+  // next, do a reduced-coordinates advection of pre-advect velocity 
   TIMER projectionTimer("Velocity projection");
 
   _qDot = velocityTest.peeledProject(_preadvectU);
+  // _qDot = _velocity.peeledProject(_preadvectU);
   
   projectionTimer.stop();
  
+  // this advects _qDot
   reducedAdvectStagedStamFast();
 
-  velocityTest.peeledUnproject(_U, _qDot);
+  // bring _qDot back into the full space
+  // QUESTION: what basis shoud I pass to Unproject?
+  velocityTest.peeledUnproject(_prediffuseU, _qDot);
   cout << "Advection test: \n";
+  // compare velocityTest and densityTest to _velocity and _density
   diffTruth(velocityTest, densityTest);
 
   TIMER diffusionProjectionTimer("Diffusion projection");
@@ -338,7 +346,7 @@ void SUBSPACE_FLUID_3D_EIGEN::stepReorderedCubatureStamTest()
 
   // do the full space unprojection
   TIMER unprojectionTimer("Velocity unprojection");
-  _velocity.peeledUnproject(_preadvectU, _qDot);
+  _velocity.peeledUnproject(_U, _qDot);
   unprojectionTimer.stop();
 
   currentTime += _dt;
@@ -349,7 +357,7 @@ void SUBSPACE_FLUID_3D_EIGEN::stepReorderedCubatureStamTest()
 	_totalSteps++;
 
   // diff the current sim results against ground truth
-  // diffGroundTruth();
+  diffGroundTruth();
 }
 //////////////////////////////////////////////////////////////////////
 // The reduced solver, with peeled boundaries, with an obstacle, 
@@ -1560,6 +1568,39 @@ void SUBSPACE_FLUID_3D_EIGEN::loadReducedRuntimeBases(string path)
   TIMER::printTimings();
   if (_preadvectU.rows() > 1000000)
     purge();
+}
+//////////////////////////////////////////////////////////////////////
+// load ALL the bases needed for cubature runtime debugging
+//
+// the path variable is there in case we want to load off the SSD
+//////////////////////////////////////////////////////////////////////
+void SUBSPACE_FLUID_3D_EIGEN::loadReducedRuntimeBasesAll(string path)
+{
+  TIMER functionTimer(__FUNCTION__);
+  if (path.length() == 0)
+    path = _reducedPath;
+
+  string filename;
+  
+  filename = path + string("U.preadvect.matrix");
+  EIGEN::read(filename, _preadvectU);
+ 
+  if (_preadvectU.rows() > 1000000)
+    purge();
+
+  filename = path + string("U.prediffuse.matrix");
+  EIGEN::read(filename, _prediffuseU);
+
+  filename = path + string("U.preproject.matrix");
+  EIGEN::read(filename, _preprojectU);
+
+  filename = path + string("U.pressure.matrix");
+  EIGEN::read(filename, _pressureU);
+
+  filename = path + string("U.final.matrix");
+  EIGEN::read(filename, _U);
+  
+  TIMER::printTimings();
 }
 //////////////////////////////////////////////////////////////////////
 // load the IOP bases needed for cubature runtime
