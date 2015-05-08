@@ -99,6 +99,7 @@ public:
   void readGz(string filename);
 
   void appendStreams() const;
+  void appendStreamsIOP() const;
 
   // create a procedural velocity field
   void generateProceduralVelocity();

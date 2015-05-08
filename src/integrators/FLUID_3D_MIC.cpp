@@ -1245,10 +1245,160 @@ void FLUID_3D_MIC::buildPeeledSparseIOP(SPARSE_MATRIX& A, const VEC3I& center, d
   }        
 }
 
-//////////////////////////////////////////////////////////////////////
-// Output directly to the files that will be sent to SVD
-//////////////////////////////////////////////////////////////////////
 void FLUID_3D_MIC::appendStreams() const
+{
+  TIMER functionTimer(__FUNCTION__);
+  assert(_snapshotPath.size() > 0);
+
+  cout << " Appending to streams in path " << _snapshotPath.c_str() << " ... " << flush;
+  vector<int> finalRows(6);
+  vector<int> finalCols(6);
+
+  // read in the initial file dims
+  vector<string> filenames;
+  filenames.push_back(_snapshotPath + string("velocity.final.matrix.dims"));
+  filenames.push_back(_snapshotPath + string("velocity.preproject.matrix.dims"));
+  filenames.push_back(_snapshotPath + string("velocity.prediffuse.matrix.dims"));
+  filenames.push_back(_snapshotPath + string("velocity.preadvect.matrix.dims"));
+  filenames.push_back(_snapshotPath + string("velocity.iop.matrix.dims"));
+  filenames.push_back(_snapshotPath + string("pressure.matrix.dims"));
+  for (int x = 0; x < filenames.size(); x++)
+  {
+    FILE* dimsFile = fopen(filenames[x].c_str(), "rb");
+    if (dimsFile == NULL) continue;
+    int rows, cols;
+
+    // write dimensions
+    fread((void*)&rows, sizeof(int), 1, dimsFile);
+    fread((void*)&cols, sizeof(int), 1, dimsFile);
+    fclose(dimsFile);
+
+    finalRows[x] = rows;
+    finalCols[x] = cols;
+  }
+
+  FILE* fileFinal;
+  FILE* filePreproject;
+  FILE* filePrediffuse;
+  FILE* filePreadvect;
+  FILE* fileIOP;
+  FILE* fileNeumannIOP;
+  FILE* filePressure;
+
+  string velocityFinalFile = _snapshotPath + string("velocity.final.matrix.transpose");
+  string velocityPreprojectFile = _snapshotPath + string("velocity.preproject.matrix.transpose");
+  string velocityPrediffuseFile = _snapshotPath + string("velocity.prediffuse.matrix.transpose");
+  string velocityPreadvectFile = _snapshotPath + string("velocity.preadvect.matrix.transpose");
+  string velocityIOPFile = _snapshotPath + string("velocity.iop.matrix.transpose");
+  string neumannIOPFile = _snapshotPath + string("neumann.iop.matrices");
+  string pressureFile = _snapshotPath + string("pressure.matrix.transpose");
+
+  // if there's a Neumann matrix at all, it's using IOP
+  bool usingIOP = (_neumannIOP.rows() > 0);
+  cout << "usingIOP deduced from neumann.rows: " << usingIOP << '\n';
+
+  fileFinal      = fopen(velocityFinalFile.c_str(), "ab");
+  filePreproject = fopen(velocityPreprojectFile.c_str(), "ab");
+  filePrediffuse = fopen(velocityPrediffuseFile.c_str(), "ab");
+  filePreadvect  = fopen(velocityPreadvectFile.c_str(), "ab");
+  fileIOP        = fopen(velocityIOPFile.c_str(), "ab");
+  if (usingIOP) 
+    fileNeumannIOP  = fopen(neumannIOPFile.c_str(), "ab");
+  filePressure   = fopen(pressureFile.c_str(), "ab");
+    
+  VECTOR velocity = _velocity.peelBoundary().flattened();
+  int cols = velocity.size();
+  assert(cols % 3 == 0);
+  int scalarCols = cols / 3;
+
+  // set the rows and cols, in case this is the first time
+  // QUESTION: why 5 instead of 6?
+  for (int x = 0; x < 5; x++)
+    if (finalCols[x] == 0)
+      finalCols[x] = cols;
+  if (finalCols[5] == 0)
+    finalCols[5] = scalarCols;
+
+
+  if (velocity.norm2() > 1e-7)
+  {
+    fwrite((void*)(velocity.data()), sizeof(double), cols, fileFinal);
+    finalRows[0]++;
+  }
+
+  velocity = _preprojection.peelBoundary().flattened();
+  if (velocity.norm2() > 1e-7)
+  {
+    fwrite((void*)(velocity.data()), sizeof(double), cols, filePreproject);
+    finalRows[1]++;
+  }
+  
+  velocity = _prediffusion.peelBoundary().flattened();
+  if (velocity.norm2() > 1e-7)
+  {
+    fwrite((void*)(velocity.data()), sizeof(double), cols, filePrediffuse);
+    finalRows[2]++;
+  }
+  
+  velocity = _preadvection.peelBoundary().flattened();
+  if (velocity.norm2() > 1e-7)
+  {
+    fwrite((void*)(velocity.data()), sizeof(double), cols, filePreadvect);
+    finalRows[3]++;
+  }
+
+  if (usingIOP)
+  {
+    velocity = _postIOP.peelBoundary().flattened();
+    if (velocity.norm2() > 1e-7)
+    {
+      fwrite((void*)(velocity.data()), sizeof(double), cols, fileIOP);
+      finalRows[4]++;
+    }
+  }
+ 
+  VECTOR scalar = _pressure.peelBoundary().flattened();
+  if (scalar.norm2() > 1e-7)
+  {
+    fwrite((void*)(scalar.data()), sizeof(double), scalarCols, filePressure);
+    finalRows[5]++;
+  }
+
+  scalar = _divergence.peelBoundary().flattened();
+  if (scalar.norm2() > 1e-7)
+  {
+    fwrite((void*)(scalar.data()), sizeof(double), scalarCols, filePressure);
+    finalRows[5]++;
+  }
+  
+  if (usingIOP) 
+    _neumannIOP.write(fileNeumannIOP);
+
+  fclose(fileFinal);
+  fclose(filePreproject);
+  fclose(filePrediffuse);
+  fclose(filePreadvect);
+  if (usingIOP)
+    fclose(fileNeumannIOP);
+  fclose(filePressure);
+
+  // write out the dimensions of the matrix to a different file
+  for (int x = 0; x < filenames.size(); x++)
+  {
+    FILE* dimsFile = fopen(filenames[x].c_str(), "wb");
+
+    // write dimensions
+    fwrite((void*)&finalRows[x], sizeof(int), 1, dimsFile);
+    fwrite((void*)&finalCols[x], sizeof(int), 1, dimsFile);
+    fclose(dimsFile);
+  }
+  cout << " done. " << endl;
+}
+
+//////////////////////////////////////////////////////////////////////
+// Output directly to the files that will be sent to SVD. Uses IOP
+//////////////////////////////////////////////////////////////////////
+void FLUID_3D_MIC::appendStreamsIOP() const
 {
   TIMER functionTimer(__FUNCTION__);
   assert(_snapshotPath.size() > 0);
@@ -1315,7 +1465,7 @@ void FLUID_3D_MIC::appendStreams() const
   int scalarCols = cols / 3;
 
   // set the rows and cols, in case this is the first time
-  for (int x = 0; x < 5; x++)
+  for (int x = 0; x < 6; x++)
     if (finalCols[x] == 0)
       finalCols[x] = cols;
   if (finalCols[5] == 0)

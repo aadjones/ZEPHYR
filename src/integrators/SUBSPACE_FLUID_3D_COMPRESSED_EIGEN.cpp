@@ -532,12 +532,10 @@ VectorXd SUBSPACE_FLUID_3D_COMPRESSED_EIGEN::advectCellStamPeeled(MATRIX_COMPRES
   const int i111 = 3 * (x1 + y1Scaled + z1Scaled);
 
   // NOTE: it spends most of its time (+50%) here
-<<<<<<< HEAD
   TIMER multiplyTimer1("multiplyTimer1");
-=======
   TIMER multiplyTimer2("multiplyTimer2");
+  TIMER multiplyTimer("multiplyTimer");
 
->>>>>>> dbe4fc0d3d01f7caff0eda98fe9942e2fcbf485c
   GetSubmatrixFast(i000, 3, U_data, submatrix);
   const VectorXd v000 = submatrix * qDot;
 
@@ -561,11 +559,8 @@ VectorXd SUBSPACE_FLUID_3D_COMPRESSED_EIGEN::advectCellStamPeeled(MATRIX_COMPRES
 
   GetSubmatrixFast(i111, 3, U_data, submatrix);
   const VectorXd v111 = submatrix * qDot;
-<<<<<<< HEAD
   multiplyTimer1.stop();
-=======
   multiplyTimer2.stop();
->>>>>>> dbe4fc0d3d01f7caff0eda98fe9942e2fcbf485c
 
   const Real w000 = u0 * s0 * t0;
   const Real w010 = u0 * s0 * t1;
@@ -691,7 +686,9 @@ VectorXd SUBSPACE_FLUID_3D_COMPRESSED_EIGEN::advectCellStamPeeled(const MatrixXd
 //////////////////////////////////////////////////////////////////////
 // advect a single cell
 //////////////////////////////////////////////////////////////////////
-<<<<<<< HEAD
+//
+// some kind of horrible version control disaster happened here...
+
 VectorXd SUBSPACE_FLUID_3D_COMPRESSED_EIGEN::advectCellStamPeeled(MATRIX_COMPRESSION_DATA& U_data, const MatrixXd& cellU, const Real& dt, const VectorXd& qDot, const int index, MatrixXd& submatrix)
 {
   TIMER functionTimer(__FUNCTION__);
@@ -759,9 +756,60 @@ VectorXd SUBSPACE_FLUID_3D_COMPRESSED_EIGEN::advectCellStamPeeled(MATRIX_COMPRES
   const int totalCols = dataX.get_numCols();
 
   TIMER multiplyTimer2("multiplyTimer2");
+
   GetSubmatrixFast(i000, 3, U_data, submatrix);
   const VectorXd v000 = submatrix * qDot;
-=======
+
+  GetSubmatrixFast(i010, 3, U_data, submatrix);
+  const VectorXd v010 = submatrix * qDot;
+
+  GetSubmatrixFast(i100, 3, U_data, submatrix);
+  const VectorXd v100 = submatrix * qDot;
+
+  GetSubmatrixFast(i110, 3, U_data, submatrix);
+  const VectorXd v110 = submatrix * qDot;
+
+  GetSubmatrixFast(i001, 3, U_data, submatrix);
+  const VectorXd v001 = submatrix * qDot;
+
+  GetSubmatrixFast(i011, 3, U_data, submatrix);
+  const VectorXd v011 = submatrix * qDot;
+
+  GetSubmatrixFast(i101, 3, U_data, submatrix);
+  const VectorXd v101 = submatrix * qDot;
+
+  GetSubmatrixFast(i111, 3, U_data, submatrix);
+  const VectorXd v111 = submatrix * qDot;
+
+  multiplyTimer2.stop();
+
+  const Real w000 = u0 * s0 * t0;
+  const Real w010 = u0 * s0 * t1;
+  const Real w100 = u0 * s1 * t0;
+  const Real w110 = u0 * s1 * t1;
+  const Real w001 = u1 * s0 * t0;
+  const Real w011 = u1 * s0 * t1;
+  const Real w101 = u1 * s1 * t0;
+  const Real w111 = u1 * s1 * t1;
+  
+  // interpolate
+  // (indices could be computed once)
+  //
+  // NOTE: it's deceptive to think this cuts down on
+  // multiplies, since they will all occur on a VECTOR,
+  // not just a scalar
+  //
+  //return u0 * (s0 * (t0 * v000 + t1 * v010) +
+  //             s1 * (t0 * v100 + t1 * v110)) +
+  //       u1 * (s0 * (t0 * v001 + t1 * v011) +
+  //             s1 * (t0 * v101 + t1 * v111));
+  return w000 * v000 + w010 * v010 + w100 * v100 + w110 * v110 +
+         w001 * v001 + w011 * v011 + w101 * v101 + w111 * v111;
+  }
+
+
+
+/*
 VectorXd SUBSPACE_FLUID_3D_COMPRESSED_EIGEN::advectCellStamPeeled(MATRIX_COMPRESSION_DATA& U_data, const MatrixXd& cellU, const Real& dt, const VectorXd& qDot, const int index)
   {
     TIMER functionTimer(__FUNCTION__);
@@ -839,7 +887,6 @@ VectorXd SUBSPACE_FLUID_3D_COMPRESSED_EIGEN::advectCellStamPeeled(MATRIX_COMPRES
 
     GetSubmatrixFast(i100, 3, U_data, submatrix);
     const VectorXd v100 = submatrix * qDot;
->>>>>>> dbe4fc0d3d01f7caff0eda98fe9942e2fcbf485c
 
     GetSubmatrixFast(i110, 3, U_data, submatrix);
     const VectorXd v110 = submatrix * qDot;
@@ -858,12 +905,7 @@ VectorXd SUBSPACE_FLUID_3D_COMPRESSED_EIGEN::advectCellStamPeeled(MATRIX_COMPRES
 
     multiplyTimer.stop();
 
-<<<<<<< HEAD
-  GetSubmatrixFast(i111, 3, U_data, submatrix);
-  const VectorXd v111 = submatrix * qDot;
-  multiplyTimer2.stop();
-=======
->>>>>>> dbe4fc0d3d01f7caff0eda98fe9942e2fcbf485c
+      
 
     const Real w000 = u0 * s0 * t0;
     const Real w010 = u0 * s0 * t1;
@@ -888,6 +930,7 @@ VectorXd SUBSPACE_FLUID_3D_COMPRESSED_EIGEN::advectCellStamPeeled(MATRIX_COMPRES
     return w000 * v000 + w010 * v010 + w100 * v100 + w110 * v110 +
            w001 * v001 + w011 * v011 + w101 * v101 + w111 * v111;
   }
+*/
 
 //////////////////////////////////////////////////////////////////////
 // read in a cubature scheme

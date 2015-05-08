@@ -338,7 +338,7 @@ void SUBSPACE_FLUID_3D_EIGEN::stepReorderedCubatureStamTest()
 
   // do the full space unprojection
   TIMER unprojectionTimer("Velocity unprojection");
-  _velocity.peeledUnproject(_U, _qDot);
+  _velocity.peeledUnproject(_preadvectU, _qDot);
   unprojectionTimer.stop();
 
   currentTime += _dt;

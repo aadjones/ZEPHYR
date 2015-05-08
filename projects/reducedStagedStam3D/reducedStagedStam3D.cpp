@@ -364,7 +364,8 @@ void runEverytime()
     static int steps = 0;
     cout << " Simulation step " << steps << endl;
     fluid->addSmokeColumn();
-    fluid->stepReorderedCubatureStamTest();
+    // fluid->stepReorderedCubatureStamTest();
+    fluid->stepReorderedCubatureStam();
     
     /* 
     char buffer[256];
@@ -377,7 +378,7 @@ void runEverytime()
 
     steps++;
 
-    if (steps == 150) {    
+    if (steps == 48) {    
     // if we were already capturing a movie
         if (captureMovie)
         {
@@ -402,7 +403,7 @@ void runEverytime()
     }
 
     // check if we're done
-    if (steps == 151)
+    if (steps == 49)
       exit(0);
     // stop early
     /*
