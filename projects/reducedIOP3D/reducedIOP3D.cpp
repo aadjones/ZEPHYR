@@ -336,9 +336,14 @@ int main(int argc, char *argv[])
 
   double discardThreshold = parser.getFloat("discard threshold", 1e-9);
   cout << " Using discard threshold: " << discardThreshold << endl;
+  
+  bool usingIOP = parser.getBool("iop", 0);
+  cout << "usingIOP was parsed as: " << usingIOP << endl;
+	fluid = new SUBSPACE_FLUID_3D_EIGEN(xRes, yRes, zRes, reducedPath, &boundaries[0], usingIOP);
+  // fluid->loadReducedIOP();
 
-	fluid = new SUBSPACE_FLUID_3D_EIGEN(xRes, yRes, zRes, reducedPath, &boundaries[0]);
-  fluid->loadReducedIOP();
+  // for debugging
+  fluid->loadReducedIOPAll();
 
   fluid->fullRankPath() = snapshotPath;
   fluid->vorticityEps() = vorticity;
@@ -367,7 +372,6 @@ void runEverytime()
   {
     static int steps = 0;
     cout << " Simulation step " << steps << endl;
-    cout << __FILE__ << " " << __FUNCTION__ << " " << __LINE__ << " : " << endl;
     fluid->addSmokeColumn();
     fluid->stepObstacleReorderedCubatureStam();
     

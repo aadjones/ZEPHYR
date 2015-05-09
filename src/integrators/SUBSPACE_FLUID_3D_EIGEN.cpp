@@ -391,8 +391,6 @@ void SUBSPACE_FLUID_3D_EIGEN::stepObstacleReorderedCubatureStam()
   _density.setZeroBorder();
   densityTrue.setZeroBorder();
   ////////////////////////////////////////////////////////////////////
-  cout << "Setting zero border. \n";
-  diffTruth(velocityTrue, densityTrue);
 
   // compute the forces
   addBuoyancy(_heat.data());
@@ -410,7 +408,8 @@ void SUBSPACE_FLUID_3D_EIGEN::stepObstacleReorderedCubatureStam()
   VEC3I center(_xRes/2, _yRes/2, _zRes/2);
   const double radius = 0.1;
 
-  if (_peeledIOP.cols() == 0) {
+  // if it's not build, construct the full IOP matrix (for debugging)
+  if (_peeledIOP.cols() <= 0) {
     buildPeeledSparseIOP(_peeledIOP, center, radius);
   }
   VectorXd afterIOP = _peeledIOP * velocityTrue.peelBoundary().flattenedEigen();
@@ -430,15 +429,14 @@ void SUBSPACE_FLUID_3D_EIGEN::stepObstacleReorderedCubatureStam()
 
   ////////////////////////////////////////////////////////////////////
   // QUESTION: not sure which basis with which to unproject
-  // _velocity.peeledUnproject(_U, _qDot);
-  // _velocity.peeledUnproject(_preadvectU, _qDot);
-  _velocity.peeledUnproject(_preprojectU, _qDot);
+  // ANSWER: use _iopU
+  _velocity.peeledUnproject(_iopU, _qDot);
   ////////////////////////////////////////////////////////////////////
   
-  cout << "Stomping boundaries. \n";
+  cout << "Stomping boundaries test. \n";
   diffTruth(velocityTrue, densityTrue);
   
-  // this will modify _velocity
+  // this will modify _velocity using a full space projection
   project();
   velocityTrue = _velocity;
 
@@ -451,7 +449,7 @@ void SUBSPACE_FLUID_3D_EIGEN::stepObstacleReorderedCubatureStam()
   ////////////////////////////////////////////////////////////////////
   
   _velocity.peeledUnproject(_preadvectU, _qDot);
-  cout << "Pressure prjoection. \n";
+  cout << "Pressure projection. \n";
   diffTruth(velocityTrue, densityTrue);
   
 
@@ -477,7 +475,7 @@ void SUBSPACE_FLUID_3D_EIGEN::stepObstacleReorderedCubatureStam()
 	_totalSteps++;
 
   // diff the current sim results against ground truth
-  // diffGroundTruth();
+  diffGroundTruth();
 }
 //////////////////////////////////////////////////////////////////////
 // do a full-rank advection of heat and density
@@ -1419,10 +1417,11 @@ void SUBSPACE_FLUID_3D_EIGEN::buildOutOfCoreMatricesIOP()
   // let's try it with preprojectToFinal instead. 
   // that was much worse...
   
+  
   EIGEN::transposeProduct(_preadvectU, _iopU, _preprojectToPreadvect);
   filename = _reducedPath + string("projected.ptof.matrix");
   EIGEN::write(filename, _preprojectToPreadvect);
- 
+  
   /////////////
   // trying it with preprojectToFinal instead
   /*
@@ -1443,9 +1442,10 @@ void SUBSPACE_FLUID_3D_EIGEN::buildOutOfCoreMatricesIOP()
   EIGEN::read(filename, _pressureU);
 
   // build reduced pressure to velocity
-  // Need: pressureU and U
+  // Need: pressureU 
+  // for IOP need _preadvectU on left, not _U!
   computePressureToVelocity();
-  _reducedPressureToVelocity = _pressureToVelocity.project(_U, _pressureU);
+  _reducedPressureToVelocity = _pressureToVelocity.project(_preadvectU, _pressureU);
   filename = _reducedPath + string("projected.ptov.matrix");
   EIGEN::write(filename, _reducedPressureToVelocity);
 
@@ -1585,9 +1585,6 @@ void SUBSPACE_FLUID_3D_EIGEN::loadReducedRuntimeBasesAll(string path)
   filename = path + string("U.preadvect.matrix");
   EIGEN::read(filename, _preadvectU);
  
-  if (_preadvectU.rows() > 1000000)
-    purge();
-
   filename = path + string("U.prediffuse.matrix");
   EIGEN::read(filename, _prediffuseU);
 
@@ -1637,7 +1634,44 @@ void SUBSPACE_FLUID_3D_EIGEN::loadReducedIOP(string path)
   if (_preprojectU.rows() > 1000000)
     purge();
 }
+//////////////////////////////////////////////////////////////////////
+// load the IOP bases needed for cubature runtime
+//
+// the path variable is there in case we want to load off the SSD
+//////////////////////////////////////////////////////////////////////
+void SUBSPACE_FLUID_3D_EIGEN::loadReducedIOPAll(string path)
+{
+  TIMER functionTimer(__FUNCTION__);
+  if (path.length() == 0)
+    path = _reducedPath;
 
+  string filename;
+  
+  filename = path + string("U.preproject.matrix");
+  EIGEN::read(filename, _preprojectU);
+ 
+  if (_preprojectU.rows() > 1000000) 
+    purge();
+ 
+  filename = path + string("U.preadvect.matrix");
+  cout << "reading _preadvectU. " << endl;
+  EIGEN::read(filename, _preadvectU);
+  cout << "dimensions: " << '(' << _preadvectU.rows() << ", " << _preadvectU.cols() << endl;
+ 
+  filename = path + string("U.prediffuse.matrix");
+  EIGEN::read(filename, _prediffuseU); 
+
+  filename = _reducedPath + string("U.iop.matrix");
+  EIGEN::read(filename, _iopU);
+
+  filename = path + string("U.final.matrix");
+  EIGEN::read(filename, _U);
+  
+
+  TIMER::printTimings();
+  if (_preprojectU.rows() > 1000000)
+    purge();
+}
 //////////////////////////////////////////////////////////////////////
 // compute the velocity-to-divergence matrix
 //////////////////////////////////////////////////////////////////////

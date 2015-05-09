@@ -1312,7 +1312,8 @@ void FLUID_3D_MIC::appendStreams() const
   int scalarCols = cols / 3;
 
   // set the rows and cols, in case this is the first time
-  // QUESTION: why 5 instead of 6?
+  // QUESTION: why 5 instead of 6
+  // (having no understanding) ANSWER: if it's 6, SVD will BOMB!! 
   for (int x = 0; x < 5; x++)
     if (finalCols[x] == 0)
       finalCols[x] = cols;
@@ -1465,12 +1466,11 @@ void FLUID_3D_MIC::appendStreamsIOP() const
   int scalarCols = cols / 3;
 
   // set the rows and cols, in case this is the first time
-  for (int x = 0; x < 6; x++)
+  for (int x = 0; x < 5; x++)
     if (finalCols[x] == 0)
       finalCols[x] = cols;
   if (finalCols[5] == 0)
     finalCols[5] = scalarCols;
-
 
   if (velocity.norm2() > 1e-7)
   {
@@ -1497,6 +1497,7 @@ void FLUID_3D_MIC::appendStreamsIOP() const
   {
     fwrite((void*)(velocity.data()), sizeof(double), cols, filePreadvect);
     finalRows[3]++;
+    cout << "preadvection size: " << "(" << cols << ", " << finalRows[3] << endl;
   }
  
   if (usingIOP)

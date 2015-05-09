@@ -88,6 +88,9 @@ public:
   // load, and if needed, precompute the matrices needed for IOP
   void loadReducedIOP(string path = string(""));
 
+  // load ALL the IOP bases needed for debugging
+  void loadReducedIOPAll(string path = string(""));
+
   // read in a cubature scheme
   void readAdvectionCubature();
 
