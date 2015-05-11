@@ -452,12 +452,70 @@ void SUBSPACE_FLUID_3D_EIGEN::stepObstacleReorderedCubatureStam()
   cout << "Pressure projection. \n";
   diffTruth(velocityTrue, densityTrue);
   
-
   // reduced advection shouldn't change for IOP
+
+  // grab the preadvected values of _velocity and _density
+  VECTOR3_FIELD_3D preadvectVelocity = _velocity;
+  FIELD_3D preadvectDensity = _density;
+  FIELD_3D preadvectHeat = _heat;
+
+  // grab the preadvected values of the 'old' fields
+
+  VECTOR3_FIELD_3D oldVelocity = _velocityOld;
+  FIELD_3D oldDensity = _densityOld;
+  FIELD_3D oldHeat = _heatOld;
+
+  ////////////////////////////////////////////////////////////////////
+  // full advection---modifies _velocity and _density
+
+  // *** this won't work because it actually also modifies ***
+  // *** _velocityOld and _densityOld, which will screw up ***
+  // *** the subsequent reduced space advection            ***
+
+  advectStam();
+  velocityTrue = _velocity;
+  densityTrue = _density;
+  ////////////////////////////////////////////////////////////////////
+
+  ////////////////////////////////////////////////////////////////////
+  // reduced advection
+  _velocity = preadvectVelocity;
+  _density = preadvectDensity;
+  _heat = preadvectHeat;
+
+  _velocityOld = oldVelocity;
+  _densityOld = oldDensity;
+  _heatOld = oldHeat;
+
   advectHeatAndDensityStam();
   reducedAdvectStagedStamFast();
- 
+  ////////////////////////////////////////////////////////////////////
+
+
+  ////////////////////////////////////////////////////////////////////
+  // comparing the reduced advection to full advection
+  _velocity.peeledUnproject(_prediffuseU, _qDot);
+  cout << "Advection projection. \n";
+  diffTruth(velocityTrue, densityTrue);
+  ////////////////////////////////////////////////////////////////////
+
+
   // reduced diffusion is also the same 
+ 
+  // grab the post-advection velocity and density
+  _velocity.peeledUnproject(_prediffuseU, _qDot);
+  densityTrue = _density;
+  
+  ////////////////////////////////////////////////////////////////////
+  // Full-space diffusion
+  if (_peeledDampingFull.rows() <= 0) {
+    buildPeeledDampingMatrixFull();
+  }
+  VectorXd after = _peeledDampingFull * _velocity.peelBoundary().flattenedEigen();
+  _velocity.setWithPeeled(after);
+  velocityTrue = _velocity;
+  ////////////////////////////////////////////////////////////////////
+
   TIMER diffusionProjectionTimer("Diffusion projection");
   reducedPeeledDiffusion();
   diffusionProjectionTimer.stop();
@@ -466,6 +524,13 @@ void SUBSPACE_FLUID_3D_EIGEN::stepObstacleReorderedCubatureStam()
   TIMER unprojectionTimer("Velocity unprojection");
   _velocity.peeledUnproject(_U, _qDot);
   unprojectionTimer.stop();
+
+
+  ////////////////////////////////////////////////////////////////////
+  // full space comparison of diffusion
+  cout << "Diffusion projection.\n";
+  diffTruth(velocityTrue, densityTrue);
+  ////////////////////////////////////////////////////////////////////
 
   currentTime += _dt;
 
