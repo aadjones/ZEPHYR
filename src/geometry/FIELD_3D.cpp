@@ -6516,7 +6516,7 @@ void FIELD_3D::setWithPeeled(const VectorXd& data)
 //////////////////////////////////////////////////////////////////////
 // return a flattened array of all the field contents
 //////////////////////////////////////////////////////////////////////
-VECTOR FIELD_3D::flattened()
+VECTOR FIELD_3D::flattened() const
 {
   VECTOR final(_totalCells);
 
@@ -6532,7 +6532,7 @@ VECTOR FIELD_3D::flattened()
 //////////////////////////////////////////////////////////////////////
 // return a flattened row order array of all the field contents (test)
 //////////////////////////////////////////////////////////////////////
-VECTOR FIELD_3D::flattenedRow()
+VECTOR FIELD_3D::flattenedRow() const
 {
   VECTOR final(_totalCells);
 
@@ -6547,7 +6547,7 @@ VECTOR FIELD_3D::flattenedRow()
 //////////////////////////////////////////////////////////////////////
 // return a flattened array of all the field contents
 //////////////////////////////////////////////////////////////////////
-VectorXd FIELD_3D::flattenedEigen()
+VectorXd FIELD_3D::flattenedEigen() const
 {
   VectorXd final(_totalCells);
 

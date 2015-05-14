@@ -26,7 +26,10 @@
 
 FIELD_3D DoSmartBlockCompression(FIELD_3D& F, COMPRESSION_DATA& data);
 
+void DCT_Smart(FIELD_3D& F, fftw_plan& plan, double*& in); 
+void DCT_Smart_Unitary(FIELD_3D& F, fftw_plan& plan, double*& in); 
 void DoSmartBlockDCT(vector<FIELD_3D>& V, int direction);
+void DoSmartUnitaryBlockDCT(vector<FIELD_3D>& V, int direction); 
 
 void DecodeBlockSmart();
 

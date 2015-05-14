@@ -56,6 +56,7 @@ public:
   unsigned int& domainBcBottom() { return _domainBcBottom; };
 
   void stepReorderedCubatureStam();
+  void stepWithObstacle();
 
   // const MatrixXd& U() const { return _U; };
   // const MatrixXd& preadvectU() const { return _preadvectU; };
@@ -92,9 +93,8 @@ public:
 
   // load the bases needed for cubature runtime
   void loadReducedRuntimeBases(string path = string(""));
+  void loadReducedIOP(string path = string(""));
 
-  // load, and if needed, precompute the matrices needed for IOP
-  void loadReducedIOP(const int snapshots);
 
   // read in a cubature scheme
   void readAdvectionCubature();
@@ -106,6 +106,7 @@ protected:
   // MatrixXd _U;
   MATRIX_COMPRESSION_DATA _U_final_data;
   MATRIX_COMPRESSION_DATA _U_preadvect_data;
+  MATRIX_COMPRESSION_DATA _U_preproject_data;
 
   // boundary bases -- ordering is:
   // 0 - left
@@ -157,6 +158,12 @@ protected:
 
   // reduced version of _pressureToVelocity
   MatrixXd _reducedPressureToVelocity;
+
+  // matrix to project the full IOP matrix into the subspace
+  MatrixXd _projectionIOP;
+
+  // reduced matrix version of stomping the interior of an obstacle for IOP
+  MatrixXd _reducedIOP;
 
   // a pressure basis -- _velocityToDivergence * _U
   MatrixXd _pressureU;
@@ -259,8 +266,14 @@ protected:
   // build a sparse version of the Poisson matrix
   void buildFlatA(SPARSE_MATRIX_ARRAY& sparseA, unsigned char* skip);
 
+  // do reduced stomping of the obstacle interior
+  void reducedSetZeroSphere();
+
   // do a staged reduced order pressure projection
   void reducedStagedProject();
+  
+  // do a staged reduced order pressure projection for IOP
+  void reducedStagedProjectIOP();
 
   // do a full-rank advection of heat and density using semi-Lagrangian
   void advectHeatAndDensityStam();

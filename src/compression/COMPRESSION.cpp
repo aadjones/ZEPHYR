@@ -409,6 +409,62 @@ void DCT_Smart(FIELD_3D& F, fftw_plan& plan, double*& in) {
   // normalize symmetrically
   F_hat *= sqrt(0.125 / (xRes * yRes * zRes));
 
+
+
+  // rewrite F with the contents of F_hat
+  F.swapPointers(F_hat);
+}
+////////////////////////////////////////////////////////
+// given a passed in FIELD_3D, fftw plan, and 
+// corresponding 'in' buffer, performs the corresponding
+// transform on the field. this one is *unitary normalization* 
+////////////////////////////////////////////////////////
+void DCT_Smart_Unitary(FIELD_3D& F, fftw_plan& plan, double*& in) {
+  TIMER functionTimer(__FUNCTION__);
+
+  int xRes = F.xRes();
+  int yRes = F.yRes();
+  int zRes = F.zRes();
+
+  // fill the 'in' buffer
+  in = CastToDouble(F.flattened(), in);
+  
+  {
+    TIMER fftTimer("fftw execute");
+  fftw_execute(plan);
+  }
+  // 'in' is now overwritten to the result of the transform
+
+  // read 'in' into F_hat
+  FIELD_3D F_hat(in, xRes, yRes, zRes);
+ 
+  // normalize symmetrically
+  F_hat *= sqrt(0.125 / (xRes * yRes * zRes));
+
+  ////////////////////////////////////////////////////////
+  // ******
+  // adding unitary normalization for testing!
+  // ******
+  for (int z = 0; z < zRes; z++) {
+    for (int y = 0; y < yRes; y++) {
+      F_hat(0, y, z) *= (1.0 / sqrt(2));
+    }
+  }
+
+  for (int y = 0; y < yRes; y++) {
+    for (int x = 0; x < xRes; x++) {
+      F_hat(x, y, 0) *= (1.0 / sqrt(2));
+    }
+  }
+
+  for (int z = 0; z < zRes; z++) {
+    for (int x = 0; x < xRes; x++) {
+      F_hat(x, 0, z) *= (1.0 / sqrt(2));
+    }
+  }
+
+  ////////////////////////////////////////////////////////
+
   // rewrite F with the contents of F_hat
   F.swapPointers(F_hat);
 }
@@ -774,6 +830,31 @@ void DoSmartBlockDCT(vector<FIELD_3D>& V, int direction) {
     // take the transform at *itr (which is a FIELD_3D)
     // and overwrite its contents
     DCT_Smart(*itr, plan, in);
+  }
+
+  fftw_free(in);
+  fftw_destroy_plan(plan);
+  fftw_cleanup();
+}
+
+////////////////////////////////////////////////////////
+// performs a UNITARY dct/idct on each individual block of a passed in
+// vector of blocks
+////////////////////////////////////////////////////////
+void DoSmartUnitaryBlockDCT(vector<FIELD_3D>& V, int direction) {
+  TIMER functionTimer(__FUNCTION__);
+  // direction determines whether it is DCT or IDCT
+  
+  // allocate a buffer for the size of an 8 x 8 x 8 block
+  double* in = (double*) fftw_malloc(8 * 8 * 8 * sizeof(double));
+
+  // make the appropriate plan
+  fftw_plan plan = Create_DCT_Plan(in, direction);
+  
+  for (auto itr = V.begin(); itr != V.end(); ++itr) {
+    // take the transform at *itr (which is a FIELD_3D)
+    // and overwrite its contents
+    DCT_Smart_Unitary(*itr, plan, in);
   }
 
   fftw_free(in);

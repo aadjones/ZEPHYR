@@ -236,6 +236,71 @@ void SUBSPACE_FLUID_3D_COMPRESSED_EIGEN::stepReorderedCubatureStam()
   }
 
 //////////////////////////////////////////////////////////////////////
+// The reduced solver, with IOP, with peeled boundaries, 
+// with cubature enabled
+//////////////////////////////////////////////////////////////////////
+void SUBSPACE_FLUID_3D_COMPRESSED_EIGEN::stepWithObstacle()
+  {
+    TIMER functionTimer(__FUNCTION__);
+    Real goalTime = 0.1;
+    Real currentTime = 0;
+
+    // compute the CFL condition
+    _dt = goalTime;
+
+    // wipe forces
+    _force.clear();
+
+    // wipe boundaries
+    _velocity.setZeroBorder();
+
+    // compute the forces
+    addBuoyancy(_heat.data());
+    _velocity.axpy(_dt, _force);
+
+    _force.clear();
+    addVorticity();
+    _velocity.axpy(_dt, _force);
+
+    TIMER projectionTimer("Velocity projection");
+
+    // project into the subspace
+    _qDot = PeeledCompressedProject(_velocity, _U_preproject_data);
+
+    projectionTimer.stop();
+
+    // do IOP
+    reducedSetZeroSphere();
+
+    // then pressure project
+    reducedStagedProjectIOP();
+
+    // then advect
+    advectHeatAndDensityStam();
+    reducedAdvectStagedStamFast();
+    
+    // then diffuse 
+    TIMER diffusionProjectionTimer("Velocity projection");
+    reducedPeeledDiffusion();
+    diffusionProjectionTimer.stop();
+
+    // come back to full space
+    TIMER unprojectionTimer("Velocity unprojection");
+    PeeledCompressedUnproject(_velocity, _U_final_data, _qDot);
+    unprojectionTimer.stop();
+
+    currentTime += _dt;
+
+    cout << " Simulation step " << _totalSteps << " done. " << endl;
+
+    _totalTime += goalTime;
+    _totalSteps++;
+
+    // diff the current sim results against ground truth
+    diffGroundTruth();
+  }
+
+//////////////////////////////////////////////////////////////////////
 // do a full-rank advection of heat and density
 //////////////////////////////////////////////////////////////////////
 void SUBSPACE_FLUID_3D_COMPRESSED_EIGEN::advectHeatAndDensityStam()
@@ -268,6 +333,26 @@ void SUBSPACE_FLUID_3D_COMPRESSED_EIGEN::advectHeatAndDensityStam()
 	_heat.setZeroBorder();
 }
 
+//////////////////////////////////////////////////////////////////////
+// do a reduced zeroing out of the sphere interior for IOP
+//////////////////////////////////////////////////////////////////////
+void SUBSPACE_FLUID_3D_COMPRESSED_EIGEN::reducedSetZeroSphere()
+{
+  TIMER functionTimer(__FUNCTION__);
+
+  cout << "_qDot.size in reducedZeroSphere: " << _qDot.size() << endl;
+  if (_reducedIOP.cols() == 0) {
+    string filename;
+    filename = _reducedPath + string("U.iop.subspace.matrix");
+    if (fileExists(filename)) {
+      EIGEN::read(filename, _reducedIOP);
+    }
+  }
+
+  cout << "_reducedIOP.cols: " << _reducedIOP.cols() << endl;
+  _qDot = _reducedIOP * _qDot;
+  
+}
 //////////////////////////////////////////////////////////////////////
 // perform reduced order diffusion with separate boundary slabs
 //////////////////////////////////////////////////////////////////////
@@ -369,6 +454,17 @@ void SUBSPACE_FLUID_3D_COMPRESSED_EIGEN::reducedStagedProject()
 {
   TIMER functionTimer(__FUNCTION__);
   _qDot = _preprojectToFinal * _qDot + _inverseProduct * _qDot;
+}
+//////////////////////////////////////////////////////////////////////
+// do a staged reduced order pressure projection for IOP
+//////////////////////////////////////////////////////////////////////
+void SUBSPACE_FLUID_3D_COMPRESSED_EIGEN::reducedStagedProjectIOP()
+{
+  TIMER functionTimer(__FUNCTION__);
+  cout << "_preprojectToPreadvect.cols: " << _preprojectToPreadvect.cols() << endl;
+  cout << "_qDot.size: " << _qDot.size() << endl;
+  cout << "_inverseProduct rows, cols: " << "(" << _inverseProduct.rows() << ", " << _inverseProduct.cols() << ")" << endl;
+  _qDot = _preprojectToPreadvect * _qDot + _inverseProduct * _qDot;
 }
 
 //////////////////////////////////////////////////////////////////////
@@ -1397,6 +1493,86 @@ void SUBSPACE_FLUID_3D_COMPRESSED_EIGEN::loadReducedRuntimeBases(string path)
     purge();
 }
 
+//////////////////////////////////////////////////////////////////////
+// load the IOP bases needed for cubature runtime
+//
+// the path variable is there in case we want to load off the SSD
+//////////////////////////////////////////////////////////////////////
+void SUBSPACE_FLUID_3D_COMPRESSED_EIGEN::loadReducedIOP(string path)
+{
+
+  // we need to load preproject, preadvect, and final (??)
+  
+ TIMER functionTimer(__FUNCTION__);
+  if (path.length() == 0)
+    path = _reducedPath;
+
+  string filename;
+  
+  int* allDataX = NULL;
+  int* allDataY = NULL;
+  int* allDataZ = NULL;
+  DECOMPRESSION_DATA decompression_dataX;
+  DECOMPRESSION_DATA decompression_dataY;
+  DECOMPRESSION_DATA decompression_dataZ;
+  filename = _reducedPath + string("U.preadvect.componentX");
+  ReadBinaryFileToMemory(filename.c_str(), allDataX, decompression_dataX);
+  filename = _reducedPath + string("U.preadvect.componentY");
+  ReadBinaryFileToMemory(filename.c_str(), allDataY, decompression_dataY);
+  filename = _reducedPath + string("U.preadvect.componentZ");
+  ReadBinaryFileToMemory(filename.c_str(), allDataZ, decompression_dataZ);
+  MATRIX_COMPRESSION_DATA U_preadvect_data(allDataX, allDataY, allDataZ,
+      decompression_dataX, decompression_dataY, decompression_dataZ);
+  _U_preadvect_data = U_preadvect_data;
+  _U_preadvect_data.init_cache();
+
+  DECOMPRESSION_DATA preadvect_dataX = _U_preadvect_data.get_decompression_dataX();
+  VEC3I dims = preadvect_dataX.get_dims();
+  const int xRes = dims[0];
+  const int yRes = dims[1];
+  const int zRes = dims[2];
+  const int numRows = 3 * xRes * yRes * zRes;
+
+  if (numRows > 1000000) 
+    purge();
+
+  filename = path + string("U.final.matrix");
+  int* UallDataX = NULL;
+  int* UallDataY = NULL;
+  int* UallDataZ = NULL;
+  DECOMPRESSION_DATA Udecompression_dataX;
+  DECOMPRESSION_DATA Udecompression_dataY;
+  DECOMPRESSION_DATA Udecompression_dataZ;
+  filename = _reducedPath + string("U.final.componentX");
+  ReadBinaryFileToMemory(filename.c_str(), UallDataX, Udecompression_dataX);
+  filename = _reducedPath + string("U.final.componentY");
+  ReadBinaryFileToMemory(filename.c_str(), UallDataY, Udecompression_dataY);
+  filename = _reducedPath + string("U.final.componentZ");
+  ReadBinaryFileToMemory(filename.c_str(), UallDataZ, Udecompression_dataZ);
+  MATRIX_COMPRESSION_DATA U_final_data(UallDataX, UallDataY, UallDataZ,
+      Udecompression_dataX, Udecompression_dataY, Udecompression_dataZ);
+  _U_final_data = U_final_data;
+  _U_final_data.init_cache();
+
+  filename = path + string("U.preproject.matrix");
+  UallDataX = NULL;
+  UallDataY = NULL;
+  UallDataZ = NULL;
+  // rewrite into Udecompression_data
+  filename = _reducedPath + string("U.preproject.componentX");
+  ReadBinaryFileToMemory(filename.c_str(), UallDataX, Udecompression_dataX);
+  filename = _reducedPath + string("U.preproject.componentY");
+  ReadBinaryFileToMemory(filename.c_str(), UallDataY, Udecompression_dataY);
+  filename = _reducedPath + string("U.preproject.componentZ");
+  ReadBinaryFileToMemory(filename.c_str(), UallDataZ, Udecompression_dataZ);
+  MATRIX_COMPRESSION_DATA U_preproject_data(UallDataX, UallDataY, UallDataZ,
+      Udecompression_dataX, Udecompression_dataY, Udecompression_dataZ);
+  _U_preproject_data = U_preproject_data;
+  _U_preproject_data.init_cache();
+
+
+  TIMER::printTimings();
+}
 //////////////////////////////////////////////////////////////////////
 // compute the velocity-to-divergence matrix
 //////////////////////////////////////////////////////////////////////

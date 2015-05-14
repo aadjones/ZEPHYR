@@ -428,9 +428,9 @@ public:
   FIELD_3D peelBoundary() const;
 
   // return a flattened array of all the field contents
-  VECTOR flattened();
-  VECTOR flattenedRow();
-  VectorXd flattenedEigen();
+  VECTOR flattened() const;
+  VECTOR flattenedRow() const;
+  VectorXd flattenedEigen() const;
 
   // set the field innards to a peeled version
   void setWithPeeled(const VECTOR& data);
