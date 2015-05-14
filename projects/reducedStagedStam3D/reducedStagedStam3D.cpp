@@ -367,7 +367,7 @@ void runEverytime()
     static int steps = 0;
     cout << " Simulation step " << steps << endl;
     fluid->addSmokeColumn();
-    fluid->stepReorderedCubatureStamTest();
+    fluid->stepReorderedCubatureStam();
     
     /* 
     char buffer[256];
@@ -380,12 +380,12 @@ void runEverytime()
 
     steps++;
 
-    if (steps == 48) {    
+    if (steps == simulationSnapshots) {    
     // if we were already capturing a movie
         if (captureMovie)
         {
          // write out the movie
-         movie.writeMovie("movie.mov");
+         movie.writeMovie("movie150May11.mov");
 
         // reset the movie object
         movie = QUICKTIME_MOVIE();
@@ -405,7 +405,7 @@ void runEverytime()
     }
 
     // check if we're done
-    if (steps == 49)
+    if (steps == simulationSnapshots)
       exit(0);
     // stop early
     /*

@@ -61,6 +61,11 @@ int xRes = 0;
 int yRes = 0;
 int zRes = 0;
 
+// awkward global resolutions for scope reasons
+int g_xRes = 200;
+int g_yRes = 266;
+int g_zRes = 200;
+
 void runEverytime();
 
 VEC3F cellCenter(int x, int y, int z);
@@ -145,9 +150,9 @@ void glutDisplay()
 
     glPushMatrix();
       // apparently the coordinates' origin is at the bottom left
-      glTranslatef(cellCenter(48, 64, 48)[0], cellCenter(48, 64, 48)[1],
-          cellCenter(48, 64, 48)[2]);
-      cout << "computed cell center for 48, 64, 48: " << cellCenter(48, 64, 48) << endl;
+      glTranslatef(cellCenter(g_xRes, g_yRes, g_zRes)[0], cellCenter(g_xRes, g_yRes, g_zRes)[1],
+          cellCenter(g_xRes, g_yRes, g_zRes)[2]);
+      // make a wire sphere of radius 0.1 with 10 latitudes/longitudes
       glutWireSphere(0.1, 10, 10);
     glPopMatrix();  
 
@@ -403,9 +408,9 @@ void runEverytime()
 
 VEC3F cellCenter(int x, int y, int z) 
 {
-  double dx = 1.0 / 48.0;
-  double dy = 1.0 / 64.0;
-  double dz = 1.0 / 48.0;
+  double dx = 1.0 / g_xRes;
+  double dy = 1.0 / g_yRes;
+  double dz = 1.0 / g_zRes;
 
   VEC3F halfLengths(0.5, 0.5, 0.5);
 

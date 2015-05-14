@@ -60,6 +60,12 @@ QUICKTIME_MOVIE movie;
 
 void runOnce();
 void runEverytime();
+
+// global resolutions for scope reasons
+int g_xRes = 200;
+int g_yRes = 266;
+int g_zRes = 200;
+
 VEC3F cellCenter(int x, int y, int z);
 
 vector<VECTOR> snapshots;
@@ -151,7 +157,8 @@ void glutDisplay()
     glPopMatrix();
     
     glPushMatrix();
-      glTranslatef(cellCenter(48, 64, 48)[0], cellCenter(48, 64, 48)[1], cellCenter(48, 64, 48)[2]);
+      glTranslatef(cellCenter(g_xRes, g_yRes, g_zRes)[0], cellCenter(g_xRes, g_yRes, g_zRes)[1], cellCenter(g_xRes, g_yRes, g_zRes)[2]);
+      // draw a sphere of radius 0.1 with 10 latitudes/longitudes
       glutWireSphere(0.1, 10, 10);
     glPopMatrix();  
 
@@ -340,7 +347,7 @@ int main(int argc, char *argv[])
   bool usingIOP = parser.getBool("iop", 0);
   cout << "usingIOP was parsed as: " << usingIOP << endl;
 	fluid = new SUBSPACE_FLUID_3D_EIGEN(xRes, yRes, zRes, reducedPath, &boundaries[0], usingIOP);
-  // fluid->loadReducedIOP();
+  fluid->loadReducedIOP();
 
   // for debugging
   fluid->loadReducedIOPAll();
@@ -386,7 +393,7 @@ void runEverytime()
 
     steps++;
 
-    if (steps == 150) {    
+    if (steps == simulationSnapshots) {    
     // if we were already capturing a movie
         if (captureMovie)
         {
@@ -411,7 +418,7 @@ void runEverytime()
     }
 
     // check if we're done
-    if (steps == 151)
+    if (steps == simulationSnapshots + 1)
       exit(0);
     // stop early
     /*
@@ -425,9 +432,9 @@ void runEverytime()
 
 VEC3F cellCenter(int x, int y, int z) 
 {
-  double dx = 1.0 / 48.0;
-  double dy = 1.0 / 64.0;
-  double dz = 1.0 / 48.0;
+  double dx = 1.0 / g_xRes;
+  double dy = 1.0 / g_yRes;
+  double dz = 1.0 / g_zRes;
 
   VEC3F halfLengths(0.5, 0.5, 0.5);
 

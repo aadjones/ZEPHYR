@@ -248,9 +248,7 @@ void FLUID_3D_MIC::stepWithObstacle()
   addVorticity();
   _velocity.axpy(_dt, _force);
 
-  // let's try it with a different center?
   VEC3I center(_xRes/2, _yRes/2, _zRes/2);
-  // VEC3I center(_xRes, _yRes, _zRes);
   double radius = 0.1;
 
 
