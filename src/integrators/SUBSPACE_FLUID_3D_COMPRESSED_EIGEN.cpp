@@ -56,7 +56,15 @@ SUBSPACE_FLUID_3D_COMPRESSED_EIGEN::SUBSPACE_FLUID_3D_COMPRESSED_EIGEN(int xRes,
 
   if (!loadNothing)
   {
-    initOutOfCore();
+    if (_usingIOP) { 
+      cout << "Calling initOutOfCoreIOP(). " << endl;
+      initOutOfCoreIOP();
+    }
+
+    else { 
+      cout << "Calling vanilla initOutOfCore. " << endl;
+      initOutOfCore();
+    }
 
     readAdvectionCubature();
   }
@@ -112,6 +120,7 @@ void SUBSPACE_FLUID_3D_COMPRESSED_EIGEN::initOutOfCore()
     
     filename = _reducedPath + string("projected.ptof.matrix");
     EIGEN::read(filename, _preprojectToFinal);
+    cout << "Read projected.ptof.matrix into _preprojectToFinal. " << endl;
 
     filename = _reducedPath + string("projected.vtod.matrix");
     EIGEN::read(filename, _reducedVelocityToDivergence);
@@ -140,6 +149,73 @@ void SUBSPACE_FLUID_3D_COMPRESSED_EIGEN::initOutOfCore()
   }
 }
 
+//////////////////////////////////////////////////////////////////////
+// initialize the peeled version where there is a separate basis
+// for each stage, using IOP
+//////////////////////////////////////////////////////////////////////
+void SUBSPACE_FLUID_3D_COMPRESSED_EIGEN::initOutOfCoreIOP()
+{
+  // init the peeled dimensions
+  _xPeeled = _xRes - 2;
+  _yPeeled = _yRes - 2;
+  _zPeeled = _zRes - 2;
+  _slabPeeled = _xPeeled * _yPeeled;
+
+  bool pcaBuilt = fileExists(_reducedPath + string("U.final.componentX")) &&
+                  fileExists(_reducedPath + string("U.final.componentY")) &&
+                  fileExists(_reducedPath + string("U.final.componentZ")) &&
+                  fileExists(_reducedPath + string("U.preproject.matrix")) &&
+                  fileExists(_reducedPath + string("U.preadvect.componentX")) &&
+                  fileExists(_reducedPath + string("U.preadvect.componentY")) &&
+                  fileExists(_reducedPath + string("U.preadvect.componentZ")) &&
+                  fileExists(_reducedPath + string("U.pressure.matrix"));
+
+  // check if pre-built matrices exist
+  bool filesBuilt = fileExists(_reducedPath + string("projected.A.matrix")) &&
+                    fileExists(_reducedPath + string("projected.ptof.matrix")) &&
+                    fileExists(_reducedPath + string("projected.vtod.matrix")) &&
+                    fileExists(_reducedPath + string("damping.peeled.matrix")) &&
+                    fileExists(_reducedPath + string("projected.ptov.matrix")) &&
+                    fileExists(_reducedPath + string("inverseProduct.matrix"));
+
+  if (!filesBuilt) {
+    cout << "Error: pre-built matrices do not yet exist!" << endl;
+    cout << "You should run ./buildProducts first." << endl;
+    exit(1);
+  }
+  else
+  {
+    string filename;
+    
+    filename = _reducedPath + string("projected.ptof.matrix");
+    EIGEN::read(filename, _preprojectToPreadvect);
+
+    filename = _reducedPath + string("projected.vtod.matrix");
+    EIGEN::read(filename, _reducedVelocityToDivergence);
+
+    filename = _reducedPath + string("projected.ptov.matrix");
+    EIGEN::read(filename, _reducedPressureToVelocity);
+
+    filename = _reducedPath + string("projected.A.matrix");
+    EIGEN::read(filename, _reducedA);
+
+    filename = _reducedPath + string("damping.peeled.matrix");
+    EIGEN::read(filename, _dampingMatrixReduced);
+    
+    filename = _reducedPath + string("inverseProduct.matrix");
+    bool success = EIGEN::read(filename, _inverseProduct);
+
+    if (!success)
+    {
+      // Needs everything prior to be built already
+      MatrixXd inverse = _reducedA.inverse();
+      _inverseProduct = _reducedPressureToVelocity * inverse * _reducedVelocityToDivergence;
+      filename = _reducedPath + string("inverseProduct.matrix");
+      EIGEN::write(filename, _inverseProduct);
+      TIMER::printTimings();
+    }
+  }
+}
 
 SUBSPACE_FLUID_3D_COMPRESSED_EIGEN::~SUBSPACE_FLUID_3D_COMPRESSED_EIGEN()
 {

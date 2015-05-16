@@ -248,8 +248,10 @@ protected:
   // initialize the staged version, assuming the Us were computed out of core and will not
   // all fit in memory
   void initOutOfCore();
+ 
+  // initialize the staged version for IOP 
+  void initOutOfCoreIOP();
   
-
   // build a peeled version of the damping matrix
   void buildPeeledDampingMatrix();
   void buildPeeledDampingMatrixFlat(SPARSE_MATRIX_ARRAY& final);

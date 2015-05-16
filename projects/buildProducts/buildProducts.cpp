@@ -46,8 +46,11 @@ int main(int argc, char* argv[]) {
 
   double discardThreshold = parser.getFloat("discard threshold", 1e-9);
   cout << " Using discard threshold: " << discardThreshold << endl;
+  
+  bool usingIOP = parser.getBool("iop", 0);
+  cout << " Using iop: " << usingIOP << endl;
 
-	fluid = new SUBSPACE_FLUID_3D_EIGEN(xRes, yRes, zRes, reducedPath, &boundaries[0]);
+	fluid = new SUBSPACE_FLUID_3D_EIGEN(xRes, yRes, zRes, reducedPath, &boundaries[0], usingIOP);
 
   delete fluid;
 

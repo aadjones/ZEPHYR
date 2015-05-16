@@ -350,7 +350,7 @@ int main(int argc, char *argv[])
   fluid->loadReducedIOP();
 
   // for debugging
-  fluid->loadReducedIOPAll();
+  // fluid->loadReducedIOPAll();
 
   fluid->fullRankPath() = snapshotPath;
   fluid->vorticityEps() = vorticity;

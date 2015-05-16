@@ -58,39 +58,24 @@ void PreprocessEncoder(COMPRESSION_DATA& data);
 int main(int argc, char* argv[]) {
   TIMER functionTimer(__FUNCTION__);
   
-  /*
+  
   // read in the cfg file
   if (argc != 2) {
     cout << " Usage: " << argv[0] << " *.cfg" << endl;
     return 0;
   }
-  */
+  
 
-  /*
+  
   SIMPLE_PARSER parser(argv[1]);
   string reducedPath = parser.getString("reduced path", "./data/reduced.dummy/"); 
   int xRes = parser.getInt("xRes", 48);
   int yRes = parser.getInt("yRes", 64);
   int zRes = parser.getInt("zRes", 48);
   int numCols = parser.getInt("reduced snapshots", 47);
-  */
-
-  string reducedPath("/Volumes/DataDrive/data/reduced.stam.128.vorticity.1.5/");
-  // string reducedPath("/Volumes/DataDrive/data/reduced.stam.200.vorticity.1.5/");
-  // string reducedPath("./data/reduced.stam.64/");
+  bool usingIOP = parser.getBool("iop", 0);
+  cout << " Using IOP: " << usingIOP << endl;
   
-  // int xRes = 200;
-  // int yRes = 266;
-  // int zRes = 200;
-  // int numCols = 150;
-  // int xRes = 48;
-  // int yRes = 64;
-  // int zRes = 48;
-  // int numCols = 47;
-  int xRes = 96;
-  int yRes = 128;
-  int zRes = 96;
-  int numCols = 150;
   // we want the peeled resolutions for the matrices
   xRes -= 2;
   yRes -= 2;
@@ -104,34 +89,51 @@ int main(int argc, char* argv[]) {
 
   MatrixXd U_preadvect(numRows, numCols);
   MatrixXd U_final(numRows, numCols);
+  MatrixXd U_preproject;
 
-  /*
+  if (usingIOP) {
+    MatrixXd U(numRows, numCols);
+    U_preproject = U;
+  }
+
   int nBits = parser.getInt("nBits", 24); 
+  cout << " nBits: " << nBits << endl;
   double q = parser.getFloat("linear damping", 1.0);
+  cout << " q: " << q << endl;
   double power = parser.getFloat("nonlinear damping", 6.0); 
-  */
-  int nBits = 24;
-  double q = 1.0;
-  double power = 6.0;
+  cout << " power: " << power << endl;
 
   string preAdvectPath = reducedPath + string("U.preadvect.matrix");
   string finalPath = reducedPath + string("U.final.matrix");
+  string preprojectPath = reducedPath + string("U.preproject.matrix");
  
   EIGEN::read(preAdvectPath, U_preadvect);
   EIGEN::read(finalPath, U_final);
+  if (usingIOP) {
+    EIGEN::read(preprojectPath, U_preproject);
+  }
 
   // set the parameters in compression data
   COMPRESSION_DATA preadvect_compression_data(dims, numCols, q, power, nBits);
   COMPRESSION_DATA final_compression_data(dims, numCols, q, power, nBits);
+  COMPRESSION_DATA preproject_compression_data;
+  if (usingIOP) {
+    COMPRESSION_DATA data(dims, numCols, q, power, nBits);
+    preproject_compression_data = data;
+  }
 
   // compute some additional parameters for compression data
   PreprocessEncoder(preadvect_compression_data);
   PreprocessEncoder(final_compression_data);
+  if (usingIOP) {
+    PreprocessEncoder(preproject_compression_data);
+  }
 
   // write a binary file for each scalar field component
 
   string preadvectFilename = reducedPath + string("U.preadvect.component");
   string finalFilename = reducedPath + string("U.final.component");
+  string preprojectFilename = reducedPath + string("U.preproject.component");
 
   // write out the compressed matrix files
   for (int component = 0; component < 3; component++) {
@@ -145,6 +147,13 @@ int main(int argc, char* argv[]) {
     CompressAndWriteMatrixComponent(finalFilename.c_str(), U_final, component, final_compression_data);
   }  
   
+  if (usingIOP) {
+    for (int component = 0; component < 3; component++) {
+      cout << "Writing component: " << component << endl;
+      CompressAndWriteMatrixComponent(preprojectFilename.c_str(), U_preproject, component, preproject_compression_data);
+    }
+  }
+     
 
   TIMER::printTimings();
   

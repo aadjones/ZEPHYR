@@ -65,6 +65,12 @@ QUICKTIME_MOVIE movie;
 void runOnce();
 void runEverytime();
 
+// global resolutions, for scope reasons
+int g_xRes = 48;
+int g_yRes = 64;
+int g_zRes = 48;
+
+VEC3F cellCenter(int x, int y, int z);
 vector<VECTOR> snapshots;
 
 // user configuration
@@ -153,7 +159,12 @@ void glutDisplay()
       fluid->density().drawBoundingBox();
       /////////////////////////////////////////////////////////////////
     glPopMatrix();
-
+   
+    glPushMatrix();
+      glTranslatef(cellCenter(g_xRes, g_yRes, g_zRes)[0], cellCenter(g_xRes, g_yRes, g_zRes)[1], cellCenter(g_xRes, g_yRes, g_zRes)[2]);
+      // draw a sphere of radius 0.1 with 10 latitudes/longitudes
+      glutWireSphere(0.1, 10, 10);
+    glPopMatrix();  
     //drawAxes();
   glvu.EndFrame();
   // if we're recording a movie, capture a frame
@@ -387,7 +398,7 @@ void runEverytime()
         if (captureMovie)
         {
          // write out the movie
-         movie.writeMovie("movie.mov");
+         movie.writeMovie("reducedIOPmovie.mov");
 
         // reset the movie object
         movie = QUICKTIME_MOVIE();
@@ -410,4 +421,28 @@ void runEverytime()
     if (steps == simulationSnapshots + 1)
       exit(0);
   }
+}
+
+VEC3F cellCenter(int x, int y, int z) 
+{
+  double dx = 1.0 / g_xRes;
+  double dy = 1.0 / g_yRes;
+  double dz = 1.0 / g_zRes;
+
+  VEC3F halfLengths(0.5, 0.5, 0.5);
+
+  // set it to the lower corner
+  VEC3F final = VEC3F(0.0, 0.0, 0.0) - halfLengths;
+
+  // displace to the NNN corner
+  final[0] += x * dx;
+  final[1] += y * dy;
+  final[2] += z * dz;
+
+  // displace it to the cell center
+  final[0] += dx * 0.5;
+  final[1] += dy * 0.5;
+  final[2] += dz * 0.5;
+
+  return final;
 }
