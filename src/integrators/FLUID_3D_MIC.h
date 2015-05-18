@@ -45,6 +45,7 @@ public:
 
   void step();
   void stepWithObstacle();
+  void stepWithObstacleSameOrder();
 
   int xRes() const { return _xRes; };
   int yRes() const { return _yRes; };

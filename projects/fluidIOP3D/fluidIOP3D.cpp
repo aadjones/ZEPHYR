@@ -371,7 +371,11 @@ void runEverytime()
     // step the sim
     cout << " Simulation step " << steps << " of " << simulationSnapshots << endl;
     fluid->addSmokeColumn();
-    fluid->stepWithObstacle();
+
+    // stepWithObstacle permutes the order of the splitting
+    // fluid->stepWithObstacle();
+    
+    fluid->stepWithObstacleSameOrder();
 
     // write to disk
     char buffer[256];

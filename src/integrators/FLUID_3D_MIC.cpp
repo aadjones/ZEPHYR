@@ -295,6 +295,87 @@ void FLUID_3D_MIC::stepWithObstacle()
 	_totalTime += goalTime;
 	_totalSteps++;
 }
+//////////////////////////////////////////////////////////////////////
+// step simulation once with fanciness like vorticity confinement 
+// and diffusion removed
+// Has a static spherical obstacle.
+// Is *NOT* reordered!
+//////////////////////////////////////////////////////////////////////
+void FLUID_3D_MIC::stepWithObstacleSameOrder()
+{
+  Real goalTime = 0.1;
+  Real currentTime = 0;
+
+  // variables for the IOP obstacle
+  VEC3I center(_xRes/2, _yRes/2, _zRes/2);
+  double radius = 0.1;
+
+  // compute the CFL condition
+  _dt = goalTime;
+
+  // wipe forces
+  _force.clear();
+
+  // wipe boundaries
+  _velocity.setZeroBorder();
+  _density.setZeroBorder();
+
+  // compute the forces
+  addBuoyancy(_heat.data());
+  _velocity.axpy(_dt, _force);
+  _force.clear();
+
+  _prevorticity = _velocity;
+
+  addVorticity();
+  _velocity.axpy(_dt, _force);
+
+  // advect everything
+  advectStam();
+
+  // cache preprojection before doing IOP
+  _preprojection = _velocity;
+
+  // let's test IOP with the full matrix
+
+  //////////////////////////////                 
+  // if the matrix isn't built yet, build it
+  if (_peeledIOP.cols() <= 0) {
+    buildPeeledSparseIOP(_peeledIOP, center, radius);
+  }
+
+  cout << "_peeledIOP dims: " << "(" << _peeledIOP.rows() << ", " << _peeledIOP.cols() << ")" << endl;
+  VectorXd afterIOP = _peeledIOP * _velocity.peelBoundary().flattenedEigen();
+  cout << "Did sparse matrix-vector multiply for IOP!" << endl;
+  _velocity.setWithPeeled(afterIOP);
+  //////////////////////////////
+  
+  // store the postIOP velocity (QUESTION: before or after the project?)
+  _postIOP = _velocity;
+
+  // project via Poisson
+  project();
+
+  // cache prediffusion
+  _prediffusion = _velocity;
+
+  // if the matrix isn't built yet, build it
+  if (_peeledDampingFull.rows() <= 0)
+    buildPeeledDampingMatrixFull();
+
+  VectorXd after = _peeledDampingFull * _velocity.peelBoundary().flattenedEigen();
+  _velocity.setWithPeeled(after);
+
+  _preprojection = _velocity;
+
+  // run the solvers
+  project();
+
+  currentTime += _dt;
+
+	_totalTime += goalTime;
+	_totalSteps++;
+}
 
 //////////////////////////////////////////////////////////////////////
 // project into divergence free field
