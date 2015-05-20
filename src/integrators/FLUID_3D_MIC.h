@@ -74,6 +74,7 @@ public:
   VECTOR3_FIELD_3D& preadvection()  { return _preadvection; };
   VECTOR3_FIELD_3D& postadvection() { return _postadvection; };
   VECTOR3_FIELD_3D& postIOP()       { return _postIOP; };
+  VECTOR3_FIELD_3D& postIOPAndPressure() { return _postIOPAndPressure; };
   VECTOR3_FIELD_3D& cachedQuadratic()  { return _cachedQuadratic; };
   VECTOR3_FIELD_3D& midMaccormack()  { return _midMaccormack; };
   FIELD_3D& cachedPressure()    { return _cachedPressure; };
@@ -160,6 +161,9 @@ protected:
   
   // cache the result of Neumann IOP
   VECTOR3_FIELD_3D _postIOP;
+
+  // cache the result of a boundary stomp + pressure projection
+  VECTOR3_FIELD_3D _postIOPAndPressure;
 
   FIELD_3D _cachedPressure;
   FIELD_3D _cachedDivergence;

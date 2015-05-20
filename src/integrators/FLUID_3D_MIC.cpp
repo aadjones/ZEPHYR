@@ -300,6 +300,11 @@ void FLUID_3D_MIC::stepWithObstacle()
 // and diffusion removed
 // Has a static spherical obstacle.
 // Is *NOT* reordered!
+// We do:
+// 1) forces
+// 2) advection
+// 3) diffusion
+// 4) boundary + pressure project (IOP)
 //////////////////////////////////////////////////////////////////////
 void FLUID_3D_MIC::stepWithObstacleSameOrder()
 {
@@ -333,22 +338,33 @@ void FLUID_3D_MIC::stepWithObstacleSameOrder()
   // advect everything
   advectStam();
 
+  // cache prediffusion
+  _prediffusion = _velocity;
+
+  // if the matrix isn't built yet, build it
+  if (_peeledDampingFull.rows() <= 0) {
+    buildPeeledDampingMatrixFull();
+  }
+
+  VectorXd after = _peeledDampingFull * _velocity.peelBoundary().flattenedEigen();
+  _velocity.setWithPeeled(after);
+
   // cache preprojection before doing IOP
   _preprojection = _velocity;
 
   // let's test IOP with the full matrix
 
-  //////////////////////////////                 
   // if the matrix isn't built yet, build it
   if (_peeledIOP.cols() <= 0) {
     buildPeeledSparseIOP(_peeledIOP, center, radius);
   }
 
+  //////////////////////////////////////////////////////////////////////
   cout << "_peeledIOP dims: " << "(" << _peeledIOP.rows() << ", " << _peeledIOP.cols() << ")" << endl;
   VectorXd afterIOP = _peeledIOP * _velocity.peelBoundary().flattenedEigen();
   cout << "Did sparse matrix-vector multiply for IOP!" << endl;
   _velocity.setWithPeeled(afterIOP);
-  //////////////////////////////
+  //////////////////////////////////////////////////////////////////////
   
   // store the postIOP velocity (QUESTION: before or after the project?)
   _postIOP = _velocity;
@@ -356,20 +372,11 @@ void FLUID_3D_MIC::stepWithObstacleSameOrder()
   // project via Poisson
   project();
 
-  // cache prediffusion
-  _prediffusion = _velocity;
+  // we don't really need to cache this since it is the final one, but it doesn't hurt 
+  _postIOPAndPressure = _velocity;
 
-  // if the matrix isn't built yet, build it
-  if (_peeledDampingFull.rows() <= 0)
-    buildPeeledDampingMatrixFull();
-
-  VectorXd after = _peeledDampingFull * _velocity.peelBoundary().flattenedEigen();
-  _velocity.setWithPeeled(after);
-
-  _preprojection = _velocity;
-
-  // run the solvers
-  project();
+  // this corresponds to doing only 1 iteration of IOP, but that may be sufficient
+  // for practical use
 
   currentTime += _dt;
 
@@ -1526,9 +1533,7 @@ void FLUID_3D_MIC::appendStreamsIOP() const
   string neumannIOPFile = _snapshotPath + string("neumann.iop.matrices");
   string pressureFile = _snapshotPath + string("pressure.matrix.transpose");
 
-  // if there's a Neumann matrix at all, it's using IOP
-  // bool usingIOP = (_neumannIOP.rows() > 0);
-  bool usingIOP = true;
+  bool usingIOP = 1; 
 
   fileFinal      = fopen(velocityFinalFile.c_str(), "ab");
   filePreproject = fopen(velocityPreprojectFile.c_str(), "ab");
@@ -1576,7 +1581,7 @@ void FLUID_3D_MIC::appendStreamsIOP() const
   {
     fwrite((void*)(velocity.data()), sizeof(double), cols, filePreadvect);
     finalRows[3]++;
-    cout << "preadvection size: " << "(" << cols << ", " << finalRows[3] << endl;
+    cout << "preadvection size: " << "(" << cols << ", " << finalRows[3] << ")" << endl;
   }
  
   if (usingIOP)

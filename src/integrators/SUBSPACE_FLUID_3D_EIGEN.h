@@ -53,6 +53,7 @@ public:
   void stepReorderedCubatureStam();
   void stepReorderedCubatureStamTest();
   void stepObstacleReorderedCubatureStam();
+  void stepObstacleSameOrder();
 
   const MatrixXd& U() const { return _U; };
   const MatrixXd& preadvectU() const { return _preadvectU; };
@@ -267,6 +268,9 @@ protected:
  
   // do a staged reduced order pressure projection for use with IOP 
   void reducedStagedProjectIOP();
+
+  // do a reduced order pressure projection for use with the unpermuted IOP
+  void reducedSameOrderProjectionIOP(); 
 
   // do a reduced zeroing out the interior of the sphere for IOP
   void reducedSetZeroSphere();

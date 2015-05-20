@@ -347,10 +347,10 @@ int main(int argc, char *argv[])
   bool usingIOP = parser.getBool("iop", 0);
   cout << "usingIOP was parsed as: " << usingIOP << endl;
 	fluid = new SUBSPACE_FLUID_3D_EIGEN(xRes, yRes, zRes, reducedPath, &boundaries[0], usingIOP);
-  fluid->loadReducedIOP();
+  // fluid->loadReducedRuntimeBases();
 
   // for debugging
-  // fluid->loadReducedIOPAll();
+  fluid->loadReducedIOPAll();
 
   fluid->fullRankPath() = snapshotPath;
   fluid->vorticityEps() = vorticity;
@@ -380,7 +380,10 @@ void runEverytime()
     static int steps = 0;
     cout << " Simulation step " << steps << endl;
     fluid->addSmokeColumn();
-    fluid->stepObstacleReorderedCubatureStam();
+    // fluid->stepObstacleReorderedCubatureStam();
+
+    // the splitting is not permuted in this method
+    fluid->stepObstacleSameOrder();
     
     /* 
     char buffer[256];
