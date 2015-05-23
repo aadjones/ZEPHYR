@@ -23,6 +23,11 @@ using std::accumulate;
 using std::cout;
 using std::endl;
 
+// assume the blocks are 8 x 8 x 8
+// DCT_NORMALIZE is 1 / sqrt( 8 * xRes * yRes * zRes) in general!
+const double DCT_NORMALIZE = 1.0/64.0;
+const double SQRT_ONEHALF = 1.0/sqrt(2.0);
+
 ////////////////////////////////////////////////////////
 // Function Implementations
 ////////////////////////////////////////////////////////
@@ -76,7 +81,6 @@ double* CastToDouble(const VECTOR& x, double* array) {
   }
   return array;
 }
-
 
 ////////////////////////////////////////////////////////
 // fill a buffer of ints from a VECTOR
@@ -419,27 +423,130 @@ void DCT_Smart(FIELD_3D& F, fftw_plan& plan, double*& in) {
 // corresponding 'in' buffer, performs the corresponding
 // transform on the field. this one is *unitary normalization* 
 ////////////////////////////////////////////////////////
-void DCT_Smart_Unitary(FIELD_3D& F, fftw_plan& plan, double*& in) {
+void DCT_Smart_Unitary(FIELD_3D& F, fftw_plan& plan, double*& in, int direction) {
   TIMER functionTimer(__FUNCTION__);
 
   int xRes = F.xRes();
   int yRes = F.yRes();
   int zRes = F.zRes();
 
+  if (direction == -1) { // inverse transform; need to pre-normalize!
+    UndoNormalize(&F);
+  }
+
   // fill the 'in' buffer
   in = CastToDouble(F.flattened(), in);
-  
+ 
+ 
   {
     TIMER fftTimer("fftw execute");
-  fftw_execute(plan);
+    fftw_execute(plan);
   }
+
   // 'in' is now overwritten to the result of the transform
 
   // read 'in' into F_hat
   FIELD_3D F_hat(in, xRes, yRes, zRes);
+
+  if (direction == 1) { // forward transform
+    DCT_Unitary_Normalize(&F_hat);
+  }
+  ////////////////////////////////////////////////////////
+
+  // rewrite F with the contents of F_hat
+  F.swapPointers(F_hat);
+}
+
+// perform a unitary normalization on the passed in field
+void DCT_Unitary_Normalize(FIELD_3D* F)
+{
+  assert( F->xRes() == 8 && F->yRes() == 8 && F->zRes() == 8 );
+
+  (*F) *= DCT_NORMALIZE;
+  
+  for (int z = 0; z < F->zRes(); z++) {
+    for (int y = 0; y < F->yRes(); y++) {
+      (*F)(0, y, z) *= SQRT_ONEHALF;
+    }
+  }
+
+  for (int y = 0; y < F->yRes(); y++) {
+    for (int x = 0; x < F->xRes(); x++) {
+      (*F)(x, y, 0) *= SQRT_ONEHALF;
+    }
+  }
+
+  for (int z = 0; z < F->zRes(); z++) {
+    for (int x = 0; x < F->xRes(); x++) {
+      (*F)(x, 0, z) *= SQRT_ONEHALF;
+    }
+  }
+}
+
+void UndoNormalize(FIELD_3D* F)
+// we need to divide by 1/sqrt2 here to play nicely with fftw
+
+{
+  
+  assert( F->xRes() == 8 && F->yRes() == 8 && F->zRes() == 8 );
+
+  (*F) *= DCT_NORMALIZE;
+
+  for (int z = 0; z < F->zRes(); z++) {
+    for (int y = 0; y < F->yRes(); y++) {
+      (*F)(0, y, z) /= SQRT_ONEHALF;
+    }
+  }
+
+  for (int y = 0; y < F->yRes(); y++) {
+    for (int x = 0; x < F->xRes(); x++) {
+      (*F)(x, y, 0) /= SQRT_ONEHALF;
+    }
+  }
+
+  for (int z = 0; z < F->zRes(); z++) {
+    for (int x = 0; x < F->xRes(); x++) {
+      (*F)(x, 0, z) /= SQRT_ONEHALF;
+    }
+  }
+}
+
+////////////////////////////////////////////////////////
+// given a passed in VectorXd which is a flattened FIELD_3D, fftw plan, and 
+// corresponding 'in' buffer, performs the corresponding
+// transform on the field. this one is *unitary normalization* 
+// assumes 8 x 8 x 8 blocks!
+////////////////////////////////////////////////////////
+
+
+void DCT_Smart_Unitary_Eigen(VectorXd& F, fftw_plan& plan, double*& in) {
+  TIMER functionTimer(__FUNCTION__);
+ 
+  const int xRes = 8;
+  const int yRes = 8; 
+  const int zRes = 8; 
+  assert(F.size() == xRes * yRes * zRes);
+
+  // fill the 'in' buffer
+  memcpy(in, F.data(), xRes * yRes * zRes * sizeof(double));
+
+
+  
+  {
+    TIMER fftTimer("fftw execute");
+    fftw_execute(plan);
+  }
+
+  // 'in' is now overwritten to the result of the transform
+
+  // read 'in' into F_hat
+  // should figure out how to carry out these normalizations
+  // WITHOUT making it a copy into a field3d...
+
+  FIELD_3D F_hat(in, xRes, yRes, zRes);
  
   // normalize symmetrically
-  F_hat *= sqrt(0.125 / (xRes * yRes * zRes));
+  F_hat *= DCT_NORMALIZE;
 
   ////////////////////////////////////////////////////////
   // ******
@@ -447,27 +554,28 @@ void DCT_Smart_Unitary(FIELD_3D& F, fftw_plan& plan, double*& in) {
   // ******
   for (int z = 0; z < zRes; z++) {
     for (int y = 0; y < yRes; y++) {
-      F_hat(0, y, z) *= (1.0 / sqrt(2));
+      F_hat(0, y, z) *= SQRT_ONEHALF;
     }
   }
 
   for (int y = 0; y < yRes; y++) {
     for (int x = 0; x < xRes; x++) {
-      F_hat(x, y, 0) *= (1.0 / sqrt(2));
+      F_hat(x, y, 0) *= SQRT_ONEHALF;
     }
   }
 
   for (int z = 0; z < zRes; z++) {
     for (int x = 0; x < xRes; x++) {
-      F_hat(x, 0, z) *= (1.0 / sqrt(2));
+      F_hat(x, 0, z) *= SQRT_ONEHALF;
     }
   }
 
-  ////////////////////////////////////////////////////////
+  F = F_hat.flattenedEigen();
 
-  // rewrite F with the contents of F_hat
-  F.swapPointers(F_hat);
+
 }
+
+
 
 ////////////////////////////////////////////////////////
 // defunct version of DCT since it does too many
@@ -854,7 +962,35 @@ void DoSmartUnitaryBlockDCT(vector<FIELD_3D>& V, int direction) {
   for (auto itr = V.begin(); itr != V.end(); ++itr) {
     // take the transform at *itr (which is a FIELD_3D)
     // and overwrite its contents
-    DCT_Smart_Unitary(*itr, plan, in);
+    DCT_Smart_Unitary(*itr, plan, in, direction);
+  }
+
+  fftw_free(in);
+  fftw_destroy_plan(plan);
+  fftw_cleanup();
+}
+
+////////////////////////////////////////////////////////
+// performs a UNITARY dct/idct on each individual block of a passed in
+// vector of blocks, but the blocks are pre-flattened into VectorXds
+////////////////////////////////////////////////////////
+
+
+
+void DoSmartUnitaryBlockDCTEigen(vector<VectorXd>& V, int direction) {
+  TIMER functionTimer(__FUNCTION__);
+  // direction determines whether it is DCT or IDCT
+  
+  // allocate a buffer for the size of an 8 x 8 x 8 block
+  double* in = (double*) fftw_malloc(8 * 8 * 8 * sizeof(double));
+
+  // make the appropriate plan
+  fftw_plan plan = Create_DCT_Plan(in, direction);
+  
+  for (auto itr = V.begin(); itr != V.end(); ++itr) {
+    // take the transform at *itr (which is a FIELD_3D)
+    // and overwrite its contents
+    DCT_Smart_Unitary_Eigen(*itr, plan, in);
   }
 
   fftw_free(in);
@@ -1396,7 +1532,13 @@ void CompressAndWriteFieldSmart(const char* filename, const FIELD_3D& F, COMPRES
     }
    
     // do the forward transform 
-    DoSmartBlockDCT(blocks, 1);
+    // NEW CHANGE! trying it with unitary dct to incorporate projection trick!
+    // ************************************
+
+    // DoSmartBlockDCT(blocks, 1);
+    DoSmartUnitaryBlockDCT(blocks, 1);
+    // ************************************
+
     // loop through the blocks and apply the encoding procedure
     for (int i = 0; i < numBlocks; i++) {
       block_i = blocks[i];
@@ -2352,7 +2494,10 @@ void DecodeScalarFieldEigenFast(const DECOMPRESSION_DATA& decompression_data, in
   
   // perform the IDCT on each block
   // -1 <-- inverse
-  DoSmartBlockDCT(blocks, -1);
+  // DoSmartBlockDCT(blocks, -1);
+  // ***NEW: do the unitary inverse here!***
+  // ******************************************
+  DoSmartUnitaryBlockDCT(blocks, -1);
 
 
   // this part is inefficient---we should implement a DCT that operates on VectorXd so that
@@ -2360,6 +2505,71 @@ void DecodeScalarFieldEigenFast(const DECOMPRESSION_DATA& decompression_data, in
   for (int blockNumber = 0; blockNumber < numBlocks; blockNumber++) {
     VectorXd blockEigen= blocks[blockNumber].flattenedEigen();
     toFill[blockNumber] = blockEigen;
+  } 
+} 
+
+////////////////////////////////////////////////////////
+// reconstructs a lossy original of a scalar field
+// *BUT STILL IN THE FOURIER SPACE*
+// which had been written to a binary file and now loaded 
+// into a int buffer. returns it in a vector of its blocks,
+// each flattened out into a VectorXd. this is for use
+// in projection/unprojection
+////////////////////////////////////////////////////////
+void DecodeScalarFieldWithoutTransformEigenFast(const DECOMPRESSION_DATA& decompression_data, int* const& allData, int col, vector<VectorXd>& toFill) {
+  TIMER functionTimer(__FUNCTION__);
+
+  // get the dims from data and construct a field of the appropriate size
+  const VEC3I& dims = decompression_data.get_dims();
+  int xRes = dims[0];
+  int xResOriginal = xRes;
+  int yRes = dims[1];
+  int yResOriginal = yRes;
+  int zRes = dims[2];
+  int zResOriginal = zRes;
+
+  int xPadding = 0;
+  int yPadding = 0;
+  int zPadding = 0;
+  // fill in the paddings
+  GetPaddings(dims, xPadding, yPadding, zPadding);
+  // update the res
+  xRes += xPadding;
+  yRes += yPadding;
+  zRes += zPadding;
+  VEC3I dimsUpdated(xRes, yRes, zRes);
+
+  int numBlocks = decompression_data.get_numBlocks();
+  toFill.resize(numBlocks);
+
+  const MATRIX& blockLengthsMatrix = decompression_data.get_blockLengthsMatrix();
+  const MATRIX& blockIndicesMatrix = decompression_data.get_blockIndicesMatrix();
+
+  const INTEGER_FIELD_3D& zigzagArray = decompression_data.get_zigzagArray();
+  INTEGER_FIELD_3D unzigzagged(8, 8, 8);
+  vector<int> runLengthDecoded(512);
+  VECTOR runLengthDecodedVec(512);
+
+  // container for the encoded blocks
+  vector<FIELD_3D> blocks(numBlocks);
+
+  for (int blockNumber = 0; blockNumber < numBlocks; blockNumber++) {
+    // decode the run length scheme
+    RunLengthDecodeBinaryFast(allData, blockNumber, col, blockLengthsMatrix, blockIndicesMatrix, runLengthDecoded);
+    // cast to VECTOR to play nice with ZigzagUnflattenSmart
+    CastIntToVectorFast(runLengthDecoded, runLengthDecodedVec);
+    // undo the zigzag scan
+    ZigzagUnflattenSmart(runLengthDecodedVec, zigzagArray, unzigzagged);
+    // undo the scaling from the quantizer and push to the block container
+    DecodeBlockDecomp(unzigzagged, blockNumber, col, decompression_data, blocks[blockNumber]);
+  }
+  
+  // DO NOT perform the IDCT on each block
+
+  // this part is inefficient---we should implement a DCT that operates on VectorXd so that
+  // we don't have to loop through all the blocks again
+  for (int blockNumber = 0; blockNumber < numBlocks; blockNumber++) {
+    toFill[blockNumber] = blocks[blockNumber].flattenedEigen();
   } 
 } 
 
@@ -2606,7 +2816,6 @@ void PeeledCompressedUnproject(VECTOR3_FIELD_3D& V, MATRIX_COMPRESSION_DATA& U_d
 
 }
 
-
 double GetDotProductSum(vector<VectorXd> Vlist, vector<VectorXd> Wlist) {
 
   assert(Vlist.size() == Wlist.size());
@@ -2676,4 +2885,71 @@ VectorXd PeeledCompressedProject(VECTOR3_FIELD_3D& V, MATRIX_COMPRESSION_DATA& U
 
 }
   
+ 
+// projection, implemented in the spatial frequency domain
+
+
+void PeeledCompressedProjectTransformTest1(const VECTOR3_FIELD_3D& V, const MATRIX_COMPRESSION_DATA& U_data,
+    VectorXd* q)
+{
+
+  const DECOMPRESSION_DATA& dataX = U_data.get_decompression_dataX();
+  int* allDataX = U_data.get_dataX();
+  const DECOMPRESSION_DATA& dataY = U_data.get_decompression_dataY();
+  int* allDataY = U_data.get_dataY();
+  const DECOMPRESSION_DATA& dataZ = U_data.get_decompression_dataZ();
+  int* allDataZ = U_data.get_dataZ();
+
+  const VEC3I& dims = dataX.get_dims();
+  const int xRes = dims[0];
+  const int yRes = dims[1];
+  const int zRes = dims[2];
+  const int totalColumns = dataX.get_numCols();
+
+  *q = VectorXd(totalColumns);
+
+  FIELD_3D V_X, V_Y, V_Z;
+  VECTOR3_FIELD_3D V_peeled = V.peelBoundary();
+  GetScalarFields(V_peeled, V_X, V_Y, V_Z);
   
+  vector<VectorXd> Xpart = GetBlocksEigen(V_X);
+  vector<VectorXd> Ypart = GetBlocksEigen(V_Y);
+  vector<VectorXd> Zpart = GetBlocksEigen(V_Z);
+
+
+  // would be nice to do a block dct that just
+  // operates on VectorXd
+  DoSmartUnitaryBlockDCTEigen(Xpart, 1);
+  DoSmartUnitaryBlockDCTEigen(Ypart, 1);
+  DoSmartUnitaryBlockDCTEigen(Zpart, 1);
+
+
+  
+  // then we can skip this
+
+  /*
+  vector<VectorXd> XpartEigen = CastFieldToVecXd(Xpart);
+  vector<VectorXd> YpartEigen = CastFieldToVecXd(Ypart);
+  vector<VectorXd> ZpartEigen = CastFieldToVecXd(Zpart);
+  */
+  
+
+  vector<VectorXd> blocks;
+  for (int col = 0; col < totalColumns; col++) {
+
+    double totalSum = 0.0;
+    DecodeScalarFieldWithoutTransformEigenFast(dataX, allDataX, col, blocks);
+    totalSum += GetDotProductSum(blocks, Xpart);
+
+    DecodeScalarFieldWithoutTransformEigenFast(dataY, allDataY, col, blocks);
+    totalSum += GetDotProductSum(blocks, Ypart);
+
+    DecodeScalarFieldWithoutTransformEigenFast(dataZ, allDataZ, col, blocks);
+    totalSum += GetDotProductSum(blocks, Zpart);
+
+    (*q)[col] = totalSum;
+ 
+  }
+
+}
+

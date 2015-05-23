@@ -27,16 +27,18 @@
 FIELD_3D DoSmartBlockCompression(FIELD_3D& F, COMPRESSION_DATA& data);
 
 void DCT_Smart(FIELD_3D& F, fftw_plan& plan, double*& in); 
-void DCT_Smart_Unitary(FIELD_3D& F, fftw_plan& plan, double*& in); 
+void DCT_Smart_Unitary(FIELD_3D& F, fftw_plan& plan, double*& in, int direction); 
 void DoSmartBlockDCT(vector<FIELD_3D>& V, int direction);
 void DoSmartUnitaryBlockDCT(vector<FIELD_3D>& V, int direction); 
 
 void DecodeBlockSmart();
 
+fftw_plan Create_DCT_Plan(double*& in, int direction); 
+
+
 FIELD_3D DecodeBlockSmart(const INTEGER_FIELD_3D& intBlock, int blockNumber, COMPRESSION_DATA& data); 
 
 VECTOR3_FIELD_3D SmartBlockCompressVectorField(const VECTOR3_FIELD_3D& V, COMPRESSION_DATA& compression_data);
-
 
 
 // cast an array of doubles to VECTOR
@@ -44,6 +46,7 @@ VECTOR CastToVector(double* data, int size);
 
 // cast a VECTOR to an array of doubles
 double* CastToDouble(const VECTOR& x, double* array);
+
 
 // cast a VECTOR (preferably with integer entries to avoid lossiness) to an array of ints
 int* CastToInt(const VECTOR& x, int* array);
@@ -163,6 +166,7 @@ void CompressAndWriteMatrixComponent(const char* filename, const MatrixXd& U, in
 
 FIELD_3D DecodeScalarField(const DECOMPRESSION_DATA& decompression_data, int* const& allData, int col); 
 
+void DecodeScalarFieldWithoutTransformEigenFast(const DECOMPRESSION_DATA& decompression_data, int* const& allData, int col, vector<VectorXd>& toFill); 
 vector<VectorXd> DecodeScalarFieldEigen(const DECOMPRESSION_DATA& decompression_data, int* const& allData, int col);
 
 VECTOR3_FIELD_3D DecodeVectorField(MATRIX_COMPRESSION_DATA& data, int col); 
@@ -202,6 +206,14 @@ void DecodeBlockFast(const INTEGER_FIELD_3D& intBlock, int blockNumber, int col,
 void IDCT_Smart_Fast(FIELD_3D& F_hat, const DECOMPRESSION_DATA& decompression_data, FIELD_3D& fieldToFill); 
 
 void CastIntToVectorFast(const vector<int>& V, VECTOR& vecToFill); 
+
+void PeeledCompressedProjectTransformTest1(const VECTOR3_FIELD_3D& V, const MATRIX_COMPRESSION_DATA& U_data,
+    VectorXd* q);
+
+void DoSmartUnitaryBlockDCTEigen(vector<VectorXd>& V, int direction);
+void DCT_Unitary_Normalize(FIELD_3D* F);
+void IDCT_Unitary_Normalize(FIELD_3D* F);
+void UndoNormalize(FIELD_3D* F);
 
 ////////////////////////////////////////////////////////
 // End Function Signatures

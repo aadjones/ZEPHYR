@@ -875,6 +875,8 @@ void SUBSPACE_FLUID_3D_EIGEN::reducedSetZeroSphere()
 
   cout << "_reducedIOP.cols: " << _reducedIOP.cols() << endl;
   _qDot = _reducedIOP * _qDot;
+
+  cout << __FILE__ << " " << __FUNCTION__ << " " << __LINE__ << " : " << endl;
   
 }
 //////////////////////////////////////////////////////////////////////

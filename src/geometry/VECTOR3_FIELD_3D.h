@@ -214,9 +214,9 @@ public:
   void swapPointers(VECTOR3_FIELD_3D& field);
 
   // return a flattened array of all the field contents
-  VECTOR flattened();
-  VectorXd flattenedEigen();
-  VectorXd flattenedEigenHomogeneous();
+  VECTOR flattened() const;
+  VectorXd flattenedEigen() const;
+  VectorXd flattenedEigenHomogeneous() const;
 
   // get gradient field
   VECTOR3_FIELD_3D gradient();

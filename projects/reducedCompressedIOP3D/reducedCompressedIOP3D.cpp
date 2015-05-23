@@ -393,7 +393,7 @@ void runEverytime()
 
     steps++;
 
-    if (steps == simulationSnapshots) {    
+    if (steps == simulationSnapshots + 1) {    
     // if we were already capturing a movie
         if (captureMovie)
         {

@@ -188,7 +188,8 @@ void SUBSPACE_FLUID_3D_COMPRESSED_EIGEN::initOutOfCoreIOP()
     string filename;
     
     filename = _reducedPath + string("projected.ptof.matrix");
-    EIGEN::read(filename, _preprojectToPreadvect);
+    // EIGEN::read(filename, _preprojectToPreadvect);
+    EIGEN::read(filename, _preprojectToFinal);
 
     filename = _reducedPath + string("projected.vtod.matrix");
     EIGEN::read(filename, _reducedVelocityToDivergence);
@@ -341,24 +342,29 @@ void SUBSPACE_FLUID_3D_COMPRESSED_EIGEN::stepWithObstacle()
     TIMER projectionTimer("Velocity projection");
 
     // project into the subspace
-    _qDot = PeeledCompressedProject(_velocity, _U_preproject_data);
-
+    _qDot = PeeledCompressedProject(_velocity, _U_preadvect_data);
     projectionTimer.stop();
+
+    // then advect
+
+    // full-space advect heat and density
+    advectHeatAndDensityStam();
+
+    // reduced advect velocity
+    reducedAdvectStagedStamFast();
+
+    // then diffuse 
+    TIMER diffusionProjectionTimer("Reduced diffusion");
+    reducedPeeledDiffusion();
+    diffusionProjectionTimer.stop();
 
     // do IOP
     reducedSetZeroSphere();
 
     // then pressure project
-    reducedStagedProjectIOP();
+    reducedStagedProject();
 
-    // then advect
-    advectHeatAndDensityStam();
-    reducedAdvectStagedStamFast();
-    
-    // then diffuse 
-    TIMER diffusionProjectionTimer("Velocity projection");
-    reducedPeeledDiffusion();
-    diffusionProjectionTimer.stop();
+    cout << __FILE__ << " " << __FUNCTION__ << " " << __LINE__ << " : " << endl;
 
     // come back to full space
     TIMER unprojectionTimer("Velocity unprojection");
@@ -427,6 +433,8 @@ void SUBSPACE_FLUID_3D_COMPRESSED_EIGEN::reducedSetZeroSphere()
 
   cout << "_reducedIOP.cols: " << _reducedIOP.cols() << endl;
   _qDot = _reducedIOP * _qDot;
+
+  cout << __FILE__ << " " << __FUNCTION__ << " " << __LINE__ << " : " << endl;
   
 }
 //////////////////////////////////////////////////////////////////////
@@ -529,6 +537,12 @@ void SUBSPACE_FLUID_3D_COMPRESSED_EIGEN::computePressureToVelocity()
 void SUBSPACE_FLUID_3D_COMPRESSED_EIGEN::reducedStagedProject()
 {
   TIMER functionTimer(__FUNCTION__);
+  cout << "_preprojectToFinal size: " << '(' << _preprojectToFinal.rows() 
+    << ", " << _preprojectToFinal.cols() << ")\n";
+
+  cout << "_inverseProduct size: " << '(' << _inverseProduct.rows()
+    << ", " << _inverseProduct.cols() << ")\n";
+
   _qDot = _preprojectToFinal * _qDot + _inverseProduct * _qDot;
 }
 //////////////////////////////////////////////////////////////////////
@@ -1578,6 +1592,7 @@ void SUBSPACE_FLUID_3D_COMPRESSED_EIGEN::loadReducedIOP(string path)
 {
 
   // we need to load preproject, preadvect, and final (??)
+  // nope, just preadvect and final!!
   
  TIMER functionTimer(__FUNCTION__);
   if (path.length() == 0)
@@ -1629,7 +1644,8 @@ void SUBSPACE_FLUID_3D_COMPRESSED_EIGEN::loadReducedIOP(string path)
       Udecompression_dataX, Udecompression_dataY, Udecompression_dataZ);
   _U_final_data = U_final_data;
   _U_final_data.init_cache();
-
+  
+  /*
   filename = path + string("U.preproject.matrix");
   UallDataX = NULL;
   UallDataY = NULL;
@@ -1645,7 +1661,7 @@ void SUBSPACE_FLUID_3D_COMPRESSED_EIGEN::loadReducedIOP(string path)
       Udecompression_dataX, Udecompression_dataY, Udecompression_dataZ);
   _U_preproject_data = U_preproject_data;
   _U_preproject_data.init_cache();
-
+  */
 
   TIMER::printTimings();
 }

@@ -3124,7 +3124,7 @@ void VECTOR3_FIELD_3D::swapPointers(VECTOR3_FIELD_3D& field)
 //////////////////////////////////////////////////////////////////////
 // return a flattened array of all the field contents
 //////////////////////////////////////////////////////////////////////
-VECTOR VECTOR3_FIELD_3D::flattened()
+VECTOR VECTOR3_FIELD_3D::flattened() const
 {
   VECTOR final(_totalCells * 3);
 
@@ -3141,7 +3141,7 @@ VECTOR VECTOR3_FIELD_3D::flattened()
 //////////////////////////////////////////////////////////////////////
 // return a flattened array of all the field contents
 //////////////////////////////////////////////////////////////////////
-VectorXd VECTOR3_FIELD_3D::flattenedEigen()
+VectorXd VECTOR3_FIELD_3D::flattenedEigen() const
 {
   VectorXd final(_totalCells * 3);
 
@@ -3158,7 +3158,7 @@ VectorXd VECTOR3_FIELD_3D::flattenedEigen()
 //////////////////////////////////////////////////////////////////////
 // return a flattened array of all the field contents
 //////////////////////////////////////////////////////////////////////
-VectorXd VECTOR3_FIELD_3D::flattenedEigenHomogeneous()
+VectorXd VECTOR3_FIELD_3D::flattenedEigenHomogeneous() const
 {
   VectorXd final(_totalCells * 3 + 1);
 
