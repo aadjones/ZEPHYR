@@ -208,6 +208,9 @@ public:
 
   // get the integer indices of a spatial position
   void indices(const VEC3F& position, int* x);
+  
+  // set to uniform random from 0 to 1
+  void setToRandom();
 
   // set to a checkerboard solid texture
   void setToSolidCheckboard(int xChecks = 10, int yChecks = 10, int zChecks = 10);

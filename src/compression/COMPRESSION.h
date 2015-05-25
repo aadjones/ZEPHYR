@@ -3,21 +3,11 @@
 
 #include <iostream>
 #include <fftw3.h>
-#include <sys/stat.h>
-#include <numeric>
 
 #include "EIGEN.h"
-// #include "SUBSPACE_FLUID_3D_EIGEN.h"
-// #include "FLUID_3D_MIC.h"
-#include "MATRIX.h"
-// #include "SIMPLE_PARSER.h"
-#include "FIELD_3D.h"
 #include "VECTOR3_FIELD_3D.h"
 #include "INTEGER_FIELD_3D.h"
-#include "COMPRESSION_DATA.h"
-#include "DECOMPRESSION_DATA.h"
 #include "MATRIX_COMPRESSION_DATA.h"
-// #include "CUBATURE_GENERATOR_EIGEN.h"
 
 //////////////////////////////////////////////////////// 
 // Function signatures

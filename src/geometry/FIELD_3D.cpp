@@ -2360,6 +2360,13 @@ void FIELD_3D::readPhysBAMGz(const char* filename)
   gzclose(file);
 }
 
+void FIELD_3D::setToRandom() 
+{
+  for (int index = 0; index < _totalCells; index++) {
+    _data[index] = static_cast <double> (rand()) / static_cast <double> (RAND_MAX);
+  }
+}
+
 ///////////////////////////////////////////////////////////////////////
 // set to a checkerboard solid texture
 ///////////////////////////////////////////////////////////////////////
