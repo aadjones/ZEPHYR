@@ -565,6 +565,14 @@ FIELD_3D& FIELD_3D::operator*=(const Real& alpha)
 
 ///////////////////////////////////////////////////////////////////////
 ///////////////////////////////////////////////////////////////////////
+FIELD_3D& FIELD_3D::operator^=(const Real& alpha)
+{
+  for (int x = 0; x < _totalCells; x++) {
+    _data[x] = pow(_data[x], alpha);
+  }
+}
+///////////////////////////////////////////////////////////////////////
+///////////////////////////////////////////////////////////////////////
 FIELD_3D& FIELD_3D::operator/=(const Real& alpha)
 {
   for (int x = 0; x < _totalCells; x++)
@@ -676,7 +684,7 @@ FIELD_3D operator/(const FIELD_3D& A, const FIELD_3D& B)
   FIELD_3D final(A);
 
   for (int x = 0; x < A.totalCells(); x++)
-    final[x] *= 1.0 / B[x];
+    final[x] /= B[x];
 
   return final;
 }
@@ -1488,7 +1496,7 @@ const Real FIELD_3D::operator()(const VEC3F& position) const
 ///////////////////////////////////////////////////////////////////////
 // summed squared entries
 ///////////////////////////////////////////////////////////////////////
-Real FIELD_3D::sumSq()
+Real FIELD_3D::sumSq() const
 {
   Real final = 0;
   for (int i = 0; i < _totalCells; i++)
@@ -1600,6 +1608,26 @@ void FIELD_3D::printNeighborhood(int x, int y, int z) const
   }
 }
 
+///////////////////////////////////////////////////////////////////////
+// round each entry to nearest integer
+///////////////////////////////////////////////////////////////////////
+void FIELD_3D::roundInt() 
+{
+  for (int i = 0; i < _totalCells; i++) {
+    _data[i] = nearbyint(_data[i]);
+  }
+}
+
+///////////////////////////////////////////////////////////////////////
+// round each entry to nearest integer out of place
+///////////////////////////////////////////////////////////////////////
+FIELD_3D FIELD_3D::castInt() const 
+{
+  FIELD_3D final(_xRes, _yRes, _zRes);
+  for (int i = 0; i < _totalCells; i++) {
+    final[i] = nearbyint(final[i]);
+  }
+}
 ///////////////////////////////////////////////////////////////////////
 // clamp nans to some specified value
 ///////////////////////////////////////////////////////////////////////
@@ -2367,6 +2395,17 @@ void FIELD_3D::setToRandom()
   }
 }
 
+
+///////////////////////////////////////////////////////////////////////
+// set each element to the specified power
+///////////////////////////////////////////////////////////////////////
+
+void FIELD_3D::toPower(double power) 
+{
+  for (int index = 0; index < _totalCells; index++) {
+    _data[index] = pow(_data[index], power);
+  }
+}
 ///////////////////////////////////////////////////////////////////////
 // set to a checkerboard solid texture
 ///////////////////////////////////////////////////////////////////////
@@ -6167,6 +6206,34 @@ FIELD_3D FIELD_3D::pad_x(int paddingSize) const
     }
   }
   
+  return final;
+}
+
+FIELD_3D FIELD_3D::pad_xyz(const VEC3I& paddings) const
+{
+  TIMER functionTimer(__FUNCTION__);
+
+  int xPad = paddings[0];
+  int yPad = paddings[1];
+  int zPad = paddings[2];
+
+  if (xPad == 0 && yPad == 0 && zPad == 0) {
+    return (*this);
+  }
+
+  // else
+  FIELD_3D final(_xRes + xPad, _yRes + yPad, _zRes + zPad);
+
+  for (int z = 0; z < _zRes + zPad; z++) {
+    for (int y = 0; y < _yRes + yPad; y++) {
+      for (int x = 0; x < _xRes + xPad; x++) {
+        int xMin = min(x, _xRes - 1);
+        int yMin = min(y, _yRes - 1);
+        int zMin = min(z, _zRes - 1);
+        final(x, y, z) = (*this)(xMin, yMin, zMin);
+      }
+    }
+  }
   return final;
 }
 

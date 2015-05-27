@@ -90,8 +90,11 @@ class COMPRESSION_DATA {
       _dampingArray = damp;
     }
 
-  // compute and set zigzag array
-
+  void tune_dampingArray(double power) {
+    this->set_power(power);
+  }
+    
+    
   void set_zigzagArray() {
     TIMER functionTimer(__FUNCTION__);
 

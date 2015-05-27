@@ -150,6 +150,13 @@ void INTEGER_FIELD_3D::resizeAndWipe(int xRes, int yRes, int zRes)
     _data[x] = 0;
 }
 
+int INTEGER_FIELD_3D::energySum() {
+  int sum = 0;
+  for (int i = 0; i < _totalCells; i++) {
+    sum += (_data[i] * _data[i]);
+  }
+  return sum;
+}
 ///////////////////////////////////////////////////////////////////////
 ///////////////////////////////////////////////////////////////////////
 // Overloaded operators

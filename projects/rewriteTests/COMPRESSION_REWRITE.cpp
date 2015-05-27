@@ -18,6 +18,8 @@ const double SQRT_TWO = sqrt(2.0);
 
 ////////////////////////////////////////////////////////
 // cast a FIELD_3D to an INTEGER_FIELD_3D by rounding 
+// *NOTE* an in-place method for doing the same operation
+// is now supported in FIELD_3D
 ////////////////////////////////////////////////////////
 void RoundFieldToInt(const FIELD_3D& F, INTEGER_FIELD_3D* castedField) {
   TIMER functionTimer(__FUNCTION__);
@@ -161,7 +163,8 @@ void UndoNormalize(FIELD_3D* F)
 // corresponding 'in' buffer, performs the corresponding
 // transform on the field. this one is *unitary normalization* 
 ////////////////////////////////////////////////////////
-void DCT_Smart_Unitary(const fftw_plan& plan, int direction, double* in, FIELD_3D* F) {
+void DCT_Smart_Unitary(const fftw_plan& plan, int direction, double* in, FIELD_3D* F)
+{
   TIMER functionTimer(__FUNCTION__);
 
   int xRes = F->xRes();
@@ -337,43 +340,42 @@ FIELD_3D DoSmartBlockCompression(FIELD_3D& F, COMPRESSION_DATA& compression_data
 ////////////////////////////////////////////////////////
 // given passed in dimensions, computes how much we
 // have to pad by in each dimension to reach the next
-// multiple of 8 for even block subdivision 
+// multiple of BLOCK_SIZE for even block subdivision 
 ////////////////////////////////////////////////////////
 
-/*
-void GetPaddings(VEC3I v, int& xPadding, int& yPadding, int& zPadding) {
+void GetPaddings(const VEC3I& v, VEC3I* paddings)
+{ 
   TIMER functionTimer(__FUNCTION__);
   int xRes = v[0];
   int yRes = v[1];
   int zRes = v[2];
-  xPadding = (BLOCK_SIZE - (xRes % BLOCK_SIZE)) % BLOCK_SIZE;     // how far are you from the next multiple of 8?
-  yPadding = (BLOCK_SIZE - (yRes % BLOCK_SIZE)) % BLOCK_SIZE;
-  zPadding = (BLOCK_SIZE - (zRes % BLOCK_SIZE)) % BLOCK_SIZE;
+  int xPadding = (BLOCK_SIZE - (xRes % BLOCK_SIZE)) % BLOCK_SIZE;     // how far are you from the next multiple of 8?
+  int yPadding = (BLOCK_SIZE - (yRes % BLOCK_SIZE)) % BLOCK_SIZE;
+  int zPadding = (BLOCK_SIZE - (zRes % BLOCK_SIZE)) % BLOCK_SIZE;
+  (*paddings)[0] = xPadding;
+  (*paddings)[1] = yPadding;
+  (*paddings)[2] = zPadding;
 }
-*/
 
 ////////////////////////////////////////////////////////
 // given a passed in FIELD_3D, pad it and  parse it 
 // into a vector of 8 x 8 x 8 blocks (listed in row-major order)
 ////////////////////////////////////////////////////////
-//
-/*
-vector<FIELD_3D> GetBlocks(const FIELD_3D& F) {
+
+void GetBlocks(const FIELD_3D& F, vector<FIELD_3D>* blocks)
+{
   TIMER functionTimer(__FUNCTION__);
+
   int xRes = F.xRes();
   int yRes = F.yRes();
   int zRes = F.zRes();
   VEC3I v(xRes, yRes, zRes);
-
-  int xPadding;
-  int yPadding;
-  int zPadding;
+ 
+  VEC3I paddings(0, 0, 0);
   // fill these in with the appropriate paddings
-  GetPaddings(v, xPadding, yPadding, zPadding);
+  GetPaddings(v, &paddings);
 
-  FIELD_3D F_padded_x = F.pad_x(xPadding);
-  FIELD_3D F_padded_xy = F_padded_x.pad_y(yPadding);
-  FIELD_3D F_padded = F_padded_xy.pad_z(zPadding);
+  FIELD_3D F_padded = F.pad_xyz(paddings);
   
   // update the resolutions to the padded ones 
   xRes = F_padded.xRes();
@@ -381,156 +383,331 @@ vector<FIELD_3D> GetBlocks(const FIELD_3D& F) {
   zRes = F_padded.zRes();
 
   // sanity check that our padder had the desired effect
-  assert(xRes % 8 == 0);
-  assert(yRes % 8 == 0);
-  assert(zRes % 8 == 0);
+  assert(xRes % BLOCK_SIZE == 0);
+  assert(yRes % BLOCK_SIZE == 0);
+  assert(zRes % BLOCK_SIZE == 0);
 
-  // variable initialization before the loop
-  FIELD_3D subfield(8, 8, 8);
-  vector<FIELD_3D> blockList;
-  
-  for (int z = 0; z < zRes/8; z++) {
-    for (int y = 0; y < yRes/8; y++) {
-      for (int x = 0; x < xRes/8; x++) {
-        subfield = F_padded.subfield(8*x, 8*(x+1), 8*y, 8*(y+1), 8*z, 8*(z+1));
-        blockList.push_back(subfield);
+  for (int z = 0; z < zRes/BLOCK_SIZE; z++) {
+    for (int y = 0; y < yRes/BLOCK_SIZE; y++) {
+      for (int x = 0; x < xRes/BLOCK_SIZE; x++) {
+        blocks->push_back(F_padded.subfield(BLOCK_SIZE*x, BLOCK_SIZE*(x+1), 
+            BLOCK_SIZE*y, BLOCK_SIZE*(y+1), BLOCK_SIZE*z, BLOCK_SIZE*(z+1)));
       }
     }
   }
-  return blockList;
 }
-*/
 
-////////////////////////////////////////////////////////
-// Given a passed FIELD_3D, parse it into zero-padded 
-// blocks, but flatten the blocks into VectorXd for use in
-// projection/unprojection. 
-////////////////////////////////////////////////////////
-/*
-vector<VectorXd> GetBlocksEigen(const FIELD_3D& F) {
- TIMER functionTimer(__FUNCTION__);
-  int xRes = F.xRes();
-  int yRes = F.yRes();
-  int zRes = F.zRes();
-  VEC3I v(xRes, yRes, zRes);
-
-  int xPadding;
-  int yPadding;
-  int zPadding;
-  // fill these in with the appropriate paddings
-  GetPaddings(v, xPadding, yPadding, zPadding);
-
-  FIELD_3D F_padded_x = F.zeroPad_x(xPadding);
-  FIELD_3D F_padded_xy = F_padded_x.zeroPad_y(yPadding);
-  FIELD_3D F_padded = F_padded_xy.zeroPad_z(zPadding);
-  
-  // update the resolutions to the padded ones 
-  xRes = F_padded.xRes();
-  yRes = F_padded.yRes();
-  zRes = F_padded.zRes();
-
-  // sanity check that our padder had the desired effect
-  assert(xRes % 8 == 0);
-  assert(yRes % 8 == 0);
-  assert(zRes % 8 == 0);
-
-  // variable initialization before the loop
-  int numBlocks = (xRes/8) * (yRes/8) * (zRes/8);
-  vector<VectorXd> blockList(numBlocks);
-  int index = 0;
-  
-  for (int z = 0; z < zRes/8; z++) {
-    for (int y = 0; y < yRes/8; y++) {
-      for (int x = 0; x < xRes/8; x++, index++) {
-        FIELD_3D subfield = F_padded.subfield(8*x, 8*(x+1), 8*y, 8*(y+1), 8*z, 8*(z+1));
-        VectorXd subfieldFlatEigen = subfield.flattenedEigen();
-        blockList[index] = subfieldFlatEigen;
-      }
-    }
-  }
-  return blockList;
-}
-*/
 ////////////////////////////////////////////////////////
 // reconstruct a FIELD_3D with the passed in dims
 // from a list of 8 x 8 x 8 blocks 
 ////////////////////////////////////////////////////////
-/*
-void AssimilateBlocks(const VEC3I& dims, const vector<FIELD_3D>& V, FIELD_3D& assimilatedField) {
+
+void AssimilateBlocks(const VEC3I& dims, const vector<FIELD_3D>& V, FIELD_3D* assimilatedField)
+{
   TIMER functionTimer(__FUNCTION__);
+
   const int xRes = dims[0];
   const int yRes = dims[1];
   const int zRes = dims[2];
 
   assert( xRes % BLOCK_SIZE == 0 && yRes % BLOCK_SIZE == 0 && zRes % BLOCK_SIZE == 0 );
-  assert( xRes == assimilatedField.xRes() && yRes == assimilatedField.yRes() && zRes == assimilatedField.zRes() );
-
+  assert( xRes == assimilatedField->xRes() && yRes == assimilatedField->yRes() && zRes == assimilatedField->zRes() );
 
   for (int z = 0; z < zRes; z++) {
     for (int y = 0; y < yRes; y++) {
       for (int x = 0; x < xRes; x++) {
         int index = (x/BLOCK_SIZE) + (y/BLOCK_SIZE) * (xRes/BLOCK_SIZE) + (z/BLOCK_SIZE) * (xRes/BLOCK_SIZE) * (yRes/BLOCK_SIZE);     // warning, evil integer division happening!
-        assimilatedField(x, y, z) = V[index](x % BLOCK_SIZE, y % BLOCK_SIZE, z % BLOCK_SIZE);             
+        (*assimilatedField)(x, y, z) = V[index](x % BLOCK_SIZE, y % BLOCK_SIZE, z % BLOCK_SIZE);             
       }
     }
   }
 
 }
-*/
-
 
 ////////////////////////////////////////////////////////
 // performs a UNITARY dct/idct on each individual block of a passed in
-// vector of blocks
+// vector of blocks. direction 1 is dct, -1 is idct.
 ////////////////////////////////////////////////////////
-/*
-void DoSmartUnitaryBlockDCT(vector<FIELD_3D>& V, int direction) {
+
+void UnitaryBlockDCT(int direction, vector<FIELD_3D>* blocks) 
+{
   TIMER functionTimer(__FUNCTION__);
   // direction determines whether it is DCT or IDCT
   
   // allocate a buffer for the size of an 8 x 8 x 8 block
-  double* in = (double*) fftw_malloc(8 * 8 * 8 * sizeof(double));
+  double* in = (double*) fftw_malloc(BLOCK_SIZE * BLOCK_SIZE * BLOCK_SIZE * sizeof(double));
 
   // make the appropriate plan
-  fftw_plan plan = Create_DCT_Plan(in, direction);
+  fftw_plan plan;
+  Create_DCT_Plan(in, direction, &plan);
   
-  for (auto itr = V.begin(); itr != V.end(); ++itr) {
+  for (auto itr = blocks->begin(); itr != blocks->end(); ++itr) {
     // take the transform at *itr (which is a FIELD_3D)
     // and overwrite its contents
-    DCT_Smart_Unitary(*itr, plan, in, direction);
+    DCT_Smart_Unitary(plan, direction, in, &(*itr));
   }
 
   fftw_free(in);
   fftw_destroy_plan(plan);
   fftw_cleanup();
 }
-*/
-////////////////////////////////////////////////////////
-// performs a UNITARY dct/idct on each individual block of a passed in
-// vector of blocks, but the blocks are pre-flattened into VectorXds
-////////////////////////////////////////////////////////
 
-
-/*
-void DoSmartUnitaryBlockDCTEigen(vector<VectorXd>& V, int direction) {
+////////////////////////////////////////////////////////
+// build a block diagonal matrix with repeating copies of the passed
+// in matrix A along the diagonal
+////////////////////////////////////////////////////////
+void BlockDiagonal(const MatrixXd& A, int count, MatrixXd* B)
+{
   TIMER functionTimer(__FUNCTION__);
-  // direction determines whether it is DCT or IDCT
-  
-  // allocate a buffer for the size of an 8 x 8 x 8 block
-  double* in = (double*) fftw_malloc(8 * 8 * 8 * sizeof(double));
 
-  // make the appropriate plan
-  fftw_plan plan = Create_DCT_Plan(in, direction);
+  *B = MatrixXd::Zero(A.rows() * count, A.cols() * count);
+
+  // **************************************************   
+  // check the memory consumption
+  double GB = A.rows() * count * A.cols() * count * sizeof(double) / pow(2.0, 30);
+  cout << "B is consuming " << GB << " GB of memory!" << endl; 
+  // **************************************************   
+
+  for (int i = 0; i < count; i++) {
+    B->block(i * A.rows(), i * A.cols(), A.rows(), A.cols()) = A;
+  }
+}
+
+////////////////////////////////////////////////////////
+// build a block diagonal matrix with repeating copies of the passed
+// in matrix A along the diagonal. assumes for simplicity
+// that A is 3 x 3 for the SVD case
+////////////////////////////////////////////////////////
+void SparseBlockDiagonal(const MatrixXd& A, int count, SparseMatrix<double>* B)
+{
+  TIMER functionTimer(__FUNCTION__);
   
-  for (auto itr = V.begin(); itr != V.end(); ++itr) {
-    // take the transform at *itr (which is a FIELD_3D)
-    // and overwrite its contents
-    DCT_Smart_Unitary_Eigen(*itr, plan, in);
+  assert( A.rows() == 3 && A.cols() == 3 );
+
+  typedef Eigen::Triplet<double> T;
+  vector<T> tripletList;
+
+  int nonzeros = A.rows() * A.cols() * count;
+  tripletList.reserve(nonzeros);
+  for (int i = 0; i < A.rows() * count; i++) {
+    if (i % 3 == 0) {
+      tripletList.push_back(T(i, i,     A(0, 0)));
+      tripletList.push_back(T(i, i + 1, A(0, 1)));
+      tripletList.push_back(T(i, i + 2, A(0, 2)));
+      }
+    else if (i % 3 == 1) {
+      tripletList.push_back(T(i, i - 1, A(1, 0)));
+      tripletList.push_back(T(i, i,     A(1, 1)));
+      tripletList.push_back(T(i, i + 1, A(1, 2)));
+    }
+    else { // i % 3 == 2 
+      tripletList.push_back(T(i, i - 2, A(2, 0)));
+      tripletList.push_back(T(i, i - 1, A(2, 1)));
+      tripletList.push_back(T(i, i,     A(2, 2)));
+    }
   }
 
-  fftw_free(in);
-  fftw_destroy_plan(plan);
-  fftw_cleanup();
+  *B = SparseMatrix<double>(A.rows() * count, A.cols() * count);
+  B->setFromTriplets(tripletList.begin(), tripletList.end());
+
+}
+
+////////////////////////////////////////////////////////
+// given a passed in vec3 field, build a matrix with 3 columns,
+// one for each of the x, y, and z components
+////////////////////////////////////////////////////////
+void BuildXYZMatrix(const VECTOR3_FIELD_3D& V, MatrixXd* A) 
+{
+  TIMER functionTimer(__FUNCTION__);
+
+  int N = V.xRes() * V.yRes() * V.zRes();
+  *A = MatrixXd::Zero(N, 3);
+
+  FIELD_3D Vx, Vy, Vz;
+  GetScalarFields(V, &Vx, &Vy, &Vz);
+
+  A->col(0) = Vx.flattenedEigen();
+  A->col(1) = Vy.flattenedEigen();
+  A->col(2) = Vz.flattenedEigen();
+}
+
+////////////////////////////////////////////////////////
+// find a new 3d coordinate system for a vector field using svd and transform into it
+// fill s with the singular values and v^T with the coordinate transform matrix
+////////////////////////////////////////////////////////
+void TransformVectorFieldSVD(VectorXd* s, MatrixXd* v, VECTOR3_FIELD_3D* V)
+{
+  TIMER functionTimer(__FUNCTION__);
+
+  MatrixXd xyzMatrix;
+  BuildXYZMatrix(*V, &xyzMatrix);
+  JacobiSVD<MatrixXd> svd(xyzMatrix, ComputeThinU | ComputeThinV);
+  *s = svd.singularValues();
+  *v = svd.matrixV();
+
+  int count = V->xRes() * V->yRes() * V->zRes();
+  
+  SparseMatrix<double> B;
+  SparseBlockDiagonal(v->transpose(), count, &B);
+
+  VectorXd transformProduct = B * V->flattenedEigen();
+  memcpy(V->data(), transformProduct.data(), 3 * count * sizeof(double));
+}
+
+////////////////////////////////////////////////////////
+// undo the effects of a previous svd coordinate transformation using the passed
+// in v matrix 
+////////////////////////////////////////////////////////
+void UntransformVectorFieldSVD(const MatrixXd& v, VECTOR3_FIELD_3D* transformedV)
+{
+  TIMER functionTimer(__FUNCTION__);
+
+  MatrixXd xyzMatrix;
+  BuildXYZMatrix(*transformedV, &xyzMatrix);
+
+  int count = transformedV->xRes() * transformedV->yRes() * transformedV->zRes();
+
+  SparseMatrix<double> B;
+  SparseBlockDiagonal(v, count, &B);
+
+  VectorXd transformProduct = B * transformedV->flattenedEigen();
+  memcpy(transformedV->data(), transformProduct.data(), 3 * count * sizeof(double));
+}
+
+
+////////////////////////////////////////////////////////
+// Binary search to find the appropriate gamma given
+// desired percent threshold within maxIterations
+////////////////////////////////////////////////////////
+double TuneGamma(const FIELD_3D& F, double percent, int maxIterations, FIELD_3D* damp)
+{
+  VECTOR::printVertical = false;
+
+  int nBits = 24;
+  double lower = 0.0;
+  // QUESTION: how should we define upper?
+  double upper = nBits;
+  cout << "Upper: " << upper << endl;
+  double epsilon = 0.01;
+  double gamma = 0.5 * (upper + lower);
+  damp->toPower(gamma);
+  
+  cout << "F: " << endl;
+  cout << F.flattened() << endl;
+  // the total amount of energy in the fourier space
+  double totalEnergy = F.sumSq();
+  FIELD_3D damped = ( F / (*damp) );
+  damped.roundInt();
+  cout << "Damped block: " << endl;
+  cout << damped.flattened() << endl;
+
+  double energyDiff = abs(totalEnergy - ( (*damp) * damped ).sumSq());
+  cout << "Absolute energy difference: " << energyDiff << endl;
+  double percentEnergy = 1.0 - (energyDiff / totalEnergy);
+  cout << "Initial percent: " << percentEnergy << endl;
+  int iterations = 0;
+   
+  while ( abs( percent - percentEnergy ) > epsilon && iterations < maxIterations) {
+
+    if (percentEnergy < percent) { // too much damping; need to lower gamma
+      upper = gamma;
+      gamma = 0.5 * (upper + lower);
+      damp->toPower(gamma / upper);
+    }
+
+    else { // not enough damping; need to increase gamma
+      lower = gamma;
+      gamma = 0.5 * (upper + lower);
+      damp->toPower(gamma / lower);
+    }
+
+    cout << "New damping array: " << endl;
+    cout << damp->flattened() << endl;
+    // update percentEnergy
+    damped = ( F / (*damp) );
+    damped.roundInt();
+    cout << "New damped block: " << endl;
+    cout << damped.flattened() << endl;
+    energyDiff = abs(totalEnergy - ( (*damp) * damped ).sumSq());
+    percentEnergy =  1.0 - (energyDiff / totalEnergy);
+    cout << "New percent energy: " << percentEnergy << endl;
+    cout << "New gamma: " << gamma << endl;
+    iterations++;
+    cout << "Next iteration: " << iterations << endl;
+  }
+  
+  cout << "Took " << iterations << " iterations to compute gamma!\n";
+  cout << "Percent Energy ended up at : " << percentEnergy << endl;
+  cout << "Gamma ended up at: " << gamma << endl;
+  return gamma;
+}
+
+////////////////////////////////////////////////////////
+// build a simple linear damping array whose uvw entry is 
+// 1 + u + v + w
+////////////////////////////////////////////////////////
+void BuildDampingArray(FIELD_3D* damp)
+{
+  int uRes = BLOCK_SIZE;
+  int vRes = BLOCK_SIZE;
+  int wRes = BLOCK_SIZE;
+
+  *damp = FIELD_3D(uRes, vRes, wRes);
+  for (int w = 0; w < wRes; w++) {
+    for (int v = 0; v < vRes; v++) {
+      for (int u = 0; u < uRes; u++) {
+        (*damp)(u, v, w) = 1 + u + v + w; 
+      }
+    }
+  }
+}
+
+////////////////////////////////////////////////////////
+// takes a passed in FIELD_3D (which is intended to be
+// the result of a DCT), scales it to an nBit integer
+// (typically 16), normalizes by the DC coefficient,
+// damps by a precomputed damping array, and quantizes 
+// to an integer
+////////////////////////////////////////////////////////
+
+/*
+void EncodeBlock(const FIELD_3D& F, int blockNumber, COMPRESSION_DATA* compression_data, 
+    INTEGER_FIELD_3D* quantized) {
+  TIMER functionTimer(__FUNCTION__);
+
+  int uRes = F.xRes();
+  int vRes = F.yRes();
+  int wRes = F.zRes();
+  // FIELD_3D F_quantized(uRes, vRes, wRes);
+
+  // what we will return
+  // INTEGER_FIELD_3D quantized(uRes, vRes, wRes);
+  
+  int nBits = compression_data->get_nBits();
+  const FIELD_3D& dampingArray = compression_data->get_dampingArray();
+  int numBlocks = compression_data->get_numBlocks();
+  assert(blockNumber >=0 && blockNumber < numBlocks);
+  
+  VECTOR sList = compression_data->get_sList();
+  if (sList.size() == 0) { // if it's the first time EncodeBlock is called in a chain
+    sList.resizeAndWipe(numBlocks);
+  }
+
+  const double Fmax = F(0, 0, 0);                                 // use the DC component as the maximum
+  double s = (pow(2.0, nBits - 1) - 1) / Fmax;                    // a scale factor for an integer representation
+
+  // assign the next s value to sList
+  sList[blockNumber] = s; 
+  // scale so that the DC component is 2^(n - 1) - 1
+  F_quantized = F * s;
+  // spatial damping to stomp high frequencies
+  F_quantized /= dampingArray;
+
+  quantized = RoundFieldToInt(F_quantized);
+
+  // update sList within compression data
+  compression_data->set_sList(sList);
+
 }
 */
 

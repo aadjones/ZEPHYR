@@ -125,6 +125,9 @@ public:
   // extend some vector quantity off of a front, given a signed distance function
   void fastExtension(const FIELD_3D& signedDistance);
 
+  // set the field values to uniform random doubles from 0 to 1
+  void setToRandom();
+
   // set the values in the field to the values at the closest points
   static FIELD_3D setToClosestPointValues(const FIELD_3D& input, const VECTOR3_FIELD_3D& closestPoints);
   static FIELD_3D setToClosestPointValuesNarrowBand(const FIELD_3D& input, const VECTOR3_FIELD_3D& closestPoints, const FIELD_3D& distance, int maxCells);

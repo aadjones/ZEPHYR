@@ -39,6 +39,9 @@ class INTEGER_FIELD_3D {
     
     // set all entries to zero
     void clear();
+    
+    // sum of the squares of the entries
+    int energySum();
 
     // Resize to the desired dimensions and set entries to zero
     void resizeAndWipe(int xRes, int yRes, int zRes);

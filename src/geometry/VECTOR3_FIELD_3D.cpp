@@ -1172,6 +1172,18 @@ VECTOR3_FIELD_3D& VECTOR3_FIELD_3D::operator=(const VECTOR3_FIELD_3D& input)
   return *this;
 }
 
+
+//////////////////////////////////////////////////////////////////////
+// set the values in the field to uniform random doubles from 0 to 1
+//////////////////////////////////////////////////////////////////////
+void VECTOR3_FIELD_3D::setToRandom()
+{
+  for (int index = 0; index < _totalCells; index++) {
+   (_data[index])[0] = static_cast <double> (rand()) / static_cast <double> (RAND_MAX);
+    (_data[index])[1] = static_cast <double> (rand()) / static_cast <double> (RAND_MAX);
+    (_data[index])[2] = static_cast <double> (rand()) / static_cast <double> (RAND_MAX);
+  }
+}
 //////////////////////////////////////////////////////////////////////
 // set the values in the field to the values at the closest points
 //////////////////////////////////////////////////////////////////////

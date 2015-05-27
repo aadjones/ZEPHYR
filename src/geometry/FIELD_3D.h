@@ -113,6 +113,7 @@ public:
   FIELD_3D& operator/=(const Real& alpha);
   FIELD_3D& operator+=(const Real& alpha);
   FIELD_3D& operator-=(const Real& alpha);
+  FIELD_3D& operator^=(const Real& alpha);
   FIELD_3D& operator-=(const FIELD_3D& input);
   FIELD_3D& operator+=(const FIELD_3D& input);
   FIELD_3D& operator*=(const FIELD_3D& input);
@@ -170,7 +171,7 @@ public:
   void boundingBoxIndices(const VEC3F& mins, const VEC3F& maxs, VEC3I& iMins, VEC3I& iMaxs);
 
   // norms
-  Real sumSq();
+  Real sumSq() const;
   Real max();
   Real absMax();
 
@@ -186,6 +187,12 @@ public:
   // print the neighborhood of a cell for debugging
   void printNeighborhood(int x, int y, int z) const;
   void printNeighborhood(int index) const;
+
+  // round each entry to nearest integer
+  void roundInt();
+
+  // round each entry to nearest integer out of place
+  FIELD_3D castInt() const;
 
   // clamp nans to some specified value
   void clampNans(Real value = 0);
@@ -211,6 +218,9 @@ public:
   
   // set to uniform random from 0 to 1
   void setToRandom();
+
+  // take each element to the specified power
+  void toPower(double power);
 
   // set to a checkerboard solid texture
   void setToSolidCheckboard(int xChecks = 10, int yChecks = 10, int zChecks = 10);
@@ -391,6 +401,9 @@ public:
 
   // same as above but in the x direction
   FIELD_3D pad_x(int paddingSize) const; 
+
+  // do x, then y, then z
+  FIELD_3D pad_xyz(const VEC3I& paddings) const;
 
   // pass back a field with a new uni-sided zero padding of size "paddingSize" in the z direction
   FIELD_3D zeroPad_z(int paddingSize) const;
