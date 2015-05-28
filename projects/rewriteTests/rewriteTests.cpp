@@ -36,12 +36,17 @@ int yRes = 62;
 int zRes = 46;
 int numRows = 3 * xRes * yRes * zRes;
 int numCols = 151;
+int numBlocks = xRes * yRes * zRes / (BLOCK_SIZE * BLOCK_SIZE * BLOCK_SIZE);
 VEC3I dims(xRes, yRes, zRes);
 MATRIX U(numRows, numCols);
 VECTOR3_FIELD_3D V(xRes, yRes, zRes);
 FIELD_3D F(xRes, yRes, zRes);
 fftw_plan plan;
 string path("../../U.preadvect.matrix");
+COMPRESSION_DATA compression_data;
+int nBits = 16;
+double percent = 0.85;
+int maxIterations = 16;
 
 ////////////////////////////////////////////////////////
 // Function Declarations
@@ -73,6 +78,12 @@ void SingularValuesTest();
 // test the binary search algorithm for damping tuning
 void GammaSearchTest();
 
+// test the block encoding function
+void EncodeBlockTest();
+
+// test the encoding/decoding chain
+void EncodeDecodeBlockTest();
+
 ////////////////////////////////////////////////////////
 // Main
 ////////////////////////////////////////////////////////
@@ -81,9 +92,8 @@ int main(int argc, char* argv[])
 {
   TIMER functionTimer(__FUNCTION__);
   InitGlobals();
-
-  GammaSearchTest();
   
+  EncodeDecodeBlockTest();
 
   functionTimer.printTimings();
   return 0;
@@ -100,15 +110,24 @@ void InitGlobals()
 {
   TIMER functionTimer(__FUNCTION__);
   srand(time(NULL));
+  VECTOR::printVertical = false;
 
   U.read(path.c_str()); 
   cout << "U dims: " << "(" << U.rows() << ", " << U.cols() << ")\n";
-  V = VECTOR3_FIELD_3D(U.getColumn(150), xRes, yRes, zRes);
+
+  int col = 127;
+  V = VECTOR3_FIELD_3D(U.getColumn(col), xRes, yRes, zRes);
 
   VectorXd s;
   MatrixXd v;
   TransformVectorFieldSVD(&s, &v, &V);
   F = V.scalarField(0);
+
+  compression_data.set_percent(percent);
+  compression_data.set_maxIterations(maxIterations);
+  compression_data.set_nBits(nBits);
+  compression_data.set_numBlocks(numBlocks);
+  compression_data.set_dampingArray();
   
 }
 
@@ -203,16 +222,65 @@ void GammaSearchTest()
   vector<FIELD_3D> blocks;
   GetBlocks(F, &blocks);
   UnitaryBlockDCT(1, &blocks);
-
-  FIELD_3D block = blocks[25];
-
-  block *= (pow(2, 23 - 1) - 1);
   
-  FIELD_3D damp;
-  BuildDampingArray(&damp);
+  int blockNumber = 2;
+  FIELD_3D block = blocks[blockNumber];
+  PreprocessBlock(&block, blockNumber, &compression_data);
+  
+  const FIELD_3D& dampingArray = compression_data.get_dampingArray();
+  FIELD_3D damp = dampingArray;
 
-  double percent = 0.80;
-  int maxIterations = 100;
+  TuneGamma(block, blockNumber, &compression_data, &damp);
+}
 
-  double gamma = TuneGamma(block, percent, maxIterations, &damp);
+void EncodeBlockTest()
+{
+  vector<FIELD_3D> blocks;
+  GetBlocks(F, &blocks);
+  UnitaryBlockDCT(1, &blocks);
+  
+  for (int blockNumber = 0; blockNumber < numBlocks; blockNumber++) {
+
+    PreprocessBlock(&(blocks[blockNumber]), blockNumber, &compression_data);
+  
+    INTEGER_FIELD_3D quantized;
+    EncodeBlock(blocks[blockNumber], blockNumber, &compression_data, &quantized);
+
+  }
+
+  VECTOR* sList = compression_data.get_sList();
+  VECTOR* gammaList = compression_data.get_gammaList();
+  cout << "sList: " << (*sList) << endl;
+  cout << "gammaList: " << (*gammaList) << endl; 
+}
+
+void EncodeDecodeBlockTest()
+{
+  vector<FIELD_3D> blocks;
+  GetBlocks(F, &blocks);
+  UnitaryBlockDCT(1, &blocks);
+
+  int blockNumber = 24;
+  FIELD_3D oldBlock = blocks[blockNumber];
+  cout << "oldBlock: " << endl;
+  cout << oldBlock.flattened() << endl;
+
+  double oldEnergy = oldBlock.sumSq();
+  PreprocessBlock(&(blocks[blockNumber]), blockNumber, &compression_data);
+
+  INTEGER_FIELD_3D quantized;
+  EncodeBlock(blocks[blockNumber], blockNumber, &compression_data, &quantized);
+  cout << "encoded block: " << endl;
+  cout << quantized.flattened() << endl;
+
+  FIELD_3D decoded;
+  DecodeBlockWithCompressionData(quantized, blockNumber, compression_data, &decoded);
+
+  cout << "newBlock: " << endl;
+  cout << decoded.flattened() << endl;
+
+  double newEnergy = decoded.sumSq();
+  double diff = abs(oldEnergy - newEnergy) / oldEnergy; 
+  cout << "Percent error from encoding and decoding: " << diff << endl;
+  cout << "Accuracy was within: " << (1 - diff) << endl;
 }

@@ -13,6 +13,8 @@
 using std::cout;
 using std::endl;
 
+const int BLOCK_SIZE = 8;
+
 class COMPRESSION_DATA {
   public:
     COMPRESSION_DATA();
@@ -27,10 +29,16 @@ class COMPRESSION_DATA {
     int get_currBlockNum() const { return _currBlockNum; }
     double get_q() const { return _q; }
     double get_power() const { return _power; }
+    double get_percent() const { return _percent; }
     int get_nBits() const { return _nBits; } 
+    int get_maxIterations() const { return _maxIterations; } 
     const VECTOR& get_blockLengths() const { return _blockLengths; }
     const VECTOR& get_blockIndices() const { return _blockIndices; }
-    const VECTOR& get_sList() const { return _sList; }
+
+    // modified get_sList to break const-ness
+    VECTOR* get_sList() { return &(_sList); }
+    VECTOR* get_gammaList() { return &(_gammaList); }
+
     const FIELD_3D& get_dampingArray() const { return _dampingArray; }
     const INTEGER_FIELD_3D& get_zigzagArray() const { return _zigzagArray; }
     double* get_dct_in() const { return _dct_in; }
@@ -44,7 +52,9 @@ class COMPRESSION_DATA {
     void set_currBlockNum(int currBlockNum) { _currBlockNum = currBlockNum; }
     void set_q(double q) { _q = q; }
     void set_power(double power) { _power = power; }
+    void set_percent(double percent) { _percent = percent; }
     void set_nBits(int nBits) { _nBits = nBits; }
+    void set_maxIterations(int maxIterations) { _maxIterations = maxIterations; }
 
     void set_blockLengths(const VECTOR& blockLengths) { 
       int length = blockLengths.size();
@@ -68,39 +78,28 @@ class COMPRESSION_DATA {
     // compute and set damping array
 
     void set_dampingArray() {
-      int uRes = 8;
-      int vRes = 8;
-      int wRes = 8;
+      int uRes = BLOCK_SIZE;
+      int vRes = BLOCK_SIZE;
+      int wRes = BLOCK_SIZE;
       FIELD_3D damp(uRes, vRes, wRes);
 
-      double q = (*this).get_q();
-      double power = (*this).get_power();
-      
       for (int w = 0; w < wRes; w++) {
         for (int v = 0; v < vRes; v++) {
           for (int u = 0; u < uRes; u++) {
-            double r_uvw = 1 + (u + v + w) * q;
-            r_uvw = pow(r_uvw, power);
-            damp(u, v, w) = r_uvw;
-            // for debugging!
-            // damp(u, v, w) = 1.0;
+            damp(u, v, w) = 1 + u + v + w;
           }
         }
       }
       _dampingArray = damp;
     }
 
-  void tune_dampingArray(double power) {
-    this->set_power(power);
-  }
-    
     
   void set_zigzagArray() {
     TIMER functionTimer(__FUNCTION__);
 
-    int xRes = 8;
-    int yRes = 8; 
-    int zRes = 8; 
+    int xRes = BLOCK_SIZE;
+    int yRes = BLOCK_SIZE; 
+    int zRes = BLOCK_SIZE; 
     INTEGER_FIELD_3D zigzagArray(xRes, yRes, zRes);
     int sum;
     int i = 0;
@@ -121,9 +120,9 @@ class COMPRESSION_DATA {
 
 
   void dct_setup(int direction) {
-    const int xRes = 8;
-    const int yRes = 8;
-    const int zRes = 8;
+    const int xRes = BLOCK_SIZE;
+    const int yRes = BLOCK_SIZE;
+    const int zRes = BLOCK_SIZE;
 
     _dct_in = (double*) fftw_malloc(xRes * yRes * zRes * sizeof(double));
     _dct_out = (double*) fftw_malloc(xRes * yRes * zRes * sizeof(double));
@@ -151,12 +150,15 @@ class COMPRESSION_DATA {
     int _numCols;
     int _numBlocks;
     int _currBlockNum;
+    int _maxIterations;
     double _q;
     double _power;
     double _nBits;
+    double _percent;
     VECTOR _blockLengths;
     VECTOR _blockIndices;
     VECTOR _sList;
+    VECTOR _gammaList;
     FIELD_3D _dampingArray;
     INTEGER_FIELD_3D _zigzagArray;
 

@@ -70,14 +70,33 @@ void TransformVectorFieldSVD(VectorXd* s, MatrixXd* v, VECTOR3_FIELD_3D* transfo
 // undo the effects of a previous svd coordinate transform on a vector field
 void UntransformVectorFieldSVD(const MatrixXd& v, VECTOR3_FIELD_3D* transformedV);
 
+// normalize the block to a resolution of nBits based on the DC component.
+// update the sList.
+void PreprocessBlock(FIELD_3D* F, int blockNumber, COMPRESSION_DATA* data);
+
 // do a binary search to find the appropriate gamma given the desired percent 
 // energy accuracy and max iterations. the variable damp will be rewritten to the
-// desired damping array.
-double TuneGamma(const FIELD_3D& F, double percent, int maxIterations, FIELD_3D* damp);
+// desired damping array. updates gamaList.
+void TuneGamma(const FIELD_3D& F, int blockNumber, COMPRESSION_DATA* data, FIELD_3D* damp);
 
-// build a simple linear damping array whose uvw entry is 1 + u + v + w
-void BuildDampingArray(FIELD_3D* damp);
+// takes a passed in FIELD_3D (which is intended to be
+// the result of a DCT post-preprocess). calculates the best gamma value
+// for a damping array. then damps by that array and quantizes the result to an integer. 
+// stores the value of gamma for the damping.
+void EncodeBlock(const FIELD_3D& F, int blockNumber, COMPRESSION_DATA* data, 
+    INTEGER_FIELD_3D* quantized); 
 
+// takes a passed in INTEGER_FIELD_3D (which is intended to be run-length
+// decoded and unzigzagged) at a particular blockNumber and column of the matrix.
+// undoes the effects of damping/quantization as best as it can.
+void DecodeBlock(const INTEGER_FIELD_3D& intBlock, int blockNumber, int col, 
+    const DECOMPRESSION_DATA& decompression_data, FIELD_3D* decoded);
+
+// performs the same operations as DecodeBlock, but with passed in compression data
+// rather than passed in decompression data. due to const poisoning, compression
+// data cannot be marked const, but is treated as such.
+void DecodeBlockWithCompressionData(const INTEGER_FIELD_3D& intBlock, 
+  int blockNumber, COMPRESSION_DATA& data, FIELD_3D* decoded); 
 
 
 #endif

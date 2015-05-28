@@ -6,7 +6,6 @@ using std::vector;
 using std::cout;
 using std::endl;
 
-const int BLOCK_SIZE = 8;
 const double DCT_NORMALIZE = 1.0 / sqrt( 8 * BLOCK_SIZE * BLOCK_SIZE * BLOCK_SIZE );
 const double SQRT_ONEHALF = 1.0/sqrt(2.0);
 const double SQRT_TWO = sqrt(2.0);
@@ -195,35 +194,6 @@ void DCT_Smart_Unitary(const fftw_plan& plan, int direction, double* in, FIELD_3
   // rewrite F's data with the new contents of in 
   memcpy(F->data(), in, totalCells * sizeof(double));
 }
-
-
-
-
-
-////////////////////////////////////////////////////////
-// given a passed in VectorXd which is a flattened FIELD_3D, fftw plan, and 
-// corresponding 'in' buffer, performs the corresponding
-// transform on the field. this one is *unitary normalization* 
-// assumes 8 x 8 x 8 blocks!
-////////////////////////////////////////////////////////
-
-
-
-
-////////////////////////////////////////////////////////
-// fetches the plan an input buffer from the passed in
-// decompression data, so make sure all is initialized
-// before calling this function! 
-// IDCT smart fast?
-////////////////////////////////////////////////////////
-
-  
-  
-////////////////////////////////////////////////////////
-// performs 'DoSmartBlockCompression' on each
-// individual scalar field of a passed in vector field,
-// then reassembles the result into a lossy vector field 
-////////////////////////////////////////////////////////
 
 /*
 VECTOR3_FIELD_3D SmartBlockCompressVectorField(const VECTOR3_FIELD_3D& V, COMPRESSION_DATA& compression_data) { 
@@ -454,7 +424,7 @@ void UnitaryBlockDCT(int direction, vector<FIELD_3D>* blocks)
 
 ////////////////////////////////////////////////////////
 // build a block diagonal matrix with repeating copies of the passed
-// in matrix A along the diagonal
+// in matrix A along the diagonal. very poor memory usage!
 ////////////////////////////////////////////////////////
 void BlockDiagonal(const MatrixXd& A, int count, MatrixXd* B)
 {
@@ -574,23 +544,54 @@ void UntransformVectorFieldSVD(const MatrixXd& v, VECTOR3_FIELD_3D* transformedV
   memcpy(transformedV->data(), transformProduct.data(), 3 * count * sizeof(double));
 }
 
+////////////////////////////////////////////////////////
+// Normalize the block contents to a resolution of
+// nBits based on the DC component. Update the sList.
+////////////////////////////////////////////////////////
+void PreprocessBlock(FIELD_3D* F, int blockNumber, COMPRESSION_DATA* data)
+{
+  int nBits = data->get_nBits();
+
+  // normalize so that the DC component is at 2 ^ {nBits - 1} - 1
+  double s = (pow(2, nBits - 1) - 1) / (*F)[0];
+  (*F) *= s;
+
+  // fetch data for updating sList 
+  VECTOR* sList = data->get_sList();
+  int numBlocks = data->get_numBlocks();
+
+  // if it's the first time PreprocessBlock is called in a chain, resize
+  if (sList->size() <= 0) { 
+    sList->resizeAndWipe(numBlocks);
+  }
+
+  // update sList
+  (*sList)[blockNumber] = s;
+}
 
 ////////////////////////////////////////////////////////
 // Binary search to find the appropriate gamma given
 // desired percent threshold within maxIterations
 ////////////////////////////////////////////////////////
-double TuneGamma(const FIELD_3D& F, double percent, int maxIterations, FIELD_3D* damp)
+void TuneGamma(const FIELD_3D& F, int blockNumber, COMPRESSION_DATA* data, FIELD_3D* damp)
 {
-  VECTOR::printVertical = false;
 
-  int nBits = 24;
+  // fetch parameters from data
+  int nBits = data->get_nBits();
+  int maxIterations = data->get_maxIterations();
+  double percent = data->get_percent();
+
   double lower = 0.0;
   // QUESTION: how should we define upper?
   double upper = nBits;
   cout << "Upper: " << upper << endl;
-  double epsilon = 0.01;
+  // arbitrarily set epsilon to be 0.5%
+  double epsilon = 0.005;
   double gamma = 0.5 * (upper + lower);
+  cout << "Initial gamma: " << gamma << endl;
   damp->toPower(gamma);
+  cout << "Initial damping array: " << endl;
+  cout << damp->flattened() << endl;
   
   cout << "F: " << endl;
   cout << F.flattened() << endl;
@@ -600,6 +601,9 @@ double TuneGamma(const FIELD_3D& F, double percent, int maxIterations, FIELD_3D*
   damped.roundInt();
   cout << "Damped block: " << endl;
   cout << damped.flattened() << endl;
+
+  cout << "Undamped block: " << endl;
+  cout << ((*damp) * damped).flattened() << endl;
 
   double energyDiff = abs(totalEnergy - ( (*damp) * damped ).sumSq());
   cout << "Absolute energy difference: " << energyDiff << endl;
@@ -612,12 +616,18 @@ double TuneGamma(const FIELD_3D& F, double percent, int maxIterations, FIELD_3D*
     if (percentEnergy < percent) { // too much damping; need to lower gamma
       upper = gamma;
       gamma = 0.5 * (upper + lower);
+
+      // to the power of 1 / upper brings it back to the vanilla state, 
+      // from which we raise it to the new gamma
       damp->toPower(gamma / upper);
     }
 
     else { // not enough damping; need to increase gamma
       lower = gamma;
       gamma = 0.5 * (upper + lower);
+
+      // to the power of 1 / lower brings it back to the vanilla state, 
+      // from which we raise it to the new gamma
       damp->toPower(gamma / lower);
     }
 
@@ -628,6 +638,8 @@ double TuneGamma(const FIELD_3D& F, double percent, int maxIterations, FIELD_3D*
     damped.roundInt();
     cout << "New damped block: " << endl;
     cout << damped.flattened() << endl;
+    cout << "New undamped block: " << endl;
+    cout << ((*damp) * damped).flattened() << endl;
     energyDiff = abs(totalEnergy - ( (*damp) * damped ).sumSq());
     percentEnergy =  1.0 - (energyDiff / totalEnergy);
     cout << "New percent energy: " << percentEnergy << endl;
@@ -639,128 +651,64 @@ double TuneGamma(const FIELD_3D& F, double percent, int maxIterations, FIELD_3D*
   cout << "Took " << iterations << " iterations to compute gamma!\n";
   cout << "Percent Energy ended up at : " << percentEnergy << endl;
   cout << "Gamma ended up at: " << gamma << endl;
-  return gamma;
+
+  // fetch data to update gammaList
+  VECTOR* gammaList = data->get_gammaList(); 
+  int numBlocks = data->get_numBlocks();
+
+  // if it's the first time TuneGamma is called in a chain, resize
+  if (gammaList->size() <= 0) { 
+    gammaList->resizeAndWipe(numBlocks);
+  }
+
+  (*gammaList)[blockNumber] = gamma;
+
 }
 
 ////////////////////////////////////////////////////////
-// build a simple linear damping array whose uvw entry is 
-// 1 + u + v + w
+// takes a passed in FIELD_3D (which is intended to be
+// the result of a DCT post-preprocess). calculates the best gamma value
+// for a damping array. then damps by that array and
+// quantizes the result to an integer. stores the 
+// value of gamma for the damping.
 ////////////////////////////////////////////////////////
-void BuildDampingArray(FIELD_3D* damp)
+
+void EncodeBlock(const FIELD_3D& F, int blockNumber, COMPRESSION_DATA* data, 
+    INTEGER_FIELD_3D* quantized) 
 {
-  int uRes = BLOCK_SIZE;
-  int vRes = BLOCK_SIZE;
-  int wRes = BLOCK_SIZE;
 
-  *damp = FIELD_3D(uRes, vRes, wRes);
-  for (int w = 0; w < wRes; w++) {
-    for (int v = 0; v < vRes; v++) {
-      for (int u = 0; u < uRes; u++) {
-        (*damp)(u, v, w) = 1 + u + v + w; 
-      }
-    }
-  }
-}
-
-////////////////////////////////////////////////////////
-// takes a passed in FIELD_3D (which is intended to be
-// the result of a DCT), scales it to an nBit integer
-// (typically 16), normalizes by the DC coefficient,
-// damps by a precomputed damping array, and quantizes 
-// to an integer
-////////////////////////////////////////////////////////
-
-/*
-void EncodeBlock(const FIELD_3D& F, int blockNumber, COMPRESSION_DATA* compression_data, 
-    INTEGER_FIELD_3D* quantized) {
   TIMER functionTimer(__FUNCTION__);
 
-  int uRes = F.xRes();
-  int vRes = F.yRes();
-  int wRes = F.zRes();
-  // FIELD_3D F_quantized(uRes, vRes, wRes);
+  // size the return value appropriately
+  quantized->resizeAndWipe(F.xRes(), F.yRes(), F.zRes());
 
-  // what we will return
-  // INTEGER_FIELD_3D quantized(uRes, vRes, wRes);
-  
-  int nBits = compression_data->get_nBits();
-  const FIELD_3D& dampingArray = compression_data->get_dampingArray();
-  int numBlocks = compression_data->get_numBlocks();
-  assert(blockNumber >=0 && blockNumber < numBlocks);
-  
-  VECTOR sList = compression_data->get_sList();
-  if (sList.size() == 0) { // if it's the first time EncodeBlock is called in a chain
-    sList.resizeAndWipe(numBlocks);
-  }
+  // grab the pre-cached vanila damping array
+  const FIELD_3D& dampingArray = data->get_dampingArray();
 
-  const double Fmax = F(0, 0, 0);                                 // use the DC component as the maximum
-  double s = (pow(2.0, nBits - 1) - 1) / Fmax;                    // a scale factor for an integer representation
+  // make a copy for modification during TuneGamma
+  FIELD_3D damp = dampingArray;
 
-  // assign the next s value to sList
-  sList[blockNumber] = s; 
-  // scale so that the DC component is 2^(n - 1) - 1
-  F_quantized = F * s;
-  // spatial damping to stomp high frequencies
-  F_quantized /= dampingArray;
+  int numBlocks = data->get_numBlocks();
+  assert(blockNumber >= 0 && blockNumber < numBlocks);
+ 
+  // finds best gamma given the percent. updates gammaList
+  // and updates damp 
+  TuneGamma(F, blockNumber, data, &damp);
 
-  quantized = RoundFieldToInt(F_quantized);
-
-  // update sList within compression data
-  compression_data->set_sList(sList);
+  // fill the return value with rounded damped entries
+  RoundFieldToInt( (F / damp), quantized );
 
 }
-*/
 
 ////////////////////////////////////////////////////////
-// takes a passed in FIELD_3D (which is intended to be
-// the result of a DCT), scales it to an nBit integer
-// (typically 16), normalizes by the DC coefficient,
-// damps by a precomputed damping array, and quantizes 
-// to an integer
+// takes a passed in INTEGER_FIELD_3D (which is inteneded to
+// be run-length decoded and unzigzagged) corresponding to
+// a particulary blockNumber and column of the matrix. undoes
+// the effects of damping and quantization as best it can.
 ////////////////////////////////////////////////////////
-/*
-INTEGER_FIELD_3D EncodeBlock(FIELD_3D& F, int blockNumber, COMPRESSION_DATA& compression_data) {
-  TIMER functionTimer(__FUNCTION__);
-
-  const int uRes = F.xRes();
-  const int vRes = F.yRes();
-  const int wRes = F.zRes();
-  FIELD_3D F_quantized(uRes, vRes, wRes);
-
-  // what we will return
-  INTEGER_FIELD_3D quantized(uRes, vRes, wRes);
-  
-  int nBits = compression_data.get_nBits();
-  const FIELD_3D& dampingArray = compression_data.get_dampingArray();
-  int numBlocks = compression_data.get_numBlocks();
-  assert(blockNumber >=0 && blockNumber < numBlocks);
-  
-  VECTOR sList = compression_data.get_sList();
-  if (sList.size() == 0) { // if it's the first time EncodeBlock is called in a chain
-    sList.resizeAndWipe(numBlocks);
-  }
-
-  const double Fmax = F(0, 0, 0);                                 // use the DC component as the maximum
-  double s = (pow(2.0, nBits - 1) - 1) / Fmax;                    // a scale factor for an integer representation
-
-  // assign the next s value to sList
-  sList[blockNumber] = s; 
-  // scale so that the DC component is 2^(n - 1) - 1
-  F_quantized = F * s;
-  // spatial damping to stomp high frequencies
-  F_quantized /= dampingArray;
-
-  quantized = RoundFieldToInt(F_quantized);
-
-  // update sList within compression data
-  compression_data.set_sList(sList);
-
-  return quantized;
-}
-*/
-
-/*
-void DecodeBlockFast(const INTEGER_FIELD_3D& intBlock, int blockNumber, int col, const DECOMPRESSION_DATA& decompression_data, FIELD_3D& fieldToFill) {
+void DecodeBlock(const INTEGER_FIELD_3D& intBlock, int blockNumber, int col, 
+    const DECOMPRESSION_DATA& decompression_data, FIELD_3D* decoded) 
+{
 
   TIMER functionTimer(__FUNCTION__);
 
@@ -769,38 +717,44 @@ void DecodeBlockFast(const INTEGER_FIELD_3D& intBlock, int blockNumber, int col,
   assert( (blockNumber >= 0) && (blockNumber < numBlocks) );
 
   // we use u, v, w rather than x, y , z to indicate the spatial frequency domain
-
   const int uRes = intBlock.xRes();
   const int vRes = intBlock.yRes();
   const int wRes = intBlock.zRes();
+  // size the decoded block appropriately and fill it with the block data
+  decoded->resizeAndWipe(uRes, vRes, wRes);
+  CastIntFieldToDouble(intBlock, decoded);
 
   // use the appropriate scale factor to decode
   const MATRIX& sListMatrix = decompression_data.get_sListMatrix();
   double s = sListMatrix(blockNumber, col);
+  double sInv = 1.0 / s;
+
+  const MATRIX& gammaListMatrix = decompression_data.get_gammaListMatrix();
+  double gamma = gammaListMatrix(blockNumber, col);
   
-  // dequantize by inverting the scaling by s and contracting by the damping array
+  // dequantize by inverting the scaling by s and contracting by the 
+  // appropriate gamma-modulated damping array
   const FIELD_3D& dampingArray = decompression_data.get_dampingArray();
-  FIELD_3D dequantized_F(uRes, vRes, wRes);
-  CastIntFieldToDouble(intBlock, dequantized_F);
-  dequantized_F *= (1.0 / s);
-  dequantized_F *= dampingArray;
-  
-  
-  // take the IDCT
-  // FIELD_3D dequantized_F_hat = IDCT(dequantized_F);
+  FIELD_3D damp = dampingArray;
+  damp.toPower(gamma);
+
+  // undo the dampings and preprocess
+  (*decoded) *= dampingArray;
+  (*decoded) *= sInv;
  
-  IDCT_Smart_Fast(dequantized_F, decompression_data, fieldToFill);
 }
-*/
 
 
 ////////////////////////////////////////////////////////
-// no IDCT, and no 'col' parameter. the decompression
-// data parameter is replaced by a compression data
-// parameter 
+// does the same operations as DecodeBlock, but with a passed
+// in compression data parameter rather than decompression data 
+// due to const poisoning, compression data cannot be marked const,
+// but nonetheless it is not modified.
 ////////////////////////////////////////////////////////
-/*
-FIELD_3D DecodeBlockSmart(const INTEGER_FIELD_3D& intBlock, int blockNumber, COMPRESSION_DATA& data) { 
+
+void DecodeBlockWithCompressionData(const INTEGER_FIELD_3D& intBlock, 
+  int blockNumber, COMPRESSION_DATA& data, FIELD_3D* decoded) 
+{ 
   TIMER functionTimer(__FUNCTION__);
 
   int numBlocks = data.get_numBlocks();
@@ -808,26 +762,32 @@ FIELD_3D DecodeBlockSmart(const INTEGER_FIELD_3D& intBlock, int blockNumber, COM
   assert( (blockNumber >= 0) && (blockNumber < numBlocks) );
 
   // we use u, v, w rather than x, y , z to indicate the spatial frequency domain
-
   const int uRes = intBlock.xRes();
   const int vRes = intBlock.yRes();
   const int wRes = intBlock.zRes();
+  // size the decoded block appropriately and fill it with the block data
+  decoded->resizeAndWipe(uRes, vRes, wRes);
+  CastIntFieldToDouble(intBlock, decoded);
 
   // use the appropriate scale factor to decode
-  const VECTOR& sList = data.get_sList();
-  double s = sList[blockNumber];
+  VECTOR* sList = data.get_sList();
+  double s = (*sList)[blockNumber];
+  double sInv = 1.0 / s;
+  VECTOR* gammaList = data.get_gammaList();
+  double gamma = (*gammaList)[blockNumber];
     
-  // dequantize by inverting the scaling by s and contracting by the damping array
+  // dequantize by inverting the scaling by s and contracting by the 
+  // appropriate gamma-modulated damping array
   const FIELD_3D& dampingArray = data.get_dampingArray();
-  FIELD_3D dequantized_F(uRes, vRes, wRes);
-  CastIntFieldToDouble(intBlock, dequantized_F);
-  dequantized_F *= (1.0 / s);
-  dequantized_F *= dampingArray;
+  FIELD_3D damp = dampingArray;
+  damp.toPower(gamma);
 
+  // undo the dampings and preprocess
+  (*decoded) *= damp;
+  (*decoded) *= sInv;
 
-  return dequantized_F;    
 }
-*/
+
 
 
 

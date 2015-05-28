@@ -26,6 +26,8 @@ class DECOMPRESSION_DATA {
     const MATRIX& get_blockLengthsMatrix() const { return _blockLengthsMatrix; } 
     const MATRIX& get_blockIndicesMatrix() const { return _blockIndicesMatrix; }
     const MATRIX& get_sListMatrix() const { return _sListMatrix; }
+    const MATRIX& get_gammaListMatrix() const { return _gammaListMatrix; }
+
     const INTEGER_FIELD_3D& get_zigzagArray() const { return _zigzagArray; }
     const FIELD_3D& get_dampingArray() const { return _dampingArray; }
     double* get_dct_in() const { return _dct_in; }
@@ -42,25 +44,20 @@ class DECOMPRESSION_DATA {
     void set_blockLengthsMatrix(const MATRIX& blockLengthsMatrix) { _blockLengthsMatrix = blockLengthsMatrix; }
     void set_blockIndicesMatrix(const MATRIX& blockIndicesMatrix) { _blockIndicesMatrix = blockIndicesMatrix; }
     void set_sListMatrix(const MATRIX& sListMatrix) { _sListMatrix = sListMatrix; }
+    void set_gammaListMatrix(const MATRIX& gammaListMatrix) { _gammaListMatrix = gammaListMatrix; }
 
     // compute and set damping array
     void set_dampingArray() {
-      int uRes = 8;
-      int vRes = 8;
-      int wRes = 8;
+      int uRes = BLOCK_SIZE;
+      int vRes = BLOCK_SIZE;
+      int wRes = BLOCK_SIZE;
       FIELD_3D damp(uRes, vRes, wRes);
 
-      double q = (*this).get_q();
-      double power = (*this).get_power();
       
       for (int w = 0; w < wRes; w++) {
         for (int v = 0; v < vRes; v++) {
           for (int u = 0; u < uRes; u++) {
-            double r_uvw = 1 + (u + v + w) * q;
-            r_uvw = pow(r_uvw, power);
-            damp(u, v, w) = r_uvw;
-            // for debugging!
-            // damp(u, v, w) = 1.0;
+            damp(u, v, w) = 1 + u + v + w;
           }
         }
       }
@@ -71,9 +68,9 @@ class DECOMPRESSION_DATA {
     void set_zigzagArray() {
       TIMER functionTimer(__FUNCTION__);
 
-      int xRes = 8;
-      int yRes = 8; 
-      int zRes = 8; 
+      int xRes = BLOCK_SIZE;
+      int yRes = BLOCK_SIZE; 
+      int zRes = BLOCK_SIZE; 
       INTEGER_FIELD_3D zigzagArray(xRes, yRes, zRes);
       int sum;
       int i = 0;
@@ -93,9 +90,9 @@ class DECOMPRESSION_DATA {
     }
 
     void dct_setup(int direction) {
-      const int xRes = 8;
-      const int yRes = 8;
-      const int zRes = 8;
+      const int xRes = BLOCK_SIZE;
+      const int yRes = BLOCK_SIZE;
+      const int zRes = BLOCK_SIZE;
 
       _dct_in = (double*) fftw_malloc(xRes * yRes * zRes * sizeof(double));
       _dct_out = (double*) fftw_malloc(xRes * yRes * zRes * sizeof(double));
@@ -128,6 +125,8 @@ class DECOMPRESSION_DATA {
     MATRIX _blockLengthsMatrix;
     MATRIX _blockIndicesMatrix;
     MATRIX _sListMatrix;
+    MATRIX _gammaListMatrix;
+
     FIELD_3D _dampingArray;
     INTEGER_FIELD_3D _zigzagArray;
 
