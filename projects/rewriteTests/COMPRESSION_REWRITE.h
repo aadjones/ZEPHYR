@@ -98,5 +98,25 @@ void DecodeBlock(const INTEGER_FIELD_3D& intBlock, int blockNumber, int col,
 void DecodeBlockWithCompressionData(const INTEGER_FIELD_3D& intBlock, 
   int blockNumber, COMPRESSION_DATA& data, FIELD_3D* decoded); 
 
+// flattens an INTEGER_FIELD_3D through a zig-zag scan
+// into a VectorXi. Since the scan always follows the same order,
+// we precompute the zigzag scan array, pass it
+// as a parameter, and then just do an index lookup
+void ZigzagFlatten(const INTEGER_FIELD_3D& F, const INTEGER_FIELD_3D& zigzagArray, 
+    VectorXi* zigzagged);
 
+// unflattens a VectorXi into an INTEGER_FIELD_3D 
+void ZigzagUnflatten(const VectorXi& V, const INTEGER_FIELD_3D& zigzagArray, 
+    INTEGER_FIELD_3D* unflattened);
+
+// given a zigzagged integer vector, write it to a binary
+// file via run-length encoding. assumes the blockLengths
+// vector has already been allocated!
+void RunLengthEncodeBinary(const char* filename, int blockNumber, const VectorXi& zigzaggedArray, 
+    VectorXi* blockLengths);
+
+// decode a run-length encoded binary file and fill 
+// a VectorXi with the contents.
+void RunLengthDecodeBinary(int* allData, int blockNumber, int col, 
+    const MatrixXi& blockLengthsMatrix, const MatrixXi& blockIndicesMatrix, VectorXi* parsedData);
 #endif

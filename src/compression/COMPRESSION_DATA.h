@@ -10,10 +10,11 @@
 #include "FIELD_3D.h"
 #include "INTEGER_FIELD_3D.h"
 
+#define BLOCK_SIZE 8
+
 using std::cout;
 using std::endl;
 
-const int BLOCK_SIZE = 8;
 
 class COMPRESSION_DATA {
   public:
@@ -32,12 +33,12 @@ class COMPRESSION_DATA {
     double get_percent() const { return _percent; }
     int get_nBits() const { return _nBits; } 
     int get_maxIterations() const { return _maxIterations; } 
-    const VECTOR& get_blockLengths() const { return _blockLengths; }
-    const VECTOR& get_blockIndices() const { return _blockIndices; }
+    const VectorXi& get_blockLengths() const { return _blockLengths; }
+    const VectorXi& get_blockIndices() const { return _blockIndices; }
 
     // modified get_sList to break const-ness
-    VECTOR* get_sList() { return &(_sList); }
-    VECTOR* get_gammaList() { return &(_gammaList); }
+    VectorXd* get_sList() { return &(_sList); }
+    VectorXd* get_gammaList() { return &(_gammaList); }
 
     const FIELD_3D& get_dampingArray() const { return _dampingArray; }
     const INTEGER_FIELD_3D& get_zigzagArray() const { return _zigzagArray; }
@@ -56,19 +57,19 @@ class COMPRESSION_DATA {
     void set_nBits(int nBits) { _nBits = nBits; }
     void set_maxIterations(int maxIterations) { _maxIterations = maxIterations; }
 
-    void set_blockLengths(const VECTOR& blockLengths) { 
+    void set_blockLengths(const VectorXi& blockLengths) { 
       int length = blockLengths.size();
       assert(length == _numBlocks);
       _blockLengths = blockLengths; 
     }
 
-    void set_blockIndices(const VECTOR& blockIndices) { 
+    void set_blockIndices(const VectorXi& blockIndices) { 
       int length = blockIndices.size();
       assert(length == _numBlocks);
       _blockIndices = blockIndices;
     }
 
-    void set_sList(const VECTOR& sList) { 
+    void set_sList(const VectorXd& sList) { 
       int length = sList.size();
       assert(length == _numBlocks);
       _sList = sList;
@@ -155,10 +156,10 @@ class COMPRESSION_DATA {
     double _power;
     double _nBits;
     double _percent;
-    VECTOR _blockLengths;
-    VECTOR _blockIndices;
-    VECTOR _sList;
-    VECTOR _gammaList;
+    VectorXi _blockLengths;
+    VectorXi _blockIndices;
+    VectorXd _sList;
+    VectorXd _gammaList;
     FIELD_3D _dampingArray;
     INTEGER_FIELD_3D _zigzagArray;
 

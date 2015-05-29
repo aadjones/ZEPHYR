@@ -38,14 +38,14 @@ int numRows = 3 * xRes * yRes * zRes;
 int numCols = 151;
 int numBlocks = xRes * yRes * zRes / (BLOCK_SIZE * BLOCK_SIZE * BLOCK_SIZE);
 VEC3I dims(xRes, yRes, zRes);
-MATRIX U(numRows, numCols);
+MatrixXd U(numRows, numCols);
 VECTOR3_FIELD_3D V(xRes, yRes, zRes);
 FIELD_3D F(xRes, yRes, zRes);
 fftw_plan plan;
 string path("../../U.preadvect.matrix");
 COMPRESSION_DATA compression_data;
 int nBits = 16;
-double percent = 0.85;
+double percent = 1.0;
 int maxIterations = 16;
 
 ////////////////////////////////////////////////////////
@@ -84,6 +84,9 @@ void EncodeBlockTest();
 // test the encoding/decoding chain
 void EncodeDecodeBlockTest();
 
+// test the zigzag scanning and reassembly
+void ZigzagTest();
+
 ////////////////////////////////////////////////////////
 // Main
 ////////////////////////////////////////////////////////
@@ -93,7 +96,7 @@ int main(int argc, char* argv[])
   TIMER functionTimer(__FUNCTION__);
   InitGlobals();
   
-  EncodeDecodeBlockTest();
+  ZigzagTest();
 
   functionTimer.printTimings();
   return 0;
@@ -112,11 +115,10 @@ void InitGlobals()
   srand(time(NULL));
   VECTOR::printVertical = false;
 
-  U.read(path.c_str()); 
-  cout << "U dims: " << "(" << U.rows() << ", " << U.cols() << ")\n";
+  EIGEN::read(path.c_str(), U); 
 
   int col = 127;
-  V = VECTOR3_FIELD_3D(U.getColumn(col), xRes, yRes, zRes);
+  V = VECTOR3_FIELD_3D(U.col(col), xRes, yRes, zRes);
 
   VectorXd s;
   MatrixXd v;
@@ -128,6 +130,7 @@ void InitGlobals()
   compression_data.set_nBits(nBits);
   compression_data.set_numBlocks(numBlocks);
   compression_data.set_dampingArray();
+  compression_data.set_zigzagArray();
   
 }
 
@@ -248,8 +251,8 @@ void EncodeBlockTest()
 
   }
 
-  VECTOR* sList = compression_data.get_sList();
-  VECTOR* gammaList = compression_data.get_gammaList();
+  VectorXd* sList = compression_data.get_sList();
+  VectorXd* gammaList = compression_data.get_gammaList();
   cout << "sList: " << (*sList) << endl;
   cout << "gammaList: " << (*gammaList) << endl; 
 }
@@ -283,4 +286,33 @@ void EncodeDecodeBlockTest()
   double diff = abs(oldEnergy - newEnergy) / oldEnergy; 
   cout << "Percent error from encoding and decoding: " << diff << endl;
   cout << "Accuracy was within: " << (1 - diff) << endl;
+}
+
+void ZigzagTest()
+{
+  vector<FIELD_3D> blocks;
+  GetBlocks(F, &blocks);
+  UnitaryBlockDCT(1, &blocks);
+
+  int blockNumber = 24;
+  FIELD_3D oldBlock = blocks[blockNumber];
+  cout << "oldBlock: " << endl;
+  cout << oldBlock.flattened() << endl;
+  PreprocessBlock(&(blocks[blockNumber]), blockNumber, &compression_data);
+
+  INTEGER_FIELD_3D quantized;
+  EncodeBlock(blocks[blockNumber], blockNumber, &compression_data, &quantized);
+  cout << "encoded block: " << endl;
+  cout << quantized.flattened() << endl;
+
+  VectorXi zigzagged;
+  const INTEGER_FIELD_3D& zigzagArray = compression_data.get_zigzagArray();
+  ZigzagFlatten(quantized, zigzagArray, &zigzagged);
+  cout << "zigzag scanned: " << endl;
+  cout << EIGEN::convert(zigzagged) << endl;
+
+  ZigzagUnflatten(zigzagged, zigzagArray, &quantized);
+  cout << "unzigzagged: " << endl;
+  cout << quantized.flattened() << endl;
+
 }

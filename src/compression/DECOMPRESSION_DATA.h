@@ -8,6 +8,8 @@
 #include "FIELD_3D.h"
 #include "INTEGER_FIELD_3D.h"
 
+#define BLOCK_SIZE 8
+
 using std::vector;
 
 class DECOMPRESSION_DATA {
@@ -23,10 +25,10 @@ class DECOMPRESSION_DATA {
     const VEC3I& get_dims() const { return _dims; }
     int get_numCols() const { return _numCols; }
     int get_numBlocks() const { return _numBlocks; }
-    const MATRIX& get_blockLengthsMatrix() const { return _blockLengthsMatrix; } 
-    const MATRIX& get_blockIndicesMatrix() const { return _blockIndicesMatrix; }
-    const MATRIX& get_sListMatrix() const { return _sListMatrix; }
-    const MATRIX& get_gammaListMatrix() const { return _gammaListMatrix; }
+    const MatrixXi get_blockLengthsMatrix() const { return _blockLengthsMatrix; } 
+    const MatrixXi& get_blockIndicesMatrix() const { return _blockIndicesMatrix; }
+    const MatrixXd& get_sListMatrix() const { return _sListMatrix; }
+    const MatrixXd& get_gammaListMatrix() const { return _gammaListMatrix; }
 
     const INTEGER_FIELD_3D& get_zigzagArray() const { return _zigzagArray; }
     const FIELD_3D& get_dampingArray() const { return _dampingArray; }
@@ -41,10 +43,10 @@ class DECOMPRESSION_DATA {
     void set_dims(const VEC3I& dims) { _dims = dims; }
     void set_numCols(int numCols) { _numCols = numCols; }
     void set_numBlocks(int numBlocks) { _numBlocks = numBlocks; }
-    void set_blockLengthsMatrix(const MATRIX& blockLengthsMatrix) { _blockLengthsMatrix = blockLengthsMatrix; }
-    void set_blockIndicesMatrix(const MATRIX& blockIndicesMatrix) { _blockIndicesMatrix = blockIndicesMatrix; }
-    void set_sListMatrix(const MATRIX& sListMatrix) { _sListMatrix = sListMatrix; }
-    void set_gammaListMatrix(const MATRIX& gammaListMatrix) { _gammaListMatrix = gammaListMatrix; }
+    void set_blockLengthsMatrix(const MatrixXi& blockLengthsMatrix) { _blockLengthsMatrix = blockLengthsMatrix; }
+    void set_blockIndicesMatrix(const MatrixXi& blockIndicesMatrix) { _blockIndicesMatrix = blockIndicesMatrix; }
+    void set_sListMatrix(const MatrixXd& sListMatrix) { _sListMatrix = sListMatrix; }
+    void set_gammaListMatrix(const MatrixXd& gammaListMatrix) { _gammaListMatrix = gammaListMatrix; }
 
     // compute and set damping array
     void set_dampingArray() {
@@ -122,10 +124,10 @@ class DECOMPRESSION_DATA {
     VEC3I _dims;
     int _numCols;
     int _numBlocks;
-    MATRIX _blockLengthsMatrix;
-    MATRIX _blockIndicesMatrix;
-    MATRIX _sListMatrix;
-    MATRIX _gammaListMatrix;
+    MatrixXi _blockLengthsMatrix;
+    MatrixXi _blockIndicesMatrix;
+    MatrixXd _sListMatrix;
+    MatrixXd _gammaListMatrix;
 
     FIELD_3D _dampingArray;
     INTEGER_FIELD_3D _zigzagArray;

@@ -557,12 +557,12 @@ void PreprocessBlock(FIELD_3D* F, int blockNumber, COMPRESSION_DATA* data)
   (*F) *= s;
 
   // fetch data for updating sList 
-  VECTOR* sList = data->get_sList();
+  VectorXd* sList = data->get_sList();
   int numBlocks = data->get_numBlocks();
 
   // if it's the first time PreprocessBlock is called in a chain, resize
   if (sList->size() <= 0) { 
-    sList->resizeAndWipe(numBlocks);
+    sList->setZero(numBlocks);
   }
 
   // update sList
@@ -653,12 +653,12 @@ void TuneGamma(const FIELD_3D& F, int blockNumber, COMPRESSION_DATA* data, FIELD
   cout << "Gamma ended up at: " << gamma << endl;
 
   // fetch data to update gammaList
-  VECTOR* gammaList = data->get_gammaList(); 
+  VectorXd* gammaList = data->get_gammaList(); 
   int numBlocks = data->get_numBlocks();
 
   // if it's the first time TuneGamma is called in a chain, resize
   if (gammaList->size() <= 0) { 
-    gammaList->resizeAndWipe(numBlocks);
+    gammaList->setZero(numBlocks);
   }
 
   (*gammaList)[blockNumber] = gamma;
@@ -725,11 +725,11 @@ void DecodeBlock(const INTEGER_FIELD_3D& intBlock, int blockNumber, int col,
   CastIntFieldToDouble(intBlock, decoded);
 
   // use the appropriate scale factor to decode
-  const MATRIX& sListMatrix = decompression_data.get_sListMatrix();
+  const MatrixXd& sListMatrix = decompression_data.get_sListMatrix();
   double s = sListMatrix(blockNumber, col);
   double sInv = 1.0 / s;
 
-  const MATRIX& gammaListMatrix = decompression_data.get_gammaListMatrix();
+  const MatrixXd& gammaListMatrix = decompression_data.get_gammaListMatrix();
   double gamma = gammaListMatrix(blockNumber, col);
   
   // dequantize by inverting the scaling by s and contracting by the 
@@ -770,10 +770,10 @@ void DecodeBlockWithCompressionData(const INTEGER_FIELD_3D& intBlock,
   CastIntFieldToDouble(intBlock, decoded);
 
   // use the appropriate scale factor to decode
-  VECTOR* sList = data.get_sList();
+  VectorXd* sList = data.get_sList();
   double s = (*sList)[blockNumber];
   double sInv = 1.0 / s;
-  VECTOR* gammaList = data.get_gammaList();
+  VectorXd* gammaList = data.get_gammaList();
   double gamma = (*gammaList)[blockNumber];
     
   // dequantize by inverting the scaling by s and contracting by the 
@@ -788,37 +788,34 @@ void DecodeBlockWithCompressionData(const INTEGER_FIELD_3D& intBlock,
 
 }
 
-
-
-
 ////////////////////////////////////////////////////////
 // given a zigzagged integer buffer, write it to a binary
-// file via run-length encoding 
+// file via run-length encoding. assumes the blockLengths
+// vector has already been allocated!
 ////////////////////////////////////////////////////////
-/*
-void RunLengthEncodeBinary(const char* filename, int blockNumber, int* zigzaggedArray, VECTOR& blockLengths) { 
+void RunLengthEncodeBinary(const char* filename, int blockNumber, const VectorXi& zigzaggedArray, 
+    VectorXi* blockLengths)
+{ 
   TIMER functionTimer(__FUNCTION__);
-  // blockLengths will be modified to keep track of how long
-  // each block is for the decoder
 
   FILE* pFile;
-  pFile = fopen(filename, "ab+");    // open a file in append mode since we will call this function repeatedly
+  // open a file in append mode since we will call this function repeatedly
+  pFile = fopen(filename, "ab+");    
   if (pFile == NULL) {
     perror ("Error opening file.");
   }
   else {
 
-    vector<int> dataList;            // a C++ vector container for our data (int16s)
+    vector<int> dataList;            // a C++ vector container for our data 
+    dataList.reserve(2 * BLOCK_SIZE * BLOCK_SIZE * BLOCK_SIZE);
     int data = 0;
     int runLength = 0;
-    // int encodedLength = 0;             // variable used to keep track of how long our code is for the decoder
 
-    // assuming 8 x 8 x 8 blocks
-    int length = 8 * 8 * 8;
+    // assuming BLOCK_SIZE blocks
+    int length = BLOCK_SIZE * BLOCK_SIZE * BLOCK_SIZE;
     for (int i = 0; i < length; i++) {
       data = zigzaggedArray[i];
       dataList.push_back(data);
-      // encodedLength++;
 
       runLength = 1;
       while ( (i + 1 < length) && (zigzaggedArray[i] == zigzaggedArray[i + 1]) ) {
@@ -830,31 +827,150 @@ void RunLengthEncodeBinary(const char* filename, int blockNumber, int* zigzagged
         // use a single repeated value as an 'escape' to indicate a run
         dataList.push_back(data);
         
-        // encodedLength++;
-
         // push the runLength to the data vector
         dataList.push_back(runLength);
-        // encodedLength++;
       }
     }
     int encodedLength = dataList.size();
 
- 
-    blockLengths[blockNumber] = encodedLength;
+    // crash if the blockLengths vector is not preallocated
+    if (blockLengths->size() <= 0) {
+      cout << "You need to allocate blockLengths before calling the run-length encoder!\n";
+      exit(EXIT_FAILURE);
+    }
+
+    // update the blockLengths vector
+    (*blockLengths)[blockNumber] = encodedLength;
 
     {
     TIMER writeTimer("fwrite timer");
 
     fwrite(&(dataList[0]), sizeof(int), encodedLength, pFile);
     // this write assumes that C++ vectors are stored in contiguous memory!
-    
     }
 
     fclose(pFile);
-    return;
   }
 }
-*/
+
+////////////////////////////////////////////////////////
+// decode a run-length encoded binary file and fill 
+// a VectorXi with the contents.
+////////////////////////////////////////////////////////
+
+void RunLengthDecodeBinary(int* allData, int blockNumber, int col, 
+    const MatrixXi& blockLengthsMatrix, const MatrixXi& blockIndicesMatrix, VectorXi* parsedData)
+{
+
+  TIMER functionTimer(__FUNCTION__);
+    
+  int compressedBlockSize = blockLengthsMatrix(blockNumber, col);
+  assert(compressedBlockSize >= 0 && 
+      compressedBlockSize <= 2 * BLOCK_SIZE * BLOCK_SIZE * BLOCK_SIZE);
+
+  int blockIndex = blockIndicesMatrix(blockNumber, col);
+  
+  int i = 0;
+  int runLength = 1;
+ 
+  // *************************************************** 
+  // Old stable code using iterators and a C++ vector<int>
+  /*
+  auto itr = parsedData.begin();
+  while (i < blockSize) {
+    *itr = allData[blockIndex + i];
+         // write the value once
+    if ( (i + 1 < blockSize) && allData[blockIndex + i] == allData[blockIndex + i + 1]) {      // if we read an 'escape' value, it indicates a run.
+      i += 2;                                     // advance past the escape value to the run length value.
+      runLength = allData[blockIndex + i];
+      
+      assert(runLength > 1 && runLength <= 512);
+
+      std::fill(itr + 1, itr + 1 + runLength - 1, allData[blockIndex + i - 2]);
+      itr += (runLength - 1);
+
+    }
+
+    i++;
+    ++itr;
+  }
+  */
+  // *************************************************** 
+
+  parsedData->resize(BLOCK_SIZE * BLOCK_SIZE * BLOCK_SIZE);
+  int* data = parsedData->data();
+  int j = 0;
+  while (i < compressedBlockSize) {
+
+    data[j] = allData[blockIndex + i];
+
+    if ( (i + 1 < compressedBlockSize) && 
+        allData[blockIndex + i] == allData[blockIndex + i + 1]) {
+      i += 2;
+      runLength = allData[blockIndex + i];
+
+      assert(runLength > 1 && runLength <= BLOCK_SIZE * BLOCK_SIZE * BLOCK_SIZE);
+
+      memset(data + j + 1, allData[blockIndex + i - 2], (runLength - 1) * sizeof(int));
+      j += (runLength - 1);
+
+    }
+
+    i++;
+    j++;
+  }
+} 
+
+
+
+////////////////////////////////////////////////////////
+// Flattends an INTEGER_FIELD_3D through a zig-zag scan
+// into a VectorXi. Since the scan always follows the same order,
+// we precompute the zigzag scan array, pass it
+// as a parameter, and then just do an index lookup
+////////////////////////////////////////////////////////
+void ZigzagFlatten(const INTEGER_FIELD_3D& F, const INTEGER_FIELD_3D& zigzagArray, 
+    VectorXi* zigzagged) 
+{
+
+  TIMER functionTimer(__FUNCTION__);
+
+  int xRes = F.xRes();
+  int yRes = F.yRes();
+  int zRes = F.zRes();
+  assert(xRes == BLOCK_SIZE && yRes == BLOCK_SIZE && zRes == BLOCK_SIZE);
+
+  zigzagged->resize(xRes * yRes * zRes);
+  int totalCells = BLOCK_SIZE * BLOCK_SIZE * BLOCK_SIZE;
+  
+  for (int i = 0; i < totalCells; i++) {
+    int index = zigzagArray[i];
+    (*zigzagged)[index] = F[i];
+  }
+
+}
+
+////////////////////////////////////////////////////////
+// Unflattens a VectorXi into an INTEGER_FIELD_3D. 
+// uses precomputed zigzagArray and simple lookups. 
+////////////////////////////////////////////////////////
+void ZigzagUnflatten(const VectorXi& V, const INTEGER_FIELD_3D& zigzagArray, 
+    INTEGER_FIELD_3D* unflattened) 
+{
+
+  TIMER functionTimer(__FUNCTION__);
+
+  assert(V.size() == BLOCK_SIZE * BLOCK_SIZE * BLOCK_SIZE);
+
+  unflattened->resizeAndWipe(BLOCK_SIZE, BLOCK_SIZE, BLOCK_SIZE);
+  
+  int totalCells = BLOCK_SIZE * BLOCK_SIZE * BLOCK_SIZE;
+  for (int i = 0; i < totalCells; i++) {
+    int index = zigzagArray[i];
+    (*unflattened)[i] = V[index];
+  }
+
+}
 
 ////////////////////////////////////////////////////////
 // reads from a binary file into a buffer, and sets
@@ -951,49 +1067,6 @@ void ReadBinaryFileToMemory(const char* filename, int*& allData, DECOMPRESSION_D
 }
 */
 
-////////////////////////////////////////////////////////
-// decode a run-length encoded binary file and return
-// a vector<int> type. fast version!
-////////////////////////////////////////////////////////
-/*
-void RunLengthDecodeBinaryFast(const int* allData, int blockNumber, int col, const MATRIX& blockLengthsMatrix, const MATRIX& blockIndicesMatrix, vector<int>& parsedData) {
-
-  TIMER functionTimer(__FUNCTION__);
-  // although blockLengths and blockIndices are passed by reference,
-  // they will not be modified.
-    
-    // what we will be returning
-    
-    int blockSize = blockLengthsMatrix(blockNumber, col);
-    assert(blockSize >= 0 && blockSize <= 3 * 8 * 8 * 8);
-
-    int blockIndex = blockIndicesMatrix(blockNumber, col);
-    
-    int i = 0;
-    int runLength = 1;
-    auto itr = parsedData.begin();
-
-    while (i < blockSize) {
-      *itr = allData[blockIndex + i];
-           // write the value once
-      if ( (i + 1 < blockSize) && allData[blockIndex + i] == allData[blockIndex + i + 1]) {      // if we read an 'escape' value, it indicates a run.
-        i += 2;                                     // advance past the escape value to the run length value.
-        runLength = allData[blockIndex + i];
-        
-        assert(runLength > 1 && runLength <= 512);
-
-        std::fill(itr + 1, itr + 1 + runLength - 1, allData[blockIndex + i - 2]);
-        itr += (runLength - 1);
-
-      }
-
-      i++;
-      ++itr;
-    }
-
-  } 
-*/
-
 
 ////////////////////////////////////////////////////////
 // deletes a file if it already exists
@@ -1021,62 +1094,53 @@ void DeleteIfExists(const char* filename) {
 */
 
 ////////////////////////////////////////////////////////
-// takes an input FIELD_3D, compresses it according
+// takes an input FIELD_3D which is the result of
+// an SVD coordinate transform, compresses it according
 // to the general scheme, and writes it to a binary file 
 ////////////////////////////////////////////////////////
-/*
-void CompressAndWriteFieldSmart(const char* filename, const FIELD_3D& F, COMPRESSION_DATA& compression_data) {
+
+void CompressAndWriteField(const char* filename, const FIELD_3D& F, 
+    COMPRESSION_DATA* compression_data)
+{
   TIMER functionTimer(__FUNCTION__);
   
-    int numBlocks = compression_data.get_numBlocks();
+  int numBlocks = compression_data->get_numBlocks();
 
-    // why must this be declared as a reference?
-    // something might be wrong with the copy constructor or the
-    // = operator
-    const INTEGER_FIELD_3D& zigzagArray = compression_data.get_zigzagArray();
-    vector<FIELD_3D> blocks = GetBlocks(F);
+  const INTEGER_FIELD_3D& zigzagArray = compression_data->get_zigzagArray();
+  vector<FIELD_3D> blocks;
+  GetBlocks(F, &blocks);
+  // do the forward transform 
+  UnitaryBlockDCT(1, &blocks);
 
-    // Initialize the relevant variables before looping through all the blocks
-    VECTOR blockLengths(numBlocks);
-    FIELD_3D block_i(8, 8, 8);
-    INTEGER_FIELD_3D intEncoded_i(8, 8, 8);
-    VECTOR zigzagged_i(8 * 8 * 8);
-    int* zigzagArray_i = (int*) malloc(sizeof(int) * 8 * 8 * 8);
-    if (zigzagArray_i == NULL) {
-      perror("Malloc failed to allocate zigzagArray_i!");
-      exit(1);
-    }
-   
-    // do the forward transform 
-    // NEW CHANGE! trying it with unitary dct to incorporate projection trick!
-    // ************************************
+  // Initialize the relevant variables before looping through all the blocks
+  VectorXi blockLengths(numBlocks);
+  INTEGER_FIELD_3D intEncoded_i;
+  VectorXi zigzagged_i;
+ 
+  // loop through the blocks and apply the encoding procedure
+  for (int i = 0; i < numBlocks; i++) {
 
-    // DoSmartBlockDCT(blocks, 1);
-    DoSmartUnitaryBlockDCT(blocks, 1);
-    // ************************************
+    // rescales data and updates sList
+    PreprocessBlock(&(blocks[i]), i, compression_data);
 
-    // loop through the blocks and apply the encoding procedure
-    for (int i = 0; i < numBlocks; i++) {
-      block_i = blocks[i];
-      // performs quantization and damping. updates sList
-      intEncoded_i = EncodeBlock(block_i, i, compression_data);
-      // zigzagged_i = ZigzagFlatten(intEncoded_i);
-      zigzagged_i = ZigzagFlattenSmart(intEncoded_i, zigzagArray);
-      zigzagArray_i = CastToInt(zigzagged_i, zigzagArray_i);
-      // performs run-length encoding. updates blockLengths. since
-      // it opens 'filename' in append mode, it can be called in a chain
-      RunLengthEncodeBinary(filename, i, zigzagArray_i, blockLengths);  
-    }
-    
-    // update the compression data
-    compression_data.set_blockLengths(blockLengths);
-    VECTOR blockIndices = ModifiedCumSum(blockLengths);
-    // the indices are computed by taking the modified cum sum
-    compression_data.set_blockIndices(blockIndices);
-    free(zigzagArray_i);
-    return;
+    // performs quantization and damping. updates gammaList
+    EncodeBlock(blocks[i], i, compression_data, &intEncoded_i);
+    // do the zigzag scan for run-length encoding
+    ZigzagFlatten(intEncoded_i, zigzagArray, &zigzagged_i);
+
+    // performs run-length encoding. updates blockLengths. since
+    // it opens 'filename' in append mode, it can be called in a chain
+    RunLengthEncodeBinary(filename, i, zigzagged_i, &blockLengths);  
   }
-  */
+  
+  // update the compression data
+  compression_data->set_blockLengths(blockLengths);
+  // VECTOR blockIndices = ModifiedCumSum(blockLengths);
+  // the indices are computed by taking the modified cum sum
+  // compression_data.set_blockIndices(blockIndices);
+  return;
+}
+  
 
 ////////////////////////////////////////////////////////
 // given a row number and the dimensions, computes
