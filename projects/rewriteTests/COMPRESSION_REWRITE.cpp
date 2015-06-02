@@ -525,6 +525,51 @@ void TransformVectorFieldSVD(VectorXd* s, MatrixXd* v, VECTOR3_FIELD_3D* V)
 }
 
 ////////////////////////////////////////////////////////
+// find a new 3d coordinate system for a vector field using svd and transform into it
+// fill s with the singular values and v^T with the coordinate transform matrix.
+// update the compression data to account for the transform matrix and its
+// corresponding singular values.
+////////////////////////////////////////////////////////
+void TransformVectorFieldSVD(VECTOR3_FIELD_3D* V, COMPRESSION_DATA* data)
+{
+  TIMER functionTimer(__FUNCTION__);
+
+  // build the N x 3 matrix from V
+  MatrixXd xyzMatrix;
+  BuildXYZMatrix(*V, &xyzMatrix);
+
+  // compute the thin svd
+  JacobiSVD<MatrixXd> svd(xyzMatrix, ComputeThinU | ComputeThinV);
+
+  // fetch the data to be updated
+  int numCols = data->get_numCols();
+  vector<Vector3d>* singularList = data->get_singularList();
+  vector<Matrix3d>* vList = data->get_vList();
+
+  // if it's the first time calling TransformVectorFieldSVD in a chain, 
+  // preallocate
+  if (singularList->size() <= 0 && vList->size() <= 0) {
+    singularList->reserve(numCols);
+    vList->reserve(numCols);
+  }
+  
+  // update the compression data
+  singularList->push_back(svd.singularValues());
+  vList->push_back(svd.matrixV());
+
+  // build the sparse block diagonal transform matrix
+  int count = V->xRes() * V->yRes() * V->zRes();
+  SparseMatrix<double> B;
+  SparseBlockDiagonal(svd.matrixV().transpose(), count, &B);
+
+  // compute the transformation using a matrix-vector multiply
+  VectorXd transformProduct = B * V->flattenedEigen();
+
+  // copy the result into V (in-place)
+  memcpy(V->data(), transformProduct.data(), 3 * count * sizeof(double));
+}
+
+////////////////////////////////////////////////////////
 // undo the effects of a previous svd coordinate transformation using the passed
 // in v matrix 
 ////////////////////////////////////////////////////////
@@ -976,6 +1021,7 @@ void ZigzagUnflatten(const VectorXi& V, const INTEGER_FIELD_3D& zigzagArray,
 // reads from a binary file into a buffer, and sets
 // important initializations inside decompression data
 ////////////////////////////////////////////////////////
+
 /*
 void ReadBinaryFileToMemory(const char* filename, int*& allData, DECOMPRESSION_DATA& decompression_data) {
   TIMER functionTimer(__FUNCTION__);

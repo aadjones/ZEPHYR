@@ -96,7 +96,7 @@ int main(int argc, char* argv[])
   TIMER functionTimer(__FUNCTION__);
   InitGlobals();
   
-  ZigzagTest();
+  SVDTest();
 
   functionTimer.printTimings();
   return 0;
@@ -117,9 +117,10 @@ void InitGlobals()
 
   EIGEN::read(path.c_str(), U); 
 
-  int col = 127;
+  int col = 20;
   V = VECTOR3_FIELD_3D(U.col(col), xRes, yRes, zRes);
-
+  
+  /*
   VectorXd s;
   MatrixXd v;
   TransformVectorFieldSVD(&s, &v, &V);
@@ -131,6 +132,7 @@ void InitGlobals()
   compression_data.set_numBlocks(numBlocks);
   compression_data.set_dampingArray();
   compression_data.set_zigzagArray();
+  */
   
 }
 
@@ -189,6 +191,8 @@ void SVDTest()
   MatrixXd v;
   VECTOR3_FIELD_3D V_old = V;
   TransformVectorFieldSVD(&s, &v, &V);
+  cout << "V: " << endl;
+  cout << v << endl;
   UntransformVectorFieldSVD(v, &V);
   double diff = (V.flattenedEigen() - V_old.flattenedEigen()).norm();
   cout << "Error from SVD and inverse SVD: " << diff << endl;

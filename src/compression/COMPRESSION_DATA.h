@@ -4,9 +4,6 @@
 #include "EIGEN.h"
 #include <iostream>
 #include <fftw3.h>
-#include <assert.h>
-#include "VECTOR.h"
-#include "VEC3.h"
 #include "FIELD_3D.h"
 #include "INTEGER_FIELD_3D.h"
 
@@ -19,7 +16,7 @@ using std::endl;
 class COMPRESSION_DATA {
   public:
     COMPRESSION_DATA();
-    COMPRESSION_DATA(VEC3I dims, int numCols, double q, double power, int nBits);
+    COMPRESSION_DATA(VEC3I dims, int numCols, int nBits, double percent);
     ~COMPRESSION_DATA();
 
 
@@ -28,17 +25,18 @@ class COMPRESSION_DATA {
     int get_numCols() const { return _numCols; }
     int get_numBlocks() const { return _numBlocks; }
     int get_currBlockNum() const { return _currBlockNum; }
-    double get_q() const { return _q; }
-    double get_power() const { return _power; }
     double get_percent() const { return _percent; }
     int get_nBits() const { return _nBits; } 
     int get_maxIterations() const { return _maxIterations; } 
     const VectorXi& get_blockLengths() const { return _blockLengths; }
     const VectorXi& get_blockIndices() const { return _blockIndices; }
 
-    // modified get_sList to break const-ness
+    // modified get_sList and gammaList to break const-ness
     VectorXd* get_sList() { return &(_sList); }
     VectorXd* get_gammaList() { return &(_gammaList); }
+
+    vector<Vector3d>* get_singularList() { return &(_singularList); }
+    vector<Matrix3d>* get_vList() { return &(_vList); }
 
     const FIELD_3D& get_dampingArray() const { return _dampingArray; }
     const INTEGER_FIELD_3D& get_zigzagArray() const { return _zigzagArray; }
@@ -51,8 +49,6 @@ class COMPRESSION_DATA {
     void set_numCols(int numCols) { _numCols = numCols; }
     void set_numBlocks(int numBlocks) { _numBlocks = numBlocks; }
     void set_currBlockNum(int currBlockNum) { _currBlockNum = currBlockNum; }
-    void set_q(double q) { _q = q; }
-    void set_power(double power) { _power = power; }
     void set_percent(double percent) { _percent = percent; }
     void set_nBits(int nBits) { _nBits = nBits; }
     void set_maxIterations(int maxIterations) { _maxIterations = maxIterations; }
@@ -74,6 +70,12 @@ class COMPRESSION_DATA {
       assert(length == _numBlocks);
       _sList = sList;
     
+    }
+    
+    void set_vList(const vector<Matrix3d>& vList) {
+      int length = vList.size();
+      assert(length == _numCols);
+      _vList = vList;
     }
 
     // compute and set damping array
@@ -152,14 +154,17 @@ class COMPRESSION_DATA {
     int _numBlocks;
     int _currBlockNum;
     int _maxIterations;
-    double _q;
-    double _power;
     double _nBits;
     double _percent;
+
     VectorXi _blockLengths;
     VectorXi _blockIndices;
     VectorXd _sList;
     VectorXd _gammaList;
+
+    vector<Matrix3d> _vList;
+    vector<Vector3d> _singularList;
+
     FIELD_3D _dampingArray;
     INTEGER_FIELD_3D _zigzagArray;
 
