@@ -43,7 +43,29 @@ void CastIntFieldToDouble(const INTEGER_FIELD_3D& F, FIELD_3D* castedField) {
   }
 }
 
-//' Modified Cum Sums'
+////////////////////////////////////////////////////////
+// operates on a VectorXi and fills another VectorXi
+// with its cumulative sum starting at zero and omitting the last
+// entry. e.g. if the input vector was (1, 2, 3, 4),
+// the result would be (0, 1, 3, 6)
+////////////////////////////////////////////////////////
+void ModifiedCumSum(const VectorXi& V, VectorXi* sum) 
+{
+  TIMER functionTimer(__FUNCTION__);
+  
+  // wipe the output and set it to the appropriate size
+  sum->setZero(V.size());
+  int accumulation = 0;
+
+  // note the loop starts offset at 1
+  for (int i = 1; i < V.size(); i++) {
+
+    // accumulate the previous value
+    accumulation += V[i - 1];
+    (*sum)[i] = accumulation;
+  }
+
+}
 
 
 ////////////////////////////////////////////////////////
@@ -530,14 +552,14 @@ void TransformVectorFieldSVD(VectorXd* s, MatrixXd* v, VECTOR3_FIELD_3D* V)
 // update the compression data to account for the transform matrix and its
 // corresponding singular values.
 ////////////////////////////////////////////////////////
-void TransformVectorFieldSVD(VECTOR3_FIELD_3D* V, COMPRESSION_DATA* data)
+void TransformVectorFieldSVDCompression(VECTOR3_FIELD_3D* V, COMPRESSION_DATA* data)
 {
   TIMER functionTimer(__FUNCTION__);
 
   // build the N x 3 matrix from V
   MatrixXd xyzMatrix;
   BuildXYZMatrix(*V, &xyzMatrix);
-
+  
   // compute the thin svd
   JacobiSVD<MatrixXd> svd(xyzMatrix, ComputeThinU | ComputeThinV);
 
@@ -593,7 +615,7 @@ void UntransformVectorFieldSVD(const MatrixXd& v, VECTOR3_FIELD_3D* transformedV
 // Normalize the block contents to a resolution of
 // nBits based on the DC component. Update the sList.
 ////////////////////////////////////////////////////////
-void PreprocessBlock(FIELD_3D* F, int blockNumber, COMPRESSION_DATA* data)
+void PreprocessBlock(FIELD_3D* F, int blockNumber, int col, COMPRESSION_DATA* data)
 {
   int nBits = data->get_nBits();
 
@@ -602,23 +624,26 @@ void PreprocessBlock(FIELD_3D* F, int blockNumber, COMPRESSION_DATA* data)
   (*F) *= s;
 
   // fetch data for updating sList 
-  VectorXd* sList = data->get_sList();
+  MatrixXd* sListMatrix = data->get_sListMatrix();
   int numBlocks = data->get_numBlocks();
+  int numCols = data->get_numCols();
 
   // if it's the first time PreprocessBlock is called in a chain, resize
-  if (sList->size() <= 0) { 
-    sList->setZero(numBlocks);
+  if (sListMatrix->cols() <= 0) { 
+    sListMatrix->setZero(numBlocks, numCols);
   }
 
   // update sList
-  (*sList)[blockNumber] = s;
+  (*sListMatrix)(blockNumber, col) = s;
 }
 
 ////////////////////////////////////////////////////////
 // Binary search to find the appropriate gamma given
-// desired percent threshold within maxIterations
+// desired percent threshold within maxIterations. Prints
+// out information as it goes.
 ////////////////////////////////////////////////////////
-void TuneGamma(const FIELD_3D& F, int blockNumber, COMPRESSION_DATA* data, FIELD_3D* damp)
+void TuneGammaVerbose(const FIELD_3D& F, int blockNumber, int col, 
+    COMPRESSION_DATA* data, FIELD_3D* damp)
 {
 
   // fetch parameters from data
@@ -640,7 +665,7 @@ void TuneGamma(const FIELD_3D& F, int blockNumber, COMPRESSION_DATA* data, FIELD
   
   cout << "F: " << endl;
   cout << F.flattened() << endl;
-  // the total amount of energy in the fourier space
+  // the total amount of energy in the Fourier space
   double totalEnergy = F.sumSq();
   FIELD_3D damped = ( F / (*damp) );
   damped.roundInt();
@@ -698,15 +723,89 @@ void TuneGamma(const FIELD_3D& F, int blockNumber, COMPRESSION_DATA* data, FIELD
   cout << "Gamma ended up at: " << gamma << endl;
 
   // fetch data to update gammaList
-  VectorXd* gammaList = data->get_gammaList(); 
+  MatrixXd* gammaListMatrix = data->get_gammaListMatrix();
   int numBlocks = data->get_numBlocks();
+  int numCols = data->get_numCols();
 
   // if it's the first time TuneGamma is called in a chain, resize
-  if (gammaList->size() <= 0) { 
-    gammaList->setZero(numBlocks);
+  if (gammaListMatrix->cols() <= 0) { 
+    gammaListMatrix->setZero(numBlocks, numCols);
   }
 
-  (*gammaList)[blockNumber] = gamma;
+  (*gammaListMatrix)(blockNumber, col) = gamma;
+
+}
+
+////////////////////////////////////////////////////////
+// Binary search to find the appropriate gamma given
+// desired percent threshold within maxIterations. 
+///////////////////////////////////////////////////////
+void TuneGamma(const FIELD_3D& F, int blockNumber, int col, 
+    COMPRESSION_DATA* data, FIELD_3D* damp)
+{
+
+  // fetch parameters from data
+  int nBits = data->get_nBits();
+  int maxIterations = data->get_maxIterations();
+  double percent = data->get_percent();
+
+  double lower = 0.0;
+  // QUESTION: how should we define upper?
+  double upper = nBits;
+  // arbitrarily set epsilon to be 0.5%
+  double epsilon = 0.005;
+  double gamma = 0.5 * (upper + lower);
+  damp->toPower(gamma);
+  
+  // the total amount of energy in the Fourier space
+  double totalEnergy = F.sumSq();
+  FIELD_3D damped = ( F / (*damp) );
+  damped.roundInt();
+
+  double energyDiff = abs(totalEnergy - ( (*damp) * damped ).sumSq());
+  double percentEnergy = 1.0 - (energyDiff / totalEnergy);
+  int iterations = 0;
+   
+  while ( abs( percent - percentEnergy ) > epsilon && iterations < maxIterations) {
+
+    if (percentEnergy < percent) { // too much damping; need to lower gamma
+      upper = gamma;
+      gamma = 0.5 * (upper + lower);
+
+      // to the power of 1 / upper brings it back to the vanilla state, 
+      // from which we raise it to the new gamma
+      damp->toPower(gamma / upper);
+    }
+
+    else { // not enough damping; need to increase gamma
+      lower = gamma;
+      gamma = 0.5 * (upper + lower);
+
+      // to the power of 1 / lower brings it back to the vanilla state, 
+      // from which we raise it to the new gamma
+      damp->toPower(gamma / lower);
+    }
+
+    // update percentEnergy
+    damped = ( F / (*damp) );
+    damped.roundInt();
+    energyDiff = abs(totalEnergy - ( (*damp) * damped ).sumSq());
+    percentEnergy =  1.0 - (energyDiff / totalEnergy);
+    iterations++;
+  }
+  
+
+  // fetch data to update gammaList
+  MatrixXd* gammaListMatrix = data->get_gammaListMatrix();
+  int numBlocks = data->get_numBlocks();
+  int numCols = data->get_numCols();
+
+  // if it's the first time TuneGamma is called in a chain, resize
+  if (gammaListMatrix->cols() <= 0) { 
+    gammaListMatrix->setZero(numBlocks, numCols);
+  }
+
+  (*gammaListMatrix)(blockNumber, col) = gamma;
 
 }
 
@@ -718,7 +817,7 @@ void TuneGamma(const FIELD_3D& F, int blockNumber, COMPRESSION_DATA* data, FIELD
 // value of gamma for the damping.
 ////////////////////////////////////////////////////////
 
-void EncodeBlock(const FIELD_3D& F, int blockNumber, COMPRESSION_DATA* data, 
+void EncodeBlock(const FIELD_3D& F, int blockNumber, int col, COMPRESSION_DATA* data, 
     INTEGER_FIELD_3D* quantized) 
 {
 
@@ -738,7 +837,7 @@ void EncodeBlock(const FIELD_3D& F, int blockNumber, COMPRESSION_DATA* data,
  
   // finds best gamma given the percent. updates gammaList
   // and updates damp 
-  TuneGamma(F, blockNumber, data, &damp);
+  TuneGamma(F, blockNumber, col, data, &damp);
 
   // fill the return value with rounded damped entries
   RoundFieldToInt( (F / damp), quantized );
@@ -1117,8 +1216,8 @@ void ReadBinaryFileToMemory(const char* filename, int*& allData, DECOMPRESSION_D
 ////////////////////////////////////////////////////////
 // deletes a file if it already exists
 ////////////////////////////////////////////////////////
-/*
-void DeleteIfExists(const char* filename) {
+void DeleteIfExists(const char* filename)
+{
   TIMER functionTimer(__FUNCTION__);
     struct stat buf;                   // dummy to pass in to stat()
     if (stat(filename, &buf) == 0) {   // if a file named 'filename' already exists
@@ -1137,22 +1236,38 @@ void DeleteIfExists(const char* filename) {
     }
     return;
   }
-*/
+
 
 ////////////////////////////////////////////////////////
-// takes an input FIELD_3D which is the result of
-// an SVD coordinate transform, compresses it according
-// to the general scheme, and writes it to a binary file 
+// takes an input FIELD_3D at a particular matrix column
+// which is the result of an SVD coordinate transform, compresses
+// it according to the general scheme, and writes it to a binary file.
+// meant to be called in a chain so that the binary file
+// continues to grow. 
 ////////////////////////////////////////////////////////
 
-void CompressAndWriteField(const char* filename, const FIELD_3D& F, 
+void CompressAndWriteField(const char* filename, const FIELD_3D& F, int col,
     COMPRESSION_DATA* compression_data)
 {
   TIMER functionTimer(__FUNCTION__);
-  
+ 
+  // fetch some compression data 
   int numBlocks = compression_data->get_numBlocks();
+  int numCols = compression_data->get_numCols();
 
   const INTEGER_FIELD_3D& zigzagArray = compression_data->get_zigzagArray();
+  MatrixXi* blockLengthsMatrix = compression_data->get_blockLengthsMatrix();
+  MatrixXi* blockIndicesMatrix = compression_data->get_blockIndicesMatrix();
+
+
+  // if it's the first time calling this routine in a chain, preallocate
+  // the matrices
+  if (blockLengthsMatrix->cols() <= 0 || blockIndicesMatrix->cols() <= 0) {
+    blockLengthsMatrix->resize(numBlocks, numCols);
+    blockIndicesMatrix->resize(numBlocks, numCols);
+  }
+
+  // subdivide F into blocks
   vector<FIELD_3D> blocks;
   GetBlocks(F, &blocks);
   // do the forward transform 
@@ -1162,15 +1277,15 @@ void CompressAndWriteField(const char* filename, const FIELD_3D& F,
   VectorXi blockLengths(numBlocks);
   INTEGER_FIELD_3D intEncoded_i;
   VectorXi zigzagged_i;
- 
+
   // loop through the blocks and apply the encoding procedure
   for (int i = 0; i < numBlocks; i++) {
 
     // rescales data and updates sList
-    PreprocessBlock(&(blocks[i]), i, compression_data);
+    PreprocessBlock(&(blocks[i]), i, col, compression_data);
 
     // performs quantization and damping. updates gammaList
-    EncodeBlock(blocks[i], i, compression_data, &intEncoded_i);
+    EncodeBlock(blocks[i], i, col, compression_data, &intEncoded_i);
     // do the zigzag scan for run-length encoding
     ZigzagFlatten(intEncoded_i, zigzagArray, &zigzagged_i);
 
@@ -1180,14 +1295,15 @@ void CompressAndWriteField(const char* filename, const FIELD_3D& F,
   }
   
   // update the compression data
-  compression_data->set_blockLengths(blockLengths);
-  // VECTOR blockIndices = ModifiedCumSum(blockLengths);
-  // the indices are computed by taking the modified cum sum
-  // compression_data.set_blockIndices(blockIndices);
-  return;
+  blockLengthsMatrix->col(col) = blockLengths;
+
+  // compute and set the block indices using cum sum
+  VectorXi blockIndices(numBlocks);
+  ModifiedCumSum(blockLengths, &blockIndices);
+  blockIndicesMatrix->col(col) = blockIndices;
+
 }
   
-
 ////////////////////////////////////////////////////////
 // given a row number and the dimensions, computes
 // which block number we need for the decoder. populates
@@ -1489,12 +1605,15 @@ void GetRowFast(int row, int matrixRow, MATRIX_COMPRESSION_DATA& data, MatrixXd&
 
 ////////////////////////////////////////////////////////
 // generates the header information in the binary file
+// need to include:
+//
 ////////////////////////////////////////////////////////
-/*
-void WriteMetaData(const char* filename, const COMPRESSION_DATA& compression_data, 
-    const MATRIX& sListMatrix, const MATRIX& blockLengthsMatrix, const MATRIX& blockIndicesMatrix) {
+
+void WriteMetaData(const char* filename, COMPRESSION_DATA& compression_data)
+{ 
 
   TIMER functionTimer(__FUNCTION__);
+
     FILE* pFile;
     pFile = fopen(filename, "wb");
     if (pFile == NULL) {
@@ -1502,16 +1621,12 @@ void WriteMetaData(const char* filename, const COMPRESSION_DATA& compression_dat
     }
     else {
       
-      // write q, power, and nBits to the binary file
-      double q = compression_data.get_q();
-      fwrite(&q, sizeof(double), 1, pFile);
-      double power = compression_data.get_power();
-      fwrite(&power, sizeof(double), 1, pFile);
+      // write nBits to the binary file
       int nBits = compression_data.get_nBits();
       fwrite(&nBits, sizeof(int), 1, pFile);
 
       // write dims, numCols, and numBlocks
-      VEC3I dims = compression_data.get_dims();
+      const VEC3I& dims = compression_data.get_dims();
       int xRes = dims[0];
       int yRes = dims[1];
       int zRes = dims[2];
@@ -1520,61 +1635,52 @@ void WriteMetaData(const char* filename, const COMPRESSION_DATA& compression_dat
       fwrite(&zRes, sizeof(int), 1, pFile);
       int numCols = compression_data.get_numCols();
       int numBlocks = compression_data.get_numBlocks();
+      int blocksXcols = numBlocks * numCols;
       fwrite(&numCols, sizeof(int), 1, pFile);
       fwrite(&numBlocks, sizeof(int), 1, pFile);
-            
        
-      VECTOR flattened_s = sListMatrix.flattenedColumn();
-      int blocksXcols = flattened_s.size();
+      MatrixXd* sListMatrix = compression_data.get_sListMatrix();
+      assert( sListMatrix->rows() * sListMatrix->cols() == blocksXcols );
 
-      assert( blocksXcols == numBlocks * numCols );
+      // write the matrix data for sList, blockLengths, and blockIndices.
+      // note that Eigen uses column-major format!
+      fwrite(sListMatrix->data(), sizeof(double), blocksXcols, pFile); 
 
-      double* sData = (double*) malloc(sizeof(double) * blocksXcols);
-      // fill sData and write it
-      sData = CastToDouble(flattened_s, sData);
-      fwrite(sData, sizeof(double), blocksXcols, pFile);
+      MatrixXd* gammaListMatrix = compression_data.get_gammaListMatrix();
+      assert( gammaListMatrix->rows() * gammaListMatrix->cols() == blocksXcols );
 
-      VECTOR flattened_lengths = blockLengthsMatrix.flattenedColumn();
-      assert(flattened_lengths.size() == blocksXcols);
+      fwrite(gammaListMatrix->data(), sizeof(double), blocksXcols, pFile);
 
-      int* lengthsData = (int*) malloc(sizeof(int) * blocksXcols);
-      // fill lengthsData and write it
-      lengthsData = CastToInt(flattened_lengths, lengthsData);
-      fwrite(lengthsData, sizeof(int), blocksXcols, pFile);
+      MatrixXi* blockLengthsMatrix = compression_data.get_blockLengthsMatrix();
+      assert( blockLengthsMatrix->rows() * blockLengthsMatrix->cols() == blocksXcols);
+
+      fwrite(blockLengthsMatrix->data(), sizeof(int), blocksXcols, pFile);
       
-      VECTOR flattened_indices = blockIndicesMatrix.flattenedColumn();
-      assert(flattened_indices.size() == blocksXcols);
+      MatrixXi* blockIndicesMatrix = compression_data.get_blockIndicesMatrix();
+      assert( blockIndicesMatrix->rows() * blockIndicesMatrix->cols() == blocksXcols);
 
-      // fill indicesData and write it
-      int* indicesData = (int*) malloc(sizeof(int) * blocksXcols);
-      indicesData = CastToInt(flattened_indices, indicesData);
-      fwrite(indicesData, sizeof(int), blocksXcols, pFile);
+      fwrite(blockIndicesMatrix->data(), sizeof(int), blocksXcols, pFile);
 
       fclose(pFile);
-      free(sData);
-      free(lengthsData);
-      free(indicesData);
     }
   }
-*/
+
 
 ////////////////////////////////////////////////////////
 // concatenate two binary files and put them into
 // a new binary file
 ////////////////////////////////////////////////////////
-/*
 void PrefixBinary(string prefix, string filename, string newFile) {
   TIMER functionTimer(__FUNCTION__);
   string command = "cat " + prefix + ' ' + filename + "> " + newFile;
   const char* command_c = command.c_str();
   system(command_c);
 }
-*/
+
 
 ////////////////////////////////////////////////////////
 // destroy the no longer needed metadata binary file
 ////////////////////////////////////////////////////////
-/*
 void CleanUpPrefix(const char* prefix, const char* filename) {
   TIMER functionTimer(__FUNCTION__);
   string prefix_string(prefix);
@@ -1587,92 +1693,115 @@ void CleanUpPrefix(const char* prefix, const char* filename) {
   system(command1_c);
   system(command2_c);
 }
-*/
+
 
 ////////////////////////////////////////////////////////
-// compress one of the scalar field components of a matrix
-// (which represents a vector field) and write it to
-// a binary file 
+// compress all of the scalar field components
+// of a matrix (which represents a vector field) and write them to
+// a binary file. applies svd coordinate transform first.
 ////////////////////////////////////////////////////////
-/*
-void CompressAndWriteMatrixComponent(const char* filename, const MatrixXd& U, int component, COMPRESSION_DATA& data) {
+
+// *****************************************************
+// Still in the process of editing this!
+// *****************************************************
+
+void CompressAndWriteMatrixComponents(const char* filename, const MatrixXd& U,  
+      COMPRESSION_DATA* data0, COMPRESSION_DATA* data1, COMPRESSION_DATA* data2) 
+{
   TIMER functionTimer(__FUNCTION__);
-
-  assert( component >= 0 && component < 3 );
-
-  string final_string(filename);
-  if (component == 0) {
-    final_string += 'X';
-    DeleteIfExists(final_string.c_str());
-  }
-  else if (component == 1) {
-    final_string += 'Y';
-    DeleteIfExists(final_string.c_str());
-  }
-  else { // component == 2
-    final_string += 'Z';
-    DeleteIfExists(final_string.c_str());
-  }
   
-  VEC3I dims = data.get_dims();
-  int xRes = dims[0];
-  int yRes = dims[1];
-  int zRes = dims[2];
-  int numBlocks = data.get_numBlocks();
-  int numCols = U.cols();
-  
-  // initialize appropriately-sized matrices for the decoder data
-  MATRIX blockLengthsMatrix(numBlocks, numCols);
-  MATRIX sListMatrix(numBlocks, numCols);
-  MATRIX blockIndicesMatrix(numBlocks, numCols);
-
   // wipe any pre-existing binary file of the same name, since we will be opening
   // in append mode! 
   DeleteIfExists(filename);
+
+  // write to component X, Y, and Z accordingly
+  // initialize strings 0, 1, and 2 for the final result
+  string filenameX(filename); filenameX += 'X';
+  string filename0(filename); filename0 += '0';
+  DeleteIfExists(filenameX.c_str());
+  DeleteIfExists(filename0.c_str());
   
-  // compute progress for the user
-  double percent = 0.0;
+  string filenameY(filename); filenameY += 'Y';
+  string filename1(filename); filename1 += '1';
+  DeleteIfExists(filenameY.c_str());
+  DeleteIfExists(filename1.c_str());
+  
+  string filenameZ(filename); filenameZ += 'Z';
+  string filename2(filename); filename2 += '2';
+  DeleteIfExists(filenameZ.c_str());
+  DeleteIfExists(filename2.c_str());
+
+  // get useful compression data. it should be the same across all three,
+  // so just fetch it from data0
+  const VEC3I& dims = data0->get_dims();
+  int xRes = dims[0];
+  int yRes = dims[1];
+  int zRes = dims[2];
+  int numCols = U.cols();
+
   for (int col = 0; col < numCols; col++) {  
-    // cout << "Column: " << col << endl;
-    VectorXd vXd = U.col(col);
-    VECTOR v = EIGEN::convert(vXd);
-    VECTOR3_FIELD_3D V(v, xRes, yRes, zRes);
-    FIELD_3D F = V.scalarField(component);
+
+    // for each column, grab the vector field that it corresponds to
+    VECTOR3_FIELD_3D V(U.col(col), xRes, yRes, zRes);
     
-    CompressAndWriteFieldSmart(filename, F, data);
+    // do the svd coordinate transform in place and update the data for 
+    // vList and singularList. only data0 contains these!  
+    TransformVectorFieldSVDCompression(&V, data0);
+   
+    // write the components to an (appended) binary file 
 
-    // update blockLengths and sList and push them to the appropriate column
-    // of their respective matrices
-    VECTOR blockLengths = data.get_blockLengths();
-    VECTOR sList = data.get_sList();
-    blockLengthsMatrix.setColumn(blockLengths, col);
-    sListMatrix.setColumn(sList, col);
+    CompressAndWriteField(filenameX.c_str(), V.scalarField(0), col, data0);
+    CompressAndWriteField(filenameY.c_str(), V.scalarField(1), col, data1);
+    CompressAndWriteField(filenameZ.c_str(), V.scalarField(2), col, data2);
 
-    // compute progress for the user
-    percent = col / (double) numCols;
-    int checkPoint1 = (numCols - 1) / 4;
-    int checkPoint2 = (numCols - 1) / 2;
-    int checkPoint3 = (3 * (numCols - 1)) / 4;
-    int checkPoint4 = numCols - 1;
-    if (col == checkPoint1 || col == checkPoint2 || col == checkPoint3 || col == checkPoint4) {
-      cout << "    Percent: " << percent << flush;
-      if (col == checkPoint4) {
-        cout << endl;
-      }
-    } 
+    // progress printout for the impatient user
+    PrintProgress(col, numCols);
   }
-  
-  // build the block indices matrix from the block lengths matrix
-  blockIndicesMatrix = ModifiedCumSum(blockLengthsMatrix);
-  
+
+  // write the metadata for each component one at a time
   const char* metafile = "metadata.bin"; 
-  WriteMetaData(metafile, data, sListMatrix, blockLengthsMatrix, blockIndicesMatrix);
+  WriteMetaData(metafile, *data0);
+
   // appends the metadata as a header to the main binary file and pipes them into final_string
-  PrefixBinary(metafile, filename, final_string);
-  // removes the now-redundant metadata and main binary files
-  CleanUpPrefix(metafile, filename);
+  PrefixBinary(metafile, filenameX, filename0);
+ 
+  // removes the now-redundant files 
+  CleanUpPrefix(metafile, filenameX.c_str());
+
+  // do the same for component 1
+  WriteMetaData(metafile, *data1);
+  PrefixBinary(metafile, filenameY, filename1);
+  CleanUpPrefix(metafile, filenameY.c_str());
+
+  // do the same for component 2
+  WriteMetaData(metafile, *data2);
+  PrefixBinary(metafile, filenameZ, filename2);
+  CleanUpPrefix(metafile, filenameZ.c_str());
 }
-*/
+
+////////////////////////////////////////////////////////
+// print four different percents for how far along each
+// column we are
+////////////////////////////////////////////////////////
+void PrintProgress(int col, int numCols) 
+{
+  // percent total progress
+  double percent = col / (double) numCols;
+
+  // four checkpoints
+  int checkPoint1 = (numCols - 1) / 4;
+  int checkPoint2 = (numCols - 1) / 2;
+  int checkPoint3 = (3 * (numCols - 1)) / 4;
+  int checkPoint4 = numCols - 1;
+
+  // if we're at any of the checkpoints, print the progress
+  if (col == checkPoint1 || col == checkPoint2 || col == checkPoint3 || col == checkPoint4) {
+    cout << "    Percent: " << percent << flush;
+    if (col == checkPoint4) {
+      cout << endl;
+    }
+  } 
+}
 
 
 // decode an entire scalar field of a particular column from matrix compression data

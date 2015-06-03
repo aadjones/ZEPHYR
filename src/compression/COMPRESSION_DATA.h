@@ -16,7 +16,7 @@ using std::endl;
 class COMPRESSION_DATA {
   public:
     COMPRESSION_DATA();
-    COMPRESSION_DATA(VEC3I dims, int numCols, int nBits, double percent);
+    COMPRESSION_DATA(const VEC3I& dims, int numCols, int nBits, double percent);
     ~COMPRESSION_DATA();
 
 
@@ -30,14 +30,21 @@ class COMPRESSION_DATA {
     int get_maxIterations() const { return _maxIterations; } 
     const VectorXi& get_blockLengths() const { return _blockLengths; }
     const VectorXi& get_blockIndices() const { return _blockIndices; }
+    
+    // adding matrix versions within compression data
+    MatrixXi* get_blockLengthsMatrix() { return &(_blockLengthsMatrix); }
+    MatrixXi* get_blockIndicesMatrix() { return &(_blockIndicesMatrix); }
 
     // modified get_sList and gammaList to break const-ness
     VectorXd* get_sList() { return &(_sList); }
     VectorXd* get_gammaList() { return &(_gammaList); }
 
+    MatrixXd* get_sListMatrix() { return &(_sListMatrix); }
+    MatrixXd* get_gammaListMatrix() { return &(_gammaListMatrix); }
+
     vector<Vector3d>* get_singularList() { return &(_singularList); }
     vector<Matrix3d>* get_vList() { return &(_vList); }
-
+    
     const FIELD_3D& get_dampingArray() const { return _dampingArray; }
     const INTEGER_FIELD_3D& get_zigzagArray() const { return _zigzagArray; }
     double* get_dct_in() const { return _dct_in; }
@@ -161,6 +168,11 @@ class COMPRESSION_DATA {
     VectorXi _blockIndices;
     VectorXd _sList;
     VectorXd _gammaList;
+
+    MatrixXi _blockLengthsMatrix;
+    MatrixXi _blockIndicesMatrix;
+    MatrixXd _sListMatrix;
+    MatrixXd _gammaListMatrix;
 
     vector<Matrix3d> _vList;
     vector<Vector3d> _singularList;

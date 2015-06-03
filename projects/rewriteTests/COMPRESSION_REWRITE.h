@@ -19,6 +19,9 @@ void RoundFieldToInt(const FIELD_3D& F, INTEGER_FIELD_3D* castedField);
 // cast an INTEGER_FIELD_3D to a FIELD_3D
 void CastIntFieldToDouble(const INTEGER_FIELD_3D& F, FIELD_3D* castedField); 
 
+// form the cumulative sum starting at zero of a passed in integer vector
+void ModifiedCumSum(const VectorXi& V, VectorXi* sum);
+
 // extract the three scalar fields from a vector field
 void GetScalarFields(const VECTOR3_FIELD_3D& V, FIELD_3D* X, FIELD_3D* Y, FIELD_3D* Z); 
 
@@ -67,23 +70,37 @@ void BuildXYZMatrix(const VECTOR3_FIELD_3D& V, MatrixXd* A);
 // uses v^T, not v!
 void TransformVectorFieldSVD(VectorXd* s, MatrixXd* v, VECTOR3_FIELD_3D* transformedV);
 
+// build a transformed vector field using a coordinate transform computed from
+// svd decomposition of the original x-, y-, and z- coordinates. update the
+// compression data to store the v matrix and the singular values.
+// can be called repeatedly in chain-like fashion.
+void TransformVectorFieldSVDCompression(VECTOR3_FIELD_3D* V, COMPRESSION_DATA* data);
+
 // undo the effects of a previous svd coordinate transform on a vector field
 void UntransformVectorFieldSVD(const MatrixXd& v, VECTOR3_FIELD_3D* transformedV);
 
 // normalize the block to a resolution of nBits based on the DC component.
 // update the sList.
-void PreprocessBlock(FIELD_3D* F, int blockNumber, COMPRESSION_DATA* data);
+void PreprocessBlock(FIELD_3D* F, int blockNumber, int col, COMPRESSION_DATA* data);
+
+// Binary search to find the appropriate gamma given
+// desired percent threshold within maxIterations. Prints
+// out information as it goes.
+///////////////////////////////////////////////////////
+void TuneGammaVerbose(const FIELD_3D& F, int blockNumber, int col, 
+    COMPRESSION_DATA* data, FIELD_3D* damp);
 
 // do a binary search to find the appropriate gamma given the desired percent 
 // energy accuracy and max iterations. the variable damp will be rewritten to the
 // desired damping array. updates gamaList.
-void TuneGamma(const FIELD_3D& F, int blockNumber, COMPRESSION_DATA* data, FIELD_3D* damp);
+void TuneGamma(const FIELD_3D& F, int blockNumber, int col, COMPRESSION_DATA* data, 
+    FIELD_3D* damp);
 
 // takes a passed in FIELD_3D (which is intended to be
 // the result of a DCT post-preprocess). calculates the best gamma value
 // for a damping array. then damps by that array and quantizes the result to an integer. 
 // stores the value of gamma for the damping.
-void EncodeBlock(const FIELD_3D& F, int blockNumber, COMPRESSION_DATA* data, 
+void EncodeBlock(const FIELD_3D& F, int blockNumber, int col, COMPRESSION_DATA* data, 
     INTEGER_FIELD_3D* quantized); 
 
 // takes a passed in INTEGER_FIELD_3D (which is intended to be run-length
@@ -119,4 +136,27 @@ void RunLengthEncodeBinary(const char* filename, int blockNumber, const VectorXi
 // a VectorXi with the contents.
 void RunLengthDecodeBinary(int* allData, int blockNumber, int col, 
     const MatrixXi& blockLengthsMatrix, const MatrixXi& blockIndicesMatrix, VectorXi* parsedData);
+
+// takes an input FIELD_3D which is the result of
+// an SVD coordinate transform, compresses it according
+// to the general scheme, and writes it to a binary file 
+void CompressAndWriteField(const char* filename, const FIELD_3D& F, int col, 
+    COMPRESSION_DATA* compression_data);
+
+// print four different percents for how far along each column we are
+void PrintProgress(int col, int numCols);
+
+// generate the header information for the encoded binary file
+void WriteMetaData(const char* filename, const COMPRESSION_DATA& compression_data);
+
+// delete a binary file if it already exists
+void DeleteIfExists(const char* filename);
+// compress all of the scalar field components
+// of a matrix (which represents a vector field) and write them to
+// a binary file. applies svd coordinate transform first 
+void CompressAndWriteMatrixComponents(const char* filename, const MatrixXd& U,  
+      COMPRESSION_DATA* data0, COMPRESSION_DATA* data1, COMPRESSION_DATA* data2);
+
 #endif
+
+

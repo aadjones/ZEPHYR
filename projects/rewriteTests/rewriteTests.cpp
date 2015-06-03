@@ -43,9 +43,9 @@ VECTOR3_FIELD_3D V(xRes, yRes, zRes);
 FIELD_3D F(xRes, yRes, zRes);
 fftw_plan plan;
 string path("../../U.preadvect.matrix");
-COMPRESSION_DATA compression_data;
+COMPRESSION_DATA compression_data0, compression_data1, compression_data2;
 int nBits = 16;
-double percent = 1.0;
+double percent = 0.95;
 int maxIterations = 16;
 
 ////////////////////////////////////////////////////////
@@ -54,6 +54,10 @@ int maxIterations = 16;
 
 // set up global variables
 void InitGlobals();
+
+// set up the compression data
+void InitCompressionData(double percent, int maxIterations, int nBits, 
+    int numBlocks, int numCols);
 
 // double-check the sparse construction 
 // of a block-diagonal matrix
@@ -87,6 +91,12 @@ void EncodeDecodeBlockTest();
 // test the zigzag scanning and reassembly
 void ZigzagTest();
 
+// test the modified cum sum routine
+void CumSumTest();
+
+// test the full matrix compression pipeline
+void MatrixCompressionTest();
+
 ////////////////////////////////////////////////////////
 // Main
 ////////////////////////////////////////////////////////
@@ -95,8 +105,8 @@ int main(int argc, char* argv[])
 {
   TIMER functionTimer(__FUNCTION__);
   InitGlobals();
-  
-  SVDTest();
+ 
+  MatrixCompressionTest();
 
   functionTimer.printTimings();
   return 0;
@@ -115,27 +125,50 @@ void InitGlobals()
   srand(time(NULL));
   VECTOR::printVertical = false;
 
+  InitCompressionData(percent, maxIterations, nBits, numBlocks, numCols);
+
   EIGEN::read(path.c_str(), U); 
 
-  int col = 20;
-  V = VECTOR3_FIELD_3D(U.col(col), xRes, yRes, zRes);
-  
-  /*
-  VectorXd s;
-  MatrixXd v;
-  TransformVectorFieldSVD(&s, &v, &V);
-  F = V.scalarField(0);
-
-  compression_data.set_percent(percent);
-  compression_data.set_maxIterations(maxIterations);
-  compression_data.set_nBits(nBits);
-  compression_data.set_numBlocks(numBlocks);
-  compression_data.set_dampingArray();
-  compression_data.set_zigzagArray();
-  */
-  
 }
 
+////////////////////////////////////////////////////////
+// initialize the compression data
+////////////////////////////////////////////////////////
+void InitCompressionData(double percent, int maxIterations, int nBits, 
+    int numBlocks, int numCols)
+{
+  compression_data0.set_percent(percent);
+  compression_data0.set_maxIterations(maxIterations);
+  compression_data0.set_nBits(nBits);
+  compression_data0.set_numBlocks(numBlocks);
+  compression_data0.set_numCols(numCols);
+  compression_data0.set_dims(dims);
+
+  // build the damping and zigzag arrays
+  compression_data0.set_dampingArray();
+  compression_data0.set_zigzagArray();
+
+  compression_data1.set_percent(percent);
+  compression_data1.set_maxIterations(maxIterations);
+  compression_data1.set_nBits(nBits);
+  compression_data1.set_numBlocks(numBlocks);
+  compression_data1.set_numCols(numCols);
+  compression_data1.set_dims(dims);
+
+  compression_data1.set_dampingArray();
+  compression_data1.set_zigzagArray();
+
+  compression_data2.set_percent(percent);
+  compression_data2.set_maxIterations(maxIterations);
+  compression_data2.set_nBits(nBits);
+  compression_data2.set_numBlocks(numBlocks);
+  compression_data2.set_numCols(numCols);
+  compression_data2.set_dims(dims);
+
+  compression_data2.set_dampingArray();
+  compression_data2.set_zigzagArray();
+}
+ 
 ////////////////////////////////////////////////////////
 // print the difference between an original 8 x 8 x 8
 // field and taking its 3d dct and 3d idct in sequence
@@ -226,43 +259,46 @@ void SingularValuesTest()
 
 void GammaSearchTest()
 {
+  int col = 0;
   vector<FIELD_3D> blocks;
   GetBlocks(F, &blocks);
   UnitaryBlockDCT(1, &blocks);
   
   int blockNumber = 2;
   FIELD_3D block = blocks[blockNumber];
-  PreprocessBlock(&block, blockNumber, &compression_data);
+  PreprocessBlock(&block, blockNumber, col, &compression_data0);
   
-  const FIELD_3D& dampingArray = compression_data.get_dampingArray();
+  const FIELD_3D& dampingArray = compression_data0.get_dampingArray();
   FIELD_3D damp = dampingArray;
 
-  TuneGamma(block, blockNumber, &compression_data, &damp);
+  TuneGamma(block, blockNumber, col, &compression_data0, &damp);
 }
 
 void EncodeBlockTest()
-{
+{ 
+  int col = 0;
   vector<FIELD_3D> blocks;
   GetBlocks(F, &blocks);
   UnitaryBlockDCT(1, &blocks);
   
   for (int blockNumber = 0; blockNumber < numBlocks; blockNumber++) {
 
-    PreprocessBlock(&(blocks[blockNumber]), blockNumber, &compression_data);
+    PreprocessBlock(&(blocks[blockNumber]), blockNumber, col, &compression_data0);
   
     INTEGER_FIELD_3D quantized;
-    EncodeBlock(blocks[blockNumber], blockNumber, &compression_data, &quantized);
+    EncodeBlock(blocks[blockNumber], blockNumber, col, &compression_data0, &quantized);
 
   }
-
-  VectorXd* sList = compression_data.get_sList();
-  VectorXd* gammaList = compression_data.get_gammaList();
+  
+  MatrixXd* sList = compression_data0.get_sListMatrix();
+  MatrixXd* gammaList = compression_data0.get_gammaListMatrix();
   cout << "sList: " << (*sList) << endl;
   cout << "gammaList: " << (*gammaList) << endl; 
 }
 
 void EncodeDecodeBlockTest()
 {
+  int col = 0;
   vector<FIELD_3D> blocks;
   GetBlocks(F, &blocks);
   UnitaryBlockDCT(1, &blocks);
@@ -273,15 +309,15 @@ void EncodeDecodeBlockTest()
   cout << oldBlock.flattened() << endl;
 
   double oldEnergy = oldBlock.sumSq();
-  PreprocessBlock(&(blocks[blockNumber]), blockNumber, &compression_data);
+  PreprocessBlock(&(blocks[blockNumber]), blockNumber, col, &compression_data0);
 
   INTEGER_FIELD_3D quantized;
-  EncodeBlock(blocks[blockNumber], blockNumber, &compression_data, &quantized);
+  EncodeBlock(blocks[blockNumber], blockNumber, col, &compression_data0, &quantized);
   cout << "encoded block: " << endl;
   cout << quantized.flattened() << endl;
 
   FIELD_3D decoded;
-  DecodeBlockWithCompressionData(quantized, blockNumber, compression_data, &decoded);
+  DecodeBlockWithCompressionData(quantized, blockNumber, compression_data0, &decoded);
 
   cout << "newBlock: " << endl;
   cout << decoded.flattened() << endl;
@@ -294,6 +330,7 @@ void EncodeDecodeBlockTest()
 
 void ZigzagTest()
 {
+  int col = 0;
   vector<FIELD_3D> blocks;
   GetBlocks(F, &blocks);
   UnitaryBlockDCT(1, &blocks);
@@ -302,15 +339,15 @@ void ZigzagTest()
   FIELD_3D oldBlock = blocks[blockNumber];
   cout << "oldBlock: " << endl;
   cout << oldBlock.flattened() << endl;
-  PreprocessBlock(&(blocks[blockNumber]), blockNumber, &compression_data);
+  PreprocessBlock(&(blocks[blockNumber]), blockNumber, col, &compression_data0);
 
   INTEGER_FIELD_3D quantized;
-  EncodeBlock(blocks[blockNumber], blockNumber, &compression_data, &quantized);
+  EncodeBlock(blocks[blockNumber], blockNumber, col, &compression_data0, &quantized);
   cout << "encoded block: " << endl;
   cout << quantized.flattened() << endl;
 
   VectorXi zigzagged;
-  const INTEGER_FIELD_3D& zigzagArray = compression_data.get_zigzagArray();
+  const INTEGER_FIELD_3D& zigzagArray = compression_data0.get_zigzagArray();
   ZigzagFlatten(quantized, zigzagArray, &zigzagged);
   cout << "zigzag scanned: " << endl;
   cout << EIGEN::convert(zigzagged) << endl;
@@ -319,4 +356,29 @@ void ZigzagTest()
   cout << "unzigzagged: " << endl;
   cout << quantized.flattened() << endl;
 
+}
+
+void CumSumTest()
+{
+  int size = 10;
+  VectorXi x(size);
+  for (int i = 0; i < size; i++) {
+    x[i] = i + 1;
+  }
+
+  VectorXi sum;
+  ModifiedCumSum(x, &sum);
+
+  cout << "x: " << endl;
+  cout << x << endl;
+  cout << "cum sum of x: " << endl;
+  cout << sum << endl;
+  
+}
+
+void MatrixCompressionTest()
+{
+  const char* filename = "U.preadvect.compressed.matrix";
+  CompressAndWriteMatrixComponents(filename, U, &compression_data0, 
+      &compression_data1, &compression_data2);
 }

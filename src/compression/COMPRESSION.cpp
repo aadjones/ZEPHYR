@@ -2113,7 +2113,8 @@ void GetRowFast(int row, int matrixRow, MATRIX_COMPRESSION_DATA& data, MatrixXd&
 // generates the header information in the binary file
 ////////////////////////////////////////////////////////
 void WriteMetaData(const char* filename, const COMPRESSION_DATA& compression_data, 
-    const MATRIX& sListMatrix, const MATRIX& blockLengthsMatrix, const MATRIX& blockIndicesMatrix) {
+    const MatrixXd& sListMatrix, const MatrixXi& blockLengthsMatrix, 
+    const MatrixXi& blockIndicesMatrix) {
 
   TIMER functionTimer(__FUNCTION__);
     FILE* pFile;

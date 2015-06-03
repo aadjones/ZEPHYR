@@ -2,7 +2,7 @@
 
 COMPRESSION_DATA::COMPRESSION_DATA() {}
 
-COMPRESSION_DATA::COMPRESSION_DATA(VEC3I dims, int numCols, int nBits, double percent) :
+COMPRESSION_DATA::COMPRESSION_DATA(const VEC3I& dims, int numCols, int nBits, double percent) :
   _dims(dims), _numCols(numCols), _nBits(nBits), _percent(percent) {}
 
 
