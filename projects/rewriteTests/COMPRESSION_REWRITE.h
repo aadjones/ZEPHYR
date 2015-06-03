@@ -26,6 +26,7 @@ void ModifiedCumSum(const VectorXi& V, VectorXi* sum);
 void GetScalarFields(const VECTOR3_FIELD_3D& V, FIELD_3D* X, FIELD_3D* Y, FIELD_3D* Z); 
 
 // make an fftw 3d dct plan. direction 1 is forward, -1 is inverse
+
 void Create_DCT_Plan(double* in, int direction, fftw_plan* plan); 
 
 // perform a unitary normalization for the forward 3d dct
@@ -135,7 +136,7 @@ void RunLengthEncodeBinary(const char* filename, int blockNumber, const VectorXi
 // decode a run-length encoded binary file and fill 
 // a VectorXi with the contents.
 void RunLengthDecodeBinary(int* allData, int blockNumber, int col, 
-    const MatrixXi& blockLengthsMatrix, const MatrixXi& blockIndicesMatrix, VectorXi* parsedData);
+    COMPRESSION_DATA* compression_data, VectorXi* parsedData);
 
 // takes an input FIELD_3D which is the result of
 // an SVD coordinate transform, compresses it according
@@ -149,13 +150,22 @@ void PrintProgress(int col, int numCols);
 // generate the header information for the encoded binary file
 void WriteMetaData(const char* filename, const COMPRESSION_DATA& compression_data);
 
+// write the singular values and V matrices to a binary file
+void WriteSVDData(const char* filename, COMPRESSION_DATA* data);
+
 // delete a binary file if it already exists
 void DeleteIfExists(const char* filename);
+
 // compress all of the scalar field components
 // of a matrix (which represents a vector field) and write them to
 // a binary file. applies svd coordinate transform first 
 void CompressAndWriteMatrixComponents(const char* filename, const MatrixXd& U,  
       COMPRESSION_DATA* data0, COMPRESSION_DATA* data1, COMPRESSION_DATA* data2);
+
+// reads from a binary file into a buffer and sets initializations
+// inside compression data
+int* ReadBinaryFileToMemory(const char* filename, 
+    COMPRESSION_DATA* data); 
 
 #endif
 

@@ -36,7 +36,7 @@ int yRes = 62;
 int zRes = 46;
 int numRows = 3 * xRes * yRes * zRes;
 int numCols = 151;
-int numBlocks = xRes * yRes * zRes / (BLOCK_SIZE * BLOCK_SIZE * BLOCK_SIZE);
+int numBlocks = (48 * 64 * 48) / (BLOCK_SIZE * BLOCK_SIZE * BLOCK_SIZE);
 VEC3I dims(xRes, yRes, zRes);
 MatrixXd U(numRows, numCols);
 VECTOR3_FIELD_3D V(xRes, yRes, zRes);
@@ -45,7 +45,7 @@ fftw_plan plan;
 string path("../../U.preadvect.matrix");
 COMPRESSION_DATA compression_data0, compression_data1, compression_data2;
 int nBits = 16;
-double percent = 0.95;
+double percent = 1.0;
 int maxIterations = 16;
 
 ////////////////////////////////////////////////////////
@@ -82,6 +82,9 @@ void SingularValuesTest();
 // test the binary search algorithm for damping tuning
 void GammaSearchTest();
 
+// test encoding just one block
+void EncodeOneBlockTest(int blockNumber, int col);
+
 // test the block encoding function
 void EncodeBlockTest();
 
@@ -97,6 +100,12 @@ void CumSumTest();
 // test the full matrix compression pipeline
 void MatrixCompressionTest();
 
+// test the reading of a binary file to memory
+void ReadToMemoryTest();
+
+// test the run-length codec
+void RunLengthTest(int blockNumber, int col);
+
 ////////////////////////////////////////////////////////
 // Main
 ////////////////////////////////////////////////////////
@@ -105,8 +114,13 @@ int main(int argc, char* argv[])
 {
   TIMER functionTimer(__FUNCTION__);
   InitGlobals();
+
  
-  MatrixCompressionTest();
+  int blockNumber = 0;
+  int col = 0;
+  EncodeOneBlockTest(blockNumber, col);
+  RunLengthTest(blockNumber, col);
+
 
   functionTimer.printTimings();
   return 0;
@@ -129,6 +143,10 @@ void InitGlobals()
 
   EIGEN::read(path.c_str(), U); 
 
+
+  V = VECTOR3_FIELD_3D(U.col(0), xRes, yRes, zRes);
+  TransformVectorFieldSVDCompression(&V, &compression_data0);
+  F = V.scalarField(1);
 }
 
 ////////////////////////////////////////////////////////
@@ -195,6 +213,9 @@ void DCTTest()
 
 }
 
+////////////////////////////////////////////////////////
+// print the error from doing a block dct and idct
+////////////////////////////////////////////////////////
 void BlockDCTTest()
 
 {
@@ -218,6 +239,10 @@ void BlockDCTTest()
   
 }
 
+////////////////////////////////////////////////////////
+// check the result of doing transform and untransform 
+// svd on a vector field
+////////////////////////////////////////////////////////
 void SVDTest()
 {
   VectorXd s;
@@ -231,6 +256,10 @@ void SVDTest()
   cout << "Error from SVD and inverse SVD: " << diff << endl;
 }
 
+////////////////////////////////////////////////////////
+// ensure that the sparse block diagonal construction
+// builds properly
+////////////////////////////////////////////////////////
 void SparseBlockDiagonalTest()
 {
   MatrixXd A(3, 3);
@@ -247,6 +276,10 @@ void SparseBlockDiagonalTest()
 
 }
 
+////////////////////////////////////////////////////////
+// display the three singular values of a particular
+// SVD coordinate transform
+////////////////////////////////////////////////////////
 void SingularValuesTest() 
 {
   VectorXd s;
@@ -257,6 +290,9 @@ void SingularValuesTest()
   cout << s << endl;
 }
 
+////////////////////////////////////////////////////////
+// test the binary search function TuneGamma
+////////////////////////////////////////////////////////
 void GammaSearchTest()
 {
   int col = 0;
@@ -274,6 +310,10 @@ void GammaSearchTest()
   TuneGamma(block, blockNumber, col, &compression_data0, &damp);
 }
 
+////////////////////////////////////////////////////////
+// encode all the blocks in one column and check whether
+// the compression data is updated
+////////////////////////////////////////////////////////
 void EncodeBlockTest()
 { 
   int col = 0;
@@ -292,10 +332,44 @@ void EncodeBlockTest()
   
   MatrixXd* sList = compression_data0.get_sListMatrix();
   MatrixXd* gammaList = compression_data0.get_gammaListMatrix();
-  cout << "sList: " << (*sList) << endl;
-  cout << "gammaList: " << (*gammaList) << endl; 
+  cout << "sList, column 0: " << endl;
+  cout << EIGEN::convert(sList->col(0)) << endl;
+  cout << "gammaList, column 0: " << endl; 
+  cout << EIGEN::convert(gammaList->col(0)) << endl;
 }
 
+
+////////////////////////////////////////////////////////
+// encode just one block at blockNumber, col. useful
+// for debugging codec
+////////////////////////////////////////////////////////
+void EncodeOneBlockTest(int blockNumber, int col)
+{
+  vector<FIELD_3D> blocks;
+  GetBlocks(F, &blocks);
+  UnitaryBlockDCT(1, &blocks);
+  PreprocessBlock(&(blocks[blockNumber]), blockNumber, col, &compression_data1);
+ 
+  INTEGER_FIELD_3D quantized;
+  EncodeBlock(blocks[blockNumber], blockNumber, col, &compression_data1, &quantized);
+
+  cout << "quantized block at blockNumber " << blockNumber << ", col " << col << ":\n";
+  cout << quantized.flattened() << endl;
+
+  const INTEGER_FIELD_3D& zigzagArray = compression_data1.get_zigzagArray();
+  VectorXi zigzagged;
+  ZigzagFlatten(quantized, zigzagArray, &zigzagged);
+  cout << "quantized and zigzagged: " << endl;
+  cout << EIGEN::convertInt(zigzagged) << endl;
+
+
+  
+}
+
+
+////////////////////////////////////////////////////////
+// check the error between encoding and decoding a block
+////////////////////////////////////////////////////////
 void EncodeDecodeBlockTest()
 {
   int col = 0;
@@ -328,6 +402,9 @@ void EncodeDecodeBlockTest()
   cout << "Accuracy was within: " << (1 - diff) << endl;
 }
 
+////////////////////////////////////////////////////////
+// ensure the zigzag scan works properly
+////////////////////////////////////////////////////////
 void ZigzagTest()
 {
   int col = 0;
@@ -350,7 +427,7 @@ void ZigzagTest()
   const INTEGER_FIELD_3D& zigzagArray = compression_data0.get_zigzagArray();
   ZigzagFlatten(quantized, zigzagArray, &zigzagged);
   cout << "zigzag scanned: " << endl;
-  cout << EIGEN::convert(zigzagged) << endl;
+  cout << EIGEN::convertInt(zigzagged) << endl;
 
   ZigzagUnflatten(zigzagged, zigzagArray, &quantized);
   cout << "unzigzagged: " << endl;
@@ -358,6 +435,9 @@ void ZigzagTest()
 
 }
 
+////////////////////////////////////////////////////////
+// ensure the cumulative sum works properly
+////////////////////////////////////////////////////////
 void CumSumTest()
 {
   int size = 10;
@@ -376,9 +456,46 @@ void CumSumTest()
   
 }
 
+////////////////////////////////////////////////////////
+// test the compression and writing to a binary file
+// of a full matrix
+////////////////////////////////////////////////////////
 void MatrixCompressionTest()
 {
   const char* filename = "U.preadvect.compressed.matrix";
   CompressAndWriteMatrixComponents(filename, U, &compression_data0, 
       &compression_data1, &compression_data2);
+}
+
+
+////////////////////////////////////////////////////////
+// test the reading into memory of a binary file that
+// is the result of a previous matrix compression
+////////////////////////////////////////////////////////
+void ReadToMemoryTest()
+{
+  const char* filename = "U.preadvect.compressed.matrix0";
+  int* allData = ReadBinaryFileToMemory(filename, &compression_data0);
+}
+
+////////////////////////////////////////////////////////
+// test the run-length decoding from a binary file
+////////////////////////////////////////////////////////
+void RunLengthTest(int blockNumber, int col) 
+{
+  const char* filename = "U.preadvect.compressed.matrix1";
+
+  int* allData = ReadBinaryFileToMemory(filename, &compression_data1);
+  VectorXi parsedData;
+  RunLengthDecodeBinary(allData, blockNumber, col, &compression_data1, &parsedData);
+  cout << "run-length decoded, not yet unzigzagged: " << endl;
+  cout << EIGEN::convertInt(parsedData) << endl;
+
+  INTEGER_FIELD_3D unflattened;
+  const INTEGER_FIELD_3D& zigzagArray = compression_data1.get_zigzagArray();
+ 
+  ZigzagUnflatten(parsedData, zigzagArray, &unflattened);
+
+  cout << "parsedData for block " << blockNumber << ", col " << col << ':' << endl;
+  cout << unflattened.flattened() << endl;
 }

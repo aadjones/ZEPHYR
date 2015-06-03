@@ -46,7 +46,7 @@ public:
   static void transposeProduct(const MatrixXd& left, const MatrixXd& right, MatrixXd& output);
   
   static VECTOR convert(const VectorXd& input);
-  static VECTOR convert(const VectorXi& input);
+  static VECTOR convertInt(const VectorXi& input);
   static VectorXd convert(const VECTOR& input);
 };
 

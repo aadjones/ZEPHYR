@@ -617,6 +617,7 @@ void UntransformVectorFieldSVD(const MatrixXd& v, VECTOR3_FIELD_3D* transformedV
 ////////////////////////////////////////////////////////
 void PreprocessBlock(FIELD_3D* F, int blockNumber, int col, COMPRESSION_DATA* data)
 {
+  TIMER functionTimer(__FUNCTION__);
   int nBits = data->get_nBits();
 
   // normalize so that the DC component is at 2 ^ {nBits - 1} - 1
@@ -645,6 +646,7 @@ void PreprocessBlock(FIELD_3D* F, int blockNumber, int col, COMPRESSION_DATA* da
 void TuneGammaVerbose(const FIELD_3D& F, int blockNumber, int col, 
     COMPRESSION_DATA* data, FIELD_3D* damp)
 {
+  TIMER functionTimer(__FUNCTION__);
 
   // fetch parameters from data
   int nBits = data->get_nBits();
@@ -743,6 +745,7 @@ void TuneGammaVerbose(const FIELD_3D& F, int blockNumber, int col,
 void TuneGamma(const FIELD_3D& F, int blockNumber, int col, 
     COMPRESSION_DATA* data, FIELD_3D* damp)
 {
+  TIMER functionTimer(__FUNCTION__);
 
   // fetch parameters from data
   int nBits = data->get_nBits();
@@ -937,8 +940,8 @@ void DecodeBlockWithCompressionData(const INTEGER_FIELD_3D& intBlock,
 // file via run-length encoding. assumes the blockLengths
 // vector has already been allocated!
 ////////////////////////////////////////////////////////
-void RunLengthEncodeBinary(const char* filename, int blockNumber, const VectorXi& zigzaggedArray, 
-    VectorXi* blockLengths)
+void RunLengthEncodeBinary(const char* filename, int blockNumber, 
+    const VectorXi& zigzaggedArray, VectorXi* blockLengths)
 { 
   TIMER functionTimer(__FUNCTION__);
 
@@ -1003,17 +1006,38 @@ void RunLengthEncodeBinary(const char* filename, int blockNumber, const VectorXi
 ////////////////////////////////////////////////////////
 
 void RunLengthDecodeBinary(int* allData, int blockNumber, int col, 
-    const MatrixXi& blockLengthsMatrix, const MatrixXi& blockIndicesMatrix, VectorXi* parsedData)
+    COMPRESSION_DATA* compression_data, VectorXi* parsedData)
 {
 
   TIMER functionTimer(__FUNCTION__);
-    
-  int compressedBlockSize = blockLengthsMatrix(blockNumber, col);
+
+  int nBits = compression_data->get_nBits();
+   
+  MatrixXi* blockLengthsMatrix = compression_data->get_blockLengthsMatrix(); 
+  int compressedBlockSize = (*blockLengthsMatrix)(blockNumber, col);
   assert(compressedBlockSize >= 0 && 
       compressedBlockSize <= 2 * BLOCK_SIZE * BLOCK_SIZE * BLOCK_SIZE);
 
-  int blockIndex = blockIndicesMatrix(blockNumber, col);
+
+  MatrixXi* blockIndicesMatrix = compression_data->get_blockIndicesMatrix();
+  int blockIndex = (*blockIndicesMatrix)(blockNumber, col);
+
+ 
+  // ***************************************************
+  // for debugging
   
+    cout << "compressedBlockSize: " << compressedBlockSize << endl;
+
+    VECTOR block(compressedBlockSize);
+    for (int i = 0; i < block.size(); i++) {
+      block[i] = allData[blockIndex + i];
+    }
+    cout << "blockNumber " << blockNumber << ", column " << col << ": " << endl;
+    cout << block << endl;
+
+  // ***************************************************
+
+
   int i = 0;
   int runLength = 1;
  
@@ -1045,8 +1069,21 @@ void RunLengthDecodeBinary(int* allData, int blockNumber, int col,
   int* data = parsedData->data();
   int j = 0;
   while (i < compressedBlockSize) {
-
+    
+    // write the value once
     data[j] = allData[blockIndex + i];
+
+    // *************************************************** 
+    // purely for debugging!
+    if (j == 0) {
+      if (data[j] != pow(2, nBits - 1) - 1) {
+        cout << "Error: DC term parsed wrong!" << endl;
+        cout << "DC term was thought to be: " << data[j] << endl;
+        cout << "Block number is: " << blockNumber << endl;
+        cout << "Column is: " << col << endl;
+      }
+    }
+    // *************************************************** 
 
     if ( (i + 1 < compressedBlockSize) && 
         allData[blockIndex + i] == allData[blockIndex + i + 1]) {
@@ -1118,13 +1155,16 @@ void ZigzagUnflatten(const VectorXi& V, const INTEGER_FIELD_3D& zigzagArray,
 
 ////////////////////////////////////////////////////////
 // reads from a binary file into a buffer, and sets
-// important initializations inside decompression data
+// important initializations inside compression data
 ////////////////////////////////////////////////////////
 
-/*
-void ReadBinaryFileToMemory(const char* filename, int*& allData, DECOMPRESSION_DATA& decompression_data) {
+int* ReadBinaryFileToMemory(const char* filename, 
+    COMPRESSION_DATA* data) 
+{
   TIMER functionTimer(__FUNCTION__);
-  // allData is passed by reference and will be modified, as will decompression_data
+
+  // initialize what we will return
+  int* allData = NULL;
 
   FILE* pFile;
 
@@ -1135,70 +1175,64 @@ void ReadBinaryFileToMemory(const char* filename, int*& allData, DECOMPRESSION_D
   }
 
   else {
-
-    // read in q, power, and nBits
-    double q, power;
-    fread(&q, 1, sizeof(double), pFile);
-    fread(&power, 1, sizeof(double), pFile);
+    
+    // build the damping array and zigzag arrays 
+    data->set_dampingArray();
+    data->set_zigzagArray();
+ 
+    // read nBits and set it
     int nBits;
     fread(&nBits, 1, sizeof(int), pFile);
+    data->set_nBits(nBits);
+    cout << "nBits: " << nBits << endl;
 
-    // set the decompression data
-    decompression_data.set_q(q);
-    decompression_data.set_power(power);
-    decompression_data.set_nBits(nBits);
-    // build the damping array using the previous values
-    decompression_data.set_dampingArray();
-
-    // this can be called at any time, so might as well do it now
-    decompression_data.set_zigzagArray();
-
-    // same for this. -1 for the inverse transform
-    decompression_data.dct_setup(-1);
-
+    // read dims, numCols, and numBlocks
     int xRes, yRes, zRes;
-    // read in the dims from the binary file
     fread(&xRes, 1, sizeof(int), pFile);
     fread(&yRes, 1, sizeof(int), pFile);
     fread(&zRes, 1, sizeof(int), pFile);
     VEC3I dims(xRes, yRes, zRes);
-    // set the decompression data accordingly
-    decompression_data.set_dims(dims);
+    data->set_dims(dims);
+    cout << "dims: " << dims << endl;
 
     int numCols, numBlocks;
-    // read in numCols and numBlocks
     fread(&numCols, 1, sizeof(int), pFile);
     fread(&numBlocks, 1, sizeof(int), pFile);
     // set the decompression data accordingly
-    decompression_data.set_numCols(numCols);
-    decompression_data.set_numBlocks(numBlocks);
+    data->set_numCols(numCols);
+    data->set_numBlocks(numBlocks);
+    cout << "numCols: " << numCols << endl;
+    cout << "numBlocks: " << numBlocks << endl;
     
     // read in the sListMatrix and set the data
-    int totalSize = numBlocks * numCols;
-    double* double_dummy = (double*) malloc(totalSize * sizeof(double));
-    fread(double_dummy, totalSize, sizeof(double), pFile);
-    VECTOR flattened_s = CastToVector(double_dummy, totalSize);
-    free(double_dummy);
-    MATRIX sMatrix(flattened_s, numBlocks, numCols);
-    decompression_data.set_sListMatrix(sMatrix);
+    int blocksXcols = numBlocks * numCols;
+    MatrixXd* sListMatrix = data->get_sListMatrix();
+    sListMatrix->resize(numBlocks, numCols);
+    fread(sListMatrix->data(), blocksXcols, sizeof(double), pFile);
+    
+    // do the same for gammaListMatrix
+    MatrixXd* gammaListMatrix = data->get_gammaListMatrix();
+    gammaListMatrix->resize(numBlocks, numCols);
+    fread(gammaListMatrix->data(), blocksXcols, sizeof(double), pFile);
 
-    // do the same for the blockLengthsMatrix
-    int* int_dummy = (int*) malloc(totalSize * sizeof(int));
-    fread(int_dummy, totalSize, sizeof(int), pFile);
-    VECTOR flattened_lengths = CastToVector(int_dummy, totalSize);
-    free(int_dummy);
-    MATRIX blockLengthsMatrix(flattened_lengths, numBlocks, numCols);
-    // store the total length to be able to read in the full compressed data later
-    int totalLength = blockLengthsMatrix.sum();
-    decompression_data.set_blockLengthsMatrix(blockLengthsMatrix);
+    // do the same for the blockLengthsMatrix, except the data are ints
+    MatrixXi* blockLengthsMatrix = data->get_blockLengthsMatrix();
+    blockLengthsMatrix->resize(numBlocks, numCols);
+    fread(blockLengthsMatrix->data(), blocksXcols, sizeof(int), pFile);
 
-    // do the same for the blockIndicesMatrix
-    int* int_dummy2 = (int*) malloc(totalSize * sizeof(int));
-    fread(int_dummy2, totalSize, sizeof(int), pFile);
-    VECTOR flattened_indices = CastToVector(int_dummy2, totalSize);
-    free(int_dummy2);
-    MATRIX blockIndicesMatrix(flattened_indices, numBlocks, numCols);
-    decompression_data.set_blockIndicesMatrix(blockIndicesMatrix);
+    // cout << "blockLengthsMatrix, column 0: " << endl;
+    VectorXi blockLengths0 = blockLengthsMatrix->col(0);
+    // cout << EIGEN::convertInt(blockLengths0) << endl;
+
+    // store the total length of all blocks to be able to 
+    // read in the full compressed data later
+    int totalLength = blockLengthsMatrix->sum();
+    // cout << "totalLength: " << totalLength << endl;
+
+    // read in blockIndicesMatrix
+    MatrixXi* blockIndicesMatrix = data->get_blockIndicesMatrix();
+    blockIndicesMatrix->resize(numBlocks, numCols);
+    fread(blockIndicesMatrix->data(), blocksXcols, sizeof(int), pFile);
 
     // finally, read in the full compressed data
     allData = (int*) malloc(totalLength * sizeof(int));
@@ -1206,12 +1240,12 @@ void ReadBinaryFileToMemory(const char* filename, int*& allData, DECOMPRESSION_D
       perror("Malloc failed to allocate allData!");
       exit(EXIT_FAILURE);
     }
-    fread(allData, totalLength, sizeof(int), pFile);
-    }
-  return;
-}
-*/
 
+    fread(allData, totalLength, sizeof(int), pFile);
+  }
+
+  return allData;
+}
 
 ////////////////////////////////////////////////////////
 // deletes a file if it already exists
@@ -1259,21 +1293,23 @@ void CompressAndWriteField(const char* filename, const FIELD_3D& F, int col,
   MatrixXi* blockLengthsMatrix = compression_data->get_blockLengthsMatrix();
   MatrixXi* blockIndicesMatrix = compression_data->get_blockIndicesMatrix();
 
-
   // if it's the first time calling this routine in a chain, preallocate
   // the matrices
-  if (blockLengthsMatrix->cols() <= 0 || blockIndicesMatrix->cols() <= 0) {
+  if (blockLengthsMatrix->cols() <= 0) {
     blockLengthsMatrix->resize(numBlocks, numCols);
+  }
+  if (blockIndicesMatrix->cols() <= 0) {
     blockIndicesMatrix->resize(numBlocks, numCols);
   }
 
   // subdivide F into blocks
   vector<FIELD_3D> blocks;
   GetBlocks(F, &blocks);
+
   // do the forward transform 
   UnitaryBlockDCT(1, &blocks);
 
-  // Initialize the relevant variables before looping through all the blocks
+  // initialize the relevant variables before looping through all the blocks
   VectorXi blockLengths(numBlocks);
   INTEGER_FIELD_3D intEncoded_i;
   VectorXi zigzagged_i;
@@ -1696,6 +1732,35 @@ void CleanUpPrefix(const char* prefix, const char* filename) {
 
 
 ////////////////////////////////////////////////////////
+// write the singular values and V matrices to a binary file
+////////////////////////////////////////////////////////
+void WriteSVDData(const char* filename, COMPRESSION_DATA* data)
+{
+  FILE* pFile;
+  pFile = fopen(filename, "wb");    
+  if (pFile == NULL) {
+    perror ("Error opening file.");
+  }
+  else {
+    vector<Vector3d>* singularList = data->get_singularList();
+    vector<Matrix3d>* vList        = data->get_vList();
+
+    int numCols = data->get_numCols();
+
+    assert(singularList->size() == numCols && vList->size() == numCols);
+
+    // for each column, first write the singular values, then write
+    // the values in the V matrix. there are 3 singular values,
+    // and the V matrices are all 3 x 3.
+    for (int col = 0; col < numCols; col++) {
+      fwrite((*singularList)[col].data(), sizeof(double), 3, pFile); 
+      fwrite((*vList)[col].data(), sizeof(double), 3 * 3, pFile);
+    }
+  }
+  fclose(pFile);
+}
+
+////////////////////////////////////////////////////////
 // compress all of the scalar field components
 // of a matrix (which represents a vector field) and write them to
 // a binary file. applies svd coordinate transform first.
@@ -1757,6 +1822,9 @@ void CompressAndWriteMatrixComponents(const char* filename, const MatrixXd& U,
     // progress printout for the impatient user
     PrintProgress(col, numCols);
   }
+  
+  // once we've gone through each column, we can write the full SVD data
+  WriteSVDData("U.preadvect.SVD.data", data0);
 
   // write the metadata for each component one at a time
   const char* metafile = "metadata.bin"; 
