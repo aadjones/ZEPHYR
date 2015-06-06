@@ -937,11 +937,10 @@ void DecodeBlockWithCompressionData(const INTEGER_FIELD_3D& intBlock,
 
 ////////////////////////////////////////////////////////
 // given a zigzagged integer buffer, write it to a binary
-// file via run-length encoding. assumes the blockLengths
-// vector has already been allocated!
+// file via run-length encoding. updates the blockLengthsMatrix. 
 ////////////////////////////////////////////////////////
-void RunLengthEncodeBinary(const char* filename, int blockNumber, 
-    const VectorXi& zigzaggedArray, VectorXi* blockLengths)
+void RunLengthEncodeBinary(const char* filename, int blockNumber, int col, 
+    const VectorXi& zigzaggedArray, COMPRESSION_DATA* compression_data)
 { 
   TIMER functionTimer(__FUNCTION__);
 
@@ -953,51 +952,151 @@ void RunLengthEncodeBinary(const char* filename, int blockNumber,
   }
   else {
 
-    vector<int> dataList;            // a C++ vector container for our data 
+    // we use a C++ vector container for our data since we don't know
+    // a priori how many entries it will have once encoded
+    vector<int> dataList;          
+    // reserve plenty of space just to be on the safe side
     dataList.reserve(2 * BLOCK_SIZE * BLOCK_SIZE * BLOCK_SIZE);
+
+    // initialize variables
     int data = 0;
     int runLength = 0;
+    int encodedLength = 0;
 
     // assuming BLOCK_SIZE blocks
     int length = BLOCK_SIZE * BLOCK_SIZE * BLOCK_SIZE;
-    for (int i = 0; i < length; i++) {
-      data = zigzaggedArray[i];
-      dataList.push_back(data);
 
+    for (int i = 0; i < length; i++) {
+
+      data = zigzaggedArray[i];
+
+      // add the value once no matter what
+      dataList.push_back(data);
+      encodedLength++;
+
+      // we already wrote one value, so runLength starts from 1
       runLength = 1;
+
+      // if the current value and the next value agree, increment the run length.
+      // don't allow the next value to go out of bounds
       while ( (i + 1 < length) && (zigzaggedArray[i] == zigzaggedArray[i + 1]) ) {
-            // i + 1 < length ensures that i + 1 doesn't go out of bounds for zigzaggedArray[]
-            runLength++;
-            i++;
+        runLength++;
+        i++;
       }
+      
+      // we don't bother to write run lengths for singletons
       if (runLength > 1) {
         // use a single repeated value as an 'escape' to indicate a run
         dataList.push_back(data);
         
         // push the runLength to the data vector
         dataList.push_back(runLength);
+
+        encodedLength += 2;
       }
+
+
     }
-    int encodedLength = dataList.size();
+ 
+    // the size of the dataList vector is how long the encoded block will be
+    // int encodedLength = dataList.size();
 
-    // crash if the blockLengths vector is not preallocated
-    if (blockLengths->size() <= 0) {
-      cout << "You need to allocate blockLengths before calling the run-length encoder!\n";
-      exit(EXIT_FAILURE);
+    // fetch the blockLengthsMatrix for updating
+    MatrixXi* blockLengthsMatrix = compression_data->get_blockLengthsMatrix();
+    int numBlocks = compression_data->get_numBlocks();
+    int numCols = compression_data->get_numCols();
+
+    // if the matrix isn't yet allocated, prellocate
+    if (blockLengthsMatrix->cols() <= 0) {
+      blockLengthsMatrix->setZero(numBlocks, numCols);
     }
 
-    // update the blockLengths vector
-    (*blockLengths)[blockNumber] = encodedLength;
+    // update the appropriate entry
+    (*blockLengthsMatrix)(blockNumber, col) = encodedLength;
 
-    {
-    TIMER writeTimer("fwrite timer");
-
-    fwrite(&(dataList[0]), sizeof(int), encodedLength, pFile);
+    fwrite(dataList.data(), sizeof(int), encodedLength, pFile);
     // this write assumes that C++ vectors are stored in contiguous memory!
-    }
 
     fclose(pFile);
   }
+}
+
+////////////////////////////////////////////////////////
+// helper function for run-length encoding. given passed
+// in buffer of ints and a starting index, finds the
+// length of the run associated with the index.
+////////////////////////////////////////////////////////
+int FindRun(const VectorXi& V, int i) 
+{
+  TIMER functionTimer(__FUNCTION__);
+
+  assert(i < V.size());
+
+  int runValue = V[i]; 
+  int runLength = 0;
+
+  while(i < V.size()) {
+    int c = V[i];
+    bool runEnded = (c != runValue);
+    if (runEnded) {
+      break;
+    }
+    runLength++;
+    i++;
+  }
+  return runLength;
+}
+
+////////////////////////////////////////////////////////
+// given a zigzagged integer buffer, write it to a binary
+// file via run-length encoding. updates the blockLengthsMatrix. 
+////////////////////////////////////////////////////////
+void RunLengthEncodeBinaryNew(const char* filename, int blockNumber, int col, 
+    const VectorXi& zigzaggedArray, COMPRESSION_DATA* compression_data)
+{
+  TIMER functionTimer(__FUNCTION__);
+
+  FILE* pFile;
+  pFile = fopen(filename, "ab+");
+
+  if (pFile == NULL) {
+    perror("Error opening file. ");
+    exit(EXIT_FAILURE);
+  }
+
+  vector<int> dataList;
+  dataList.reserve(2 * BLOCK_SIZE * BLOCK_SIZE * BLOCK_SIZE);
+
+  int i = 0;
+  while (i != zigzaggedArray.size()) {
+    int len = FindRun(zigzaggedArray, i);
+    dataList.push_back(zigzaggedArray[i]);
+    if (len > 1) {
+      dataList.push_back(zigzaggedArray[i]);
+      dataList.push_back(len);
+    }
+    i += len;
+  }
+  
+  int encodedLength = dataList.size();
+
+  // fetch the blockLengthsMatrix for updating
+  MatrixXi* blockLengthsMatrix = compression_data->get_blockLengthsMatrix();
+  int numBlocks = compression_data->get_numBlocks();
+  int numCols = compression_data->get_numCols();
+
+  // if the matrix isn't yet allocated, prellocate
+  if (blockLengthsMatrix->cols() <= 0) {
+    blockLengthsMatrix->setZero(numBlocks, numCols);
+  }
+
+  // update the appropriate entry
+  (*blockLengthsMatrix)(blockNumber, col) = encodedLength;
+
+  fwrite(dataList.data(), sizeof(int), encodedLength, pFile);
+  // this write assumes that C++ vectors are stored in contiguous memory!
+
+  fclose(pFile);
 }
 
 ////////////////////////////////////////////////////////
@@ -1234,6 +1333,9 @@ int* ReadBinaryFileToMemory(const char* filename,
     blockIndicesMatrix->resize(numBlocks, numCols);
     fread(blockIndicesMatrix->data(), blocksXcols, sizeof(int), pFile);
 
+    // cout << "blockIndicesMatrix, column 0: " << endl;
+    // cout << EIGEN::convertInt(blockIndicesMatrix->col(0)) << endl; 
+
     // finally, read in the full compressed data
     allData = (int*) malloc(totalLength * sizeof(int));
     if (allData == NULL) {
@@ -1291,15 +1393,11 @@ void CompressAndWriteField(const char* filename, const FIELD_3D& F, int col,
 
   const INTEGER_FIELD_3D& zigzagArray = compression_data->get_zigzagArray();
   MatrixXi* blockLengthsMatrix = compression_data->get_blockLengthsMatrix();
-  MatrixXi* blockIndicesMatrix = compression_data->get_blockIndicesMatrix();
 
   // if it's the first time calling this routine in a chain, preallocate
-  // the matrices
+  // the matrix
   if (blockLengthsMatrix->cols() <= 0) {
     blockLengthsMatrix->resize(numBlocks, numCols);
-  }
-  if (blockIndicesMatrix->cols() <= 0) {
-    blockIndicesMatrix->resize(numBlocks, numCols);
   }
 
   // subdivide F into blocks
@@ -1322,24 +1420,70 @@ void CompressAndWriteField(const char* filename, const FIELD_3D& F, int col,
 
     // performs quantization and damping. updates gammaList
     EncodeBlock(blocks[i], i, col, compression_data, &intEncoded_i);
+
     // do the zigzag scan for run-length encoding
     ZigzagFlatten(intEncoded_i, zigzagArray, &zigzagged_i);
 
-    // performs run-length encoding. updates blockLengths. since
+    // performs run-length encoding. updates blockLengthsMatrix. since
     // it opens 'filename' in append mode, it can be called in a chain
-    RunLengthEncodeBinary(filename, i, zigzagged_i, &blockLengths);  
+    RunLengthEncodeBinary(filename, i, col, zigzagged_i, compression_data);  
   }
   
-  // update the compression data
-  blockLengthsMatrix->col(col) = blockLengths;
+}
 
-  // compute and set the block indices using cum sum
-  VectorXi blockIndices(numBlocks);
-  ModifiedCumSum(blockLengths, &blockIndices);
-  blockIndicesMatrix->col(col) = blockIndices;
+
+////////////////////////////////////////////////////////
+// build the block indices matrix from the block lengths matrix
+////////////////////////////////////////////////////////
+void BuildBlockIndicesMatrix(COMPRESSION_DATA* data)
+{
+  MatrixXi* blockLengths = data->get_blockLengthsMatrix();
+  MatrixXi* blockIndices = data->get_blockIndicesMatrix();
+
+  // copy the block lengths to start
+  *blockIndices = (*blockLengths);
+
+  // flatten column-wise into a vector
+  blockIndices->resize(blockLengths->rows() * blockLengths->cols(), 1);
+
+  // compute the cumulative sum
+  VectorXi sum;
+  ModifiedCumSum(blockIndices->col(0), &sum);
+
+  // copy back into block indices
+  memcpy(blockIndices->data(), sum.data(), sum.size() * sizeof(int));
+
+  // reshape appropriately
+  blockIndices->resize(blockLengths->rows(), blockLengths->cols());
 
 }
-  
+
+////////////////////////////////////////////////////////
+// build the block indices matrix from the block lengths matrix.
+// uses explicitly passed in matrices for debugging!
+////////////////////////////////////////////////////////
+void BuildBlockIndicesMatrixDebug(const MatrixXi blockLengths, MatrixXi* blockIndices)
+{
+  TIMER functionTimer(__FUNCTION__);
+
+  // copy the block lengths to start
+  *blockIndices = blockLengths;
+
+  // flatten column-wise into a vector
+  blockIndices->resize(blockLengths.rows() * blockLengths.cols(), 1);
+
+  // compute the cumulative sum 
+  VectorXi sum; 
+  ModifiedCumSum(blockIndices->col(0), &sum);
+
+  // copy back into block indices
+  memcpy(blockIndices->data(), sum.data(), sum.size() * sizeof(int));
+
+  // reshape appropriately
+  blockIndices->resize(blockLengths.rows(), blockLengths.cols()); 
+
+}
+
 ////////////////////////////////////////////////////////
 // given a row number and the dimensions, computes
 // which block number we need for the decoder. populates
@@ -1812,6 +1956,7 @@ void CompressAndWriteMatrixComponents(const char* filename, const MatrixXd& U,
     // do the svd coordinate transform in place and update the data for 
     // vList and singularList. only data0 contains these!  
     TransformVectorFieldSVDCompression(&V, data0);
+    
    
     // write the components to an (appended) binary file 
 
@@ -1825,6 +1970,11 @@ void CompressAndWriteMatrixComponents(const char* filename, const MatrixXd& U,
   
   // once we've gone through each column, we can write the full SVD data
   WriteSVDData("U.preadvect.SVD.data", data0);
+
+  // we can also build the block indices matrix for each component
+  BuildBlockIndicesMatrix(data0);
+  BuildBlockIndicesMatrix(data1);
+  BuildBlockIndicesMatrix(data2);
 
   // write the metadata for each component one at a time
   const char* metafile = "metadata.bin"; 

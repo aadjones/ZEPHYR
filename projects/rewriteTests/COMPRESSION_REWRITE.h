@@ -22,6 +22,14 @@ void CastIntFieldToDouble(const INTEGER_FIELD_3D& F, FIELD_3D* castedField);
 // form the cumulative sum starting at zero of a passed in integer vector
 void ModifiedCumSum(const VectorXi& V, VectorXi* sum);
 
+// build the block indices matrix from the block lengths matrix using 
+// modified cum sum
+void BuildBlockIndicesMatrix(COMPRESSION_DATA* data);
+
+// builds the block indices matrix from the block lengths matrix.
+// uses explicitly passed in matrices for debugging purposes!
+void BuildBlockIndicesMatrixDebug(const MatrixXi blockLengths, MatrixXi* blockIndices);
+
 // extract the three scalar fields from a vector field
 void GetScalarFields(const VECTOR3_FIELD_3D& V, FIELD_3D* X, FIELD_3D* Y, FIELD_3D* Z); 
 
@@ -127,11 +135,17 @@ void ZigzagFlatten(const INTEGER_FIELD_3D& F, const INTEGER_FIELD_3D& zigzagArra
 void ZigzagUnflatten(const VectorXi& V, const INTEGER_FIELD_3D& zigzagArray, 
     INTEGER_FIELD_3D* unflattened);
 
+// helper function to run-length encoding to find runs
+int FindRun(const VectorXi& V, int i);
+
 // given a zigzagged integer vector, write it to a binary
-// file via run-length encoding. assumes the blockLengths
-// vector has already been allocated!
-void RunLengthEncodeBinary(const char* filename, int blockNumber, const VectorXi& zigzaggedArray, 
-    VectorXi* blockLengths);
+// file via run-length encoding. updates the blockLengths matrix 
+void RunLengthEncodeBinary(const char* filename, int blockNumber, int col, 
+    const VectorXi& zigzaggedArray, COMPRESSION_DATA* compression_data);
+
+// different implementation. will it solve the bug?!
+void RunLengthEncodeBinaryNew(const char* filename, int blockNumber, int col, 
+    const VectorXi& zigzaggedArray, COMPRESSION_DATA* compression_data);
 
 // decode a run-length encoded binary file and fill 
 // a VectorXi with the contents.
