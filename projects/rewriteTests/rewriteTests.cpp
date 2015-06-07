@@ -127,8 +127,8 @@ int main(int argc, char* argv[])
  
   // RunLengthOneBlockTest(&compression_data0);
 
-  EncodeOneBlockTest(blockNumber, col, &compression_data0);
-  RunLengthTest(blockNumber, col, &compression_data0);
+  EncodeOneBlockTest(blockNumber, col, &compression_data2);
+  RunLengthTest(blockNumber, col, &compression_data2);
  
   // MatrixCompressionTest();
 
@@ -157,8 +157,8 @@ void InitGlobals()
   EIGEN::read(path.c_str(), U); 
 
   V = VECTOR3_FIELD_3D(U.col(150), xRes, yRes, zRes);
-  TransformVectorFieldSVDCompression(&V, &compression_data0);
-  F = V.scalarField(0);
+  TransformVectorFieldSVDCompression(&V, &compression_data1);
+  F = V.scalarField(2);
 }
 
 ////////////////////////////////////////////////////////
@@ -495,7 +495,7 @@ void ReadToMemoryTest()
 ////////////////////////////////////////////////////////
 void RunLengthTest(int blockNumber, int col, COMPRESSION_DATA* data) 
 {
-  const char* filename = "U.preadvect.compressed.matrix0";
+  const char* filename = "U.preadvect.compressed.matrix2";
 
   int* allData = ReadBinaryFileToMemory(filename, data);
   VectorXi parsedData;
