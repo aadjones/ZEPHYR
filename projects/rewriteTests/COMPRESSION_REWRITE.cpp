@@ -1062,30 +1062,6 @@ void RunLengthDecodeBinary(int* allData, int blockNumber, int col,
   int i = 0;
   int runLength = 1;
  
-  // *************************************************** 
-  // Old stable code using iterators and a C++ vector<int>
-  /*
-  auto itr = parsedData.begin();
-  while (i < blockSize) {
-    *itr = allData[blockIndex + i];
-         // write the value once
-    if ( (i + 1 < blockSize) && allData[blockIndex + i] == allData[blockIndex + i + 1]) {      // if we read an 'escape' value, it indicates a run.
-      i += 2;                                     // advance past the escape value to the run length value.
-      runLength = allData[blockIndex + i];
-      
-      assert(runLength > 1 && runLength <= 512);
-
-      std::fill(itr + 1, itr + 1 + runLength - 1, allData[blockIndex + i - 2]);
-      itr += (runLength - 1);
-
-    }
-
-    i++;
-    ++itr;
-  }
-  */
-  // *************************************************** 
-
   parsedData->resize(BLOCK_SIZE * BLOCK_SIZE * BLOCK_SIZE);
   int* data = parsedData->data();
   int j = 0;
@@ -1113,7 +1089,7 @@ void RunLengthDecodeBinary(int* allData, int blockNumber, int col,
 
       assert(runLength > 1 && runLength <= BLOCK_SIZE * BLOCK_SIZE * BLOCK_SIZE);
 
-      memset(data + j + 1, allData[blockIndex + i - 2], (runLength - 1) * sizeof(int));
+      std::fill(data + j + 1, data + j + 1 + runLength - 1, allData[blockIndex + i - 2]);
       j += (runLength - 1);
 
     }
