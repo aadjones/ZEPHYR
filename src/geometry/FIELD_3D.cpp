@@ -6237,6 +6237,36 @@ FIELD_3D FIELD_3D::pad_xyz(const VEC3I& paddings) const
   return final;
 }
 
+FIELD_3D FIELD_3D::zeroPad_xyz(const VEC3I& paddings) const
+{
+  TIMER functionTimer(__FUNCTION__);
+
+  int xPad = paddings[0];
+  int yPad = paddings[1];
+  int zPad = paddings[2];
+
+  if (xPad == 0 && yPad == 0 && zPad == 0) {
+    return (*this);
+  }
+
+  // else
+  FIELD_3D final(_xRes + xPad, _yRes + yPad, _zRes + zPad);
+
+  for (int z = 0; z < _zRes + zPad; z++) {
+    for (int y = 0; y < _yRes + yPad; y++) {
+      for (int x = 0; x < _xRes + xPad; x++) {
+        if (x < _xRes && y < _yRes && z < _zRes) {
+          final(x, y, z) = (*this)(x, y, z);
+        }
+        else {
+          final(x, y, z) = 0; 
+        }
+      }
+    }
+  }
+  return final;
+}
+
 FIELD_3D FIELD_3D::zeroPad_z(int paddingSize) const
 {
   assert(paddingSize >= 0);

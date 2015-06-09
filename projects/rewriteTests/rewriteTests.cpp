@@ -44,6 +44,10 @@ FIELD_3D F(xRes, yRes, zRes);
 fftw_plan plan;
 string path("../../U.preadvect.matrix");
 COMPRESSION_DATA compression_data0, compression_data1, compression_data2;
+int* allData0;
+int* allData1;
+int* allData2;
+MATRIX_COMPRESSION_DATA matrix_data;
 int nBits = 16;
 double percent = 0.99;
 int maxIterations = 16;
@@ -58,6 +62,9 @@ void InitGlobals();
 // set up the compression data
 void InitCompressionData(double percent, int maxIterations, int nBits, 
     int numBlocks, int numCols);
+
+// set up the matrix compression data from metadata and block data
+void InitMatrixCompressionData();
 
 // double-check the sparse construction 
 // of a block-diagonal matrix
@@ -106,11 +113,20 @@ void ReadToMemoryTest();
 // test the run-length codec
 void RunLengthTest(int blockNumber, int col, COMPRESSION_DATA* data);
 
-// test the run-length on the very first block
-void RunLengthOneBlockTest(COMPRESSION_DATA* compression_data);
-
 // test the block indices matrix construction
 void BuildBlockIndicesTest();
+
+// test the run-length decoder and dequantization methods
+void DequantizationTest(int blockNumber, int col, COMPRESSION_DATA* data);
+
+// test the decoding of an entire scalar field of a particular matrix column
+void DecodeScalarFieldTest(int col, COMPRESSION_DATA* data);
+
+// test the decoding of an entire vector field of a particular matrix column
+void DecodeVectorFieldTest(int col);
+
+// test the frequency domain projection
+void PeeledCompressedProjectTransformTest();
 
 ////////////////////////////////////////////////////////
 // Main
@@ -120,19 +136,17 @@ int main(int argc, char* argv[])
 {
   TIMER functionTimer(__FUNCTION__);
   InitGlobals();
+
+  InitMatrixCompressionData();
  
-  int blockNumber = 287;
-  int col = 150;
+  // int blockNumber = 287;
+  int col = 0;
 
- 
-  // RunLengthOneBlockTest(&compression_data0);
+  // EncodeOneBlockTest(blockNumber, col, &compression_data0);
 
-  EncodeOneBlockTest(blockNumber, col, &compression_data2);
-  RunLengthTest(blockNumber, col, &compression_data2);
- 
-  // MatrixCompressionTest();
-
-
+  // DecodeScalarFieldTest(col, &compression_data0);
+  
+  PeeledCompressedProjectTransformTest();
   
 
   functionTimer.printTimings();
@@ -156,9 +170,9 @@ void InitGlobals()
 
   EIGEN::read(path.c_str(), U); 
 
-  V = VECTOR3_FIELD_3D(U.col(150), xRes, yRes, zRes);
-  TransformVectorFieldSVDCompression(&V, &compression_data1);
-  F = V.scalarField(2);
+  // V = VECTOR3_FIELD_3D(U.col(150), xRes, yRes, zRes);
+  // TransformVectorFieldSVDCompression(&V, &compression_data1);
+  // F = V.scalarField(0);
 }
 
 ////////////////////////////////////////////////////////
@@ -360,6 +374,9 @@ void EncodeOneBlockTest(int blockNumber, int col, COMPRESSION_DATA* data)
   vector<FIELD_3D> blocks;
   GetBlocks(F, &blocks);
   UnitaryBlockDCT(1, &blocks);
+  cout << "post dct: " << endl;
+  cout << blocks[blockNumber].flattened() << endl;
+
   PreprocessBlock(&(blocks[blockNumber]), blockNumber, col, data);
  
   INTEGER_FIELD_3D quantized;
@@ -403,7 +420,7 @@ void EncodeDecodeBlockTest()
   cout << quantized.flattened() << endl;
 
   FIELD_3D decoded;
-  DecodeBlockWithCompressionData(quantized, blockNumber, compression_data0, &decoded);
+  DecodeBlockWithCompressionData(quantized, blockNumber, col, &compression_data0, &decoded);
 
   cout << "newBlock: " << endl;
   cout << decoded.flattened() << endl;
@@ -488,6 +505,13 @@ void ReadToMemoryTest()
 {
   const char* filename = "U.preadvect.compressed.matrix0";
   int* allData = ReadBinaryFileToMemory(filename, &compression_data0);
+  filename = "U.preadvect.SVD.data";
+  ReadSVDData(filename, &compression_data0);
+  vector<Matrix3d>* vList = compression_data0.get_vList();
+  cout << "v at column 150: " << endl;
+  cout << (*vList)[150] << endl;
+  cout << "det v:" << endl;
+  cout << (*vList)[150].determinant() << endl;
 }
 
 ////////////////////////////////////////////////////////
@@ -495,7 +519,7 @@ void ReadToMemoryTest()
 ////////////////////////////////////////////////////////
 void RunLengthTest(int blockNumber, int col, COMPRESSION_DATA* data) 
 {
-  const char* filename = "U.preadvect.compressed.matrix2";
+  const char* filename = "U.preadvect.compressed.matrix0";
 
   int* allData = ReadBinaryFileToMemory(filename, data);
   VectorXi parsedData;
@@ -511,109 +535,6 @@ void RunLengthTest(int blockNumber, int col, COMPRESSION_DATA* data)
 
   cout << "parsedData for block " << blockNumber << ", col " << col << ':' << endl;
   cout << unflattened.flattened() << endl;
-}
-
-void RunLengthOneBlockTest(COMPRESSION_DATA* compression_data)
-{
-  TIMER functionTimer(__FUNCTION__);
-
-  const char* filename = "block01col1.run";
-  DeleteIfExists(filename);
-
-  // we use i for the blockNumber, but let's just debug it for i = 0.
-  int i = 0; 
-  int col = 1;
-
-  // fetch some compression data 
-  int numBlocks = compression_data->get_numBlocks();
-  int numCols = compression_data->get_numCols();
-
-  const INTEGER_FIELD_3D& zigzagArray = compression_data->get_zigzagArray();
-  MatrixXi* blockLengthsMatrix = compression_data->get_blockLengthsMatrix();
-  MatrixXi* blockIndicesMatrix = compression_data->get_blockIndicesMatrix();
-
-  // if it's the first time calling this routine in a chain, preallocate
-  // the matrices
-  if (blockLengthsMatrix->cols() <= 0) {
-    blockLengthsMatrix->resize(numBlocks, numCols);
-  }
-  if (blockIndicesMatrix->cols() <= 0) {
-    blockIndicesMatrix->resize(numBlocks, numCols);
-  }
-
-  // subdivide F into blocks
-  vector<FIELD_3D> blocks;
-  GetBlocks(F, &blocks);
-
-  // do the forward transform 
-  UnitaryBlockDCT(1, &blocks);
-
-  // variable initialization
-  VectorXi blockLengths;
-  // preallocate just for block lengths
-  blockLengths.setZero(numBlocks);
-  INTEGER_FIELD_3D intEncoded_i;
-  VectorXi zigzagged_i;
-
-  for (int i = 0; i < 2; i++) {
-    // rescales data and updates sList
-    PreprocessBlock(&(blocks[i]), i, col, compression_data);
-
-    // performs quantization and damping. updates gammaList
-    EncodeBlock(blocks[i], i, col, compression_data, &intEncoded_i);
-
-    // do the zigzag scan for run-length encoding
-    ZigzagFlatten(intEncoded_i, zigzagArray, &zigzagged_i);
-
-    // performs run-length encoding. updates blockLengths. since
-    // it opens 'filename' in append mode, it can be called in a chain
-    RunLengthEncodeBinary(filename, i, col, zigzagged_i, compression_data);  
-
-  }
-
-  // compute and set the block indices using cum sum
-  VectorXi blockIndices(numBlocks);
-  ModifiedCumSum(blockLengthsMatrix->col(col), &blockIndices);
-  blockIndicesMatrix->col(col) = blockIndices;
-
-  // now read the written binary file and do the run-length decoding
-	FILE* file;
-  file = fopen(filename, "rb");
-	if (!file) {
-		fprintf(stderr, "Unable to open file %s", filename);
-		exit(EXIT_FAILURE);
-	}
-	
-	// Get file length
-	fseek(file, 0, SEEK_END);
-	int fileLen = ftell(file);
-	fseek(file, 0, SEEK_SET);
-
-	// Allocate memory
-  int* buffer = (int*) malloc((fileLen + 1) );
-	if (!buffer) {
-		fprintf(stderr, "Memory error!");
-    fclose(file);
-		exit(EXIT_FAILURE);
-	}
-
-	// Read file contents into buffer
-	fread(buffer, fileLen / sizeof(int), sizeof(int), file);
-	fclose(file);
-
-  VectorXi parsedData0, parsedData1;
-  RunLengthDecodeBinary(buffer, i, col, compression_data, &parsedData0);
-  RunLengthDecodeBinary(buffer, i + 1, col, compression_data, &parsedData1);
-
-  cout << "parsedData0: " << endl;
-  cout << EIGEN::convertInt(parsedData0) << endl;
-
-  cout << "parsedData1: " << endl;
-  cout << EIGEN::convertInt(parsedData1) << endl;
-
-
-
-	free(buffer);
 }
 
 void BuildBlockIndicesTest() 
@@ -632,3 +553,129 @@ void BuildBlockIndicesTest()
 }
 
 
+////////////////////////////////////////////////////////
+// test the run-length decoding and dequantization
+// from a binary file
+////////////////////////////////////////////////////////
+void DequantizationTest(int blockNumber, int col, COMPRESSION_DATA* data) 
+{
+  const char* filename = "U.preadvect.compressed.matrix0";
+
+  int* allData = ReadBinaryFileToMemory(filename, data);
+  VectorXi parsedData;
+  RunLengthDecodeBinary(allData, blockNumber, col, data, &parsedData);
+  cout << "run-length decoded, not yet unzigzagged: " << endl;
+  cout << EIGEN::convertInt(parsedData) << endl;
+
+  INTEGER_FIELD_3D unflattened;
+  const INTEGER_FIELD_3D& zigzagArray = data->get_zigzagArray();
+ 
+  ZigzagUnflatten(parsedData, zigzagArray, &unflattened);
+
+  cout << "parsedData for block " << blockNumber << ", col " << col << ':' << endl;
+  cout << unflattened.flattened() << endl;
+
+  FIELD_3D decoded;
+  DecodeBlockWithCompressionData(unflattened, blockNumber, col, data, &decoded);
+  cout << "decoded: " << endl;
+  cout << decoded.flattened() << endl;
+
+}
+
+////////////////////////////////////////////////////////
+// test the decoding of an entire scalar field from a
+// particular column of the original matrix
+////////////////////////////////////////////////////////
+void DecodeScalarFieldTest(int col, COMPRESSION_DATA* data)
+{
+ 
+  const char* filename = "U.preadvect.compressed.matrix0";
+  
+  int* allData = ReadBinaryFileToMemory(filename, data);
+  
+  FIELD_3D decoded;
+  DecodeScalarField(data, allData, col, &decoded);
+
+  FILE* pFile;
+  pFile = fopen("U.preadvect.decoded.col150.x", "wb");
+
+  if (pFile == NULL) {
+    perror("Error opening file");
+    exit(EXIT_FAILURE);
+  }
+
+  // write out the field for debugging
+  int totalCells = decoded.totalCells();
+  fwrite(&totalCells, sizeof(int), 1, pFile);
+  fwrite(decoded.data(), sizeof(double), totalCells, pFile);
+
+  
+  // write out the 'ground truth' field
+  pFile = fopen("U.preadvect.col150.x", "wb");
+
+  if (pFile == NULL) {
+    perror("Error opening file");
+    exit(EXIT_FAILURE);
+  }
+
+  totalCells = F.totalCells();
+  fwrite(&totalCells, sizeof(int), 1, pFile);
+  fwrite(F.data(), sizeof(double), totalCells, pFile);
+
+  fclose(pFile);
+
+}
+
+
+////////////////////////////////////////////////////////
+// set up the matrix compression data
+////////////////////////////////////////////////////////
+void InitMatrixCompressionData() 
+{
+  // put the svd data inside the 0 component
+  const char* filename = "U.preadvect.SVD.data";
+  ReadSVDData(filename, &compression_data0);
+  filename = "U.preadvect.compressed.matrix0";
+  allData0 = ReadBinaryFileToMemory(filename, &compression_data0);
+  filename = "U.preadvect.compressed.matrix1";
+  allData1 = ReadBinaryFileToMemory(filename, &compression_data1);
+  filename = "U.preadvect.compressed.matrix2";
+  allData2 = ReadBinaryFileToMemory(filename, &compression_data2);
+
+  matrix_data = MATRIX_COMPRESSION_DATA(allData0, allData1, allData2, 
+      &compression_data0, &compression_data1, &compression_data2);
+}
+
+
+////////////////////////////////////////////////////////
+// test the decoding of a full vector field
+////////////////////////////////////////////////////////
+void DecodeVectorFieldTest(int col)
+{
+ 
+  InitMatrixCompressionData();
+
+  VECTOR3_FIELD_3D decoded;
+  DecodeVectorField(&matrix_data, col, &decoded);
+  VectorXd ground = U.col(col);
+  double energyError = abs(decoded.flattenedEigen().squaredNorm() - ground.squaredNorm());
+  energyError /= ground.squaredNorm();
+  cout << "energy error: " << energyError << endl;
+} 
+
+
+void PeeledCompressedProjectTransformTest()
+{
+  InitMatrixCompressionData();
+
+  VECTOR3_FIELD_3D randomV(xRes, yRes, zRes);
+  randomV.setToRandom();
+  VectorXd q;
+  PeeledCompressedProjectTransform(V, &matrix_data, &q);
+
+  VectorXd ground = randomV.peeledProject(U);
+
+  double diff = (q - ground).norm();
+  cout << "projection diff: " << diff << endl;
+
+}

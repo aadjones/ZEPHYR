@@ -405,6 +405,9 @@ public:
   // do x, then y, then z
   FIELD_3D pad_xyz(const VEC3I& paddings) const;
 
+  // pad with zeros rather than contiguous values
+  FIELD_3D zeroPad_xyz(const VEC3I& paddings) const;
+
   // pass back a field with a new uni-sided zero padding of size "paddingSize" in the z direction
   FIELD_3D zeroPad_z(int paddingSize) const;
   

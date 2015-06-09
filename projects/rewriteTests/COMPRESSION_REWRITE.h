@@ -43,8 +43,16 @@ void DCT_Unitary_Normalize(double* buffer);
 // perform a unitary normalization in preparation for the inverse 3d dct
 void UndoNormalize(FIELD_3D* F);
 
+// perform a unitary normalization on a flattened-out FIELD_3D in preparation
+// for the inverse 3d dct
+void UndoNormalizeEigen(VectorXd* F);
+
 // do the corresponding dct based on the plan and direction
 void DCT_Smart_Unitary(const fftw_plan& plan, int direction, double* in, FIELD_3D* F); 
+
+
+// do the corresponding dct on a flattened-out FIELD_3D based on the plan and direction
+void DCT_Smart_Unitary_Eigen(const fftw_plan& plan, int direction, double* in, VectorXd* F);
 
 // given passed in dimensions, compute the amount of padding required to get to
 // dimensions that are evenly divisible by BLOCK_SIZE
@@ -53,6 +61,10 @@ void GetPaddings(const VEC3I& v, VEC3I* paddings);
 // given passed in field, parse it into a vector of padded 3d blocks of size BLOCK_SIZE
 // in row-major order
 void GetBlocks(const FIELD_3D& F, vector<FIELD_3D>* blocks); 
+
+// given a passed in FIELD_3D, pad it with zeros and  parse it 
+// into a vector of flattened 8 x 8 x 8 blocks (listed in row-major order
+void GetBlocksEigen(const FIELD_3D& F, vector<FIELD_3D>* blocks);
 
 // reassemble a big field from a row-major list of smaller blocks
 void AssimilateBlocks(const VEC3I& dims, const vector<FIELD_3D>& V, FIELD_3D* assimilatedField); 
@@ -84,6 +96,11 @@ void TransformVectorFieldSVD(VectorXd* s, MatrixXd* v, VECTOR3_FIELD_3D* transfo
 // compression data to store the v matrix and the singular values.
 // can be called repeatedly in chain-like fashion.
 void TransformVectorFieldSVDCompression(VECTOR3_FIELD_3D* V, COMPRESSION_DATA* data);
+
+// perform the coordinate transform without having
+// to recompute the SVD by reading in from a cached 3 x 3
+// v matrix. used for the projection trick later on.
+void TransformVectorFieldSVDCached(Matrix3d* v, VECTOR3_FIELD_3D* V);
 
 // undo the effects of a previous svd coordinate transform on a vector field
 void UntransformVectorFieldSVD(const MatrixXd& v, VECTOR3_FIELD_3D* transformedV);
@@ -122,7 +139,7 @@ void DecodeBlock(const INTEGER_FIELD_3D& intBlock, int blockNumber, int col,
 // rather than passed in decompression data. due to const poisoning, compression
 // data cannot be marked const, but is treated as such.
 void DecodeBlockWithCompressionData(const INTEGER_FIELD_3D& intBlock, 
-  int blockNumber, COMPRESSION_DATA& data, FIELD_3D* decoded); 
+  int blockNumber, int col, COMPRESSION_DATA* data, FIELD_3D* decoded); 
 
 // flattens an INTEGER_FIELD_3D through a zig-zag scan
 // into a VectorXi. Since the scan always follows the same order,
@@ -143,9 +160,6 @@ int FindRun(const VectorXi& V, int i);
 void RunLengthEncodeBinary(const char* filename, int blockNumber, int col, 
     const VectorXi& zigzaggedArray, COMPRESSION_DATA* compression_data);
 
-// different implementation. will it solve the bug?!
-void RunLengthEncodeBinaryNew(const char* filename, int blockNumber, int col, 
-    const VectorXi& zigzaggedArray, COMPRESSION_DATA* compression_data);
 
 // decode a run-length encoded binary file and fill 
 // a VectorXi with the contents.
@@ -176,10 +190,45 @@ void DeleteIfExists(const char* filename);
 void CompressAndWriteMatrixComponents(const char* filename, const MatrixXd& U,  
       COMPRESSION_DATA* data0, COMPRESSION_DATA* data1, COMPRESSION_DATA* data2);
 
+// reads from a binary file of the SVD data and sets the initializations
+// inside compression data
+void ReadSVDData(const char* filename, COMPRESSION_DATA* data);
+
 // reads from a binary file into a buffer and sets initializations
 // inside compression data
 int* ReadBinaryFileToMemory(const char* filename, 
     COMPRESSION_DATA* data); 
+
+// decode a particular scalar component of the corresponding column of the 
+// matrix
+void DecodeScalarField(COMPRESSION_DATA* compression_data, int* allData, 
+    int col, FIELD_3D* decoded);
+
+// decode an entire scalar field of a particular column from matrix compression data
+// *without* going back to the spatial domain (or the SVD transform). leave them
+// in a list of blocks as well
+void DecodeScalarFieldEigen(COMPRESSION_DATA* compression_data, int* allData, 
+    int col, vector<VectorXd>* decoded);
+
+// uses DecodeScalarField three times to form a vector field, and then undoes
+// the SVD transform to recover the original vector field corresponding to col
+void DecodeVectorField(MATRIX_COMPRESSION_DATA* data, int col, 
+    VECTOR3_FIELD_3D* decoded);
+
+// compute the block-wise dot product between two lists and sum them into one
+// large dot product
+double GetDotProductSum(const vector<VectorXd>& Vlist, const vector<VectorXd>& Wlist); 
+ 
+// helper function for frequency domain projection. transforms 
+// V first by the SVD and then DCT. fills up the three vectors
+// with the three components.
+void TransformSVDAndDCT(int col, VECTOR3_FIELD_3D* V, 
+    MATRIX_COMPRESSION_DATA* U_data, 
+    vector<VectorXd>* Xpart, vector<VectorXd>* Ypart, vector<VectorXd>* Zpart);
+
+// projection, implemented in the frequency domain
+void PeeledCompressedProjectTransform(const VECTOR3_FIELD_3D& V, 
+    MATRIX_COMPRESSION_DATA* U_data, VectorXd* q);
 
 #endif
 

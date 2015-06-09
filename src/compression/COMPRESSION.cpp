@@ -2113,8 +2113,7 @@ void GetRowFast(int row, int matrixRow, MATRIX_COMPRESSION_DATA& data, MatrixXd&
 // generates the header information in the binary file
 ////////////////////////////////////////////////////////
 void WriteMetaData(const char* filename, const COMPRESSION_DATA& compression_data, 
-    const MatrixXd& sListMatrix, const MatrixXi& blockLengthsMatrix, 
-    const MatrixXi& blockIndicesMatrix) {
+    const MATRIX& sListMatrix, const MATRIX& blockLengthsMatrix, const MATRIX& blockIndicesMatrix) {
 
   TIMER functionTimer(__FUNCTION__);
     FILE* pFile;
@@ -2798,7 +2797,7 @@ void PeeledCompressedUnproject(VECTOR3_FIELD_3D& V, MATRIX_COMPRESSION_DATA& U_d
 
 }
 
-double GetDotProductSum(vector<VectorXd> Vlist, vector<VectorXd> Wlist) {
+double GetDotProductSum(const vector<VectorXd>& Vlist, const vector<VectorXd>& Wlist) {
 
   assert(Vlist.size() == Wlist.size());
 

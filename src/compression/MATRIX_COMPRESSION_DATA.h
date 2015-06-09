@@ -14,21 +14,27 @@ class MATRIX_COMPRESSION_DATA {
   public: 
     MATRIX_COMPRESSION_DATA(); 
 
-    MATRIX_COMPRESSION_DATA(int* const& dataX, int* const& dataY, int* const& dataZ,
+    MATRIX_COMPRESSION_DATA(int* dataX, int* dataY, int* dataZ,
         const DECOMPRESSION_DATA& decompression_dataX, const DECOMPRESSION_DATA& decompression_dataY, const DECOMPRESSION_DATA& decompression_dataZ);
 
+    MATRIX_COMPRESSION_DATA(int* dataX, int* dataY, int* dataZ,
+        COMPRESSION_DATA* compression_dataX, COMPRESSION_DATA* compression_dataY, COMPRESSION_DATA* decompression_dataZ);
     ~MATRIX_COMPRESSION_DATA();
 
    
     // getters
     
-    int* const& get_dataX() const { return _dataX; }
-    int* const& get_dataY() const { return _dataY; }
-    int* const& get_dataZ() const { return _dataZ; }
+    int* get_dataX() const { return _dataX; }
+    int* get_dataY() const { return _dataY; }
+    int* get_dataZ() const { return _dataZ; }
 
     const DECOMPRESSION_DATA& get_decompression_dataX() const { return _decompression_dataX; }
     const DECOMPRESSION_DATA& get_decompression_dataY() const { return _decompression_dataY; }
     const DECOMPRESSION_DATA& get_decompression_dataZ() const { return _decompression_dataZ; }
+
+    COMPRESSION_DATA* get_compression_dataX() { return &_compression_dataX; }
+    COMPRESSION_DATA* get_compression_dataY() { return &_compression_dataY; }
+    COMPRESSION_DATA* get_compression_dataZ() { return &_compression_dataZ; }
 
     vector<FIELD_3D>& get_cachedBlocksX() { return _cachedBlocksX; }
     vector<FIELD_3D>& get_cachedBlocksY() { return _cachedBlocksY; }
@@ -41,9 +47,9 @@ class MATRIX_COMPRESSION_DATA {
     
     // setters
     
-    void set_dataX(int* const& dataX) { _dataX = dataX; }
-    void set_dataY(int* const& dataY) { _dataY = dataY; }
-    void set_dataZ(int* const& dataZ) { _dataZ = dataZ; }
+    void set_dataX(int* dataX) { _dataX = dataX; }
+    void set_dataY(int* dataY) { _dataY = dataY; }
+    void set_dataZ(int* dataZ) { _dataZ = dataZ; }
 
     void set_decompression_dataX(const DECOMPRESSION_DATA& decompression_dataX) { _decompression_dataX = decompression_dataX; }
     void set_decompression_dataY(const DECOMPRESSION_DATA& decompression_dataY) { _decompression_dataY = decompression_dataY; }
@@ -67,9 +73,9 @@ class MATRIX_COMPRESSION_DATA {
       // initialize decode counter
       // _decodeCounter = 0;
 
-      const int xRes = 8;
-      const int yRes = 8;
-      const int zRes = 8;
+      const int xRes = BLOCK_SIZE;
+      const int yRes = BLOCK_SIZE;
+      const int zRes = BLOCK_SIZE;
 
       // clunky, but it works
       int numCols = (*this)._decompression_dataX.get_numCols();
@@ -107,9 +113,9 @@ class MATRIX_COMPRESSION_DATA {
     */
 
     void dct_setup(int direction) {
-      const int xRes = 8;
-      const int yRes = 8;
-      const int zRes = 8;
+      const int xRes = BLOCK_SIZE;
+      const int yRes = BLOCK_SIZE;
+      const int zRes = BLOCK_SIZE;
 
       _dct_in = (double*) fftw_malloc(xRes * yRes * zRes * sizeof(double));
       _dct_out = (double*) fftw_malloc(xRes * yRes * zRes * sizeof(double));
@@ -141,6 +147,10 @@ class MATRIX_COMPRESSION_DATA {
     DECOMPRESSION_DATA _decompression_dataX;
     DECOMPRESSION_DATA _decompression_dataY;
     DECOMPRESSION_DATA _decompression_dataZ;
+
+    COMPRESSION_DATA _compression_dataX;
+    COMPRESSION_DATA _compression_dataY;
+    COMPRESSION_DATA _compression_dataZ;
 
     vector<FIELD_3D> _cachedBlocksX;
     vector<FIELD_3D> _cachedBlocksY;
