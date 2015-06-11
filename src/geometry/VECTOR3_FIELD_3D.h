@@ -216,6 +216,9 @@ public:
   VectorXd flattenedEigen();
   VectorXd flattenedEigenHomogeneous();
 
+  // do the reverse of a flatten operation
+  void unflatten(const VECTOR& v);
+  
   // get gradient field
   VECTOR3_FIELD_3D gradient();
 
@@ -261,6 +264,17 @@ public:
 
   // get a z slice
   VECTOR3_FIELD_2D zSlice(const int z) const;
+
+  // compute the vorticity function according to the 
+  // DeWitt et al. paper
+  void vorticity(int i, int k1, int k2, int k3);
+
+  // compute the Laplacian Eigenfunction according to the DeWitt et al. paper
+  void eigenfunctionUnscaled(int i, int k1, int k2, int k3);
+  void eigenfunction(int i, int k1, int k2, int k3);
+
+  // get the structure coefficient
+  static Real structureCoefficient(vector<int> a, vector<int> b, vector<int> k, int xRes = 256, int yRes = 256, int zRes = 256);
 
 private:
   int _xRes;
