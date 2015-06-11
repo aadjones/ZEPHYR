@@ -81,6 +81,8 @@ using namespace std;
     // write the matrix to a binary file
     // everything is always written as a double
     void write(const char* filename);
+    void write(FILE* file);
+    void writeGz(gzFile& file) const;
     void writeMatlab(string filename, string varname);
     
     // read from a binary file
@@ -96,7 +98,6 @@ using namespace std;
     // force a single precision read
     void readSingle(const char* filename);
     void readSingleText(const char* filename);
-    
 
     // resize the matrix and wipe to zero
     void resizeAndWipe(int rows, int cols);
