@@ -528,7 +528,8 @@ const VEC3F VECTOR3_FIELD_3D::operator()(const VEC3F& position) const
   // recenter position
   positionCopy -= corner;
   */
-  VEC3F positionCopy = position - _center + (Real)0.5 * _lengths - (Real)0.5 * dxs();
+  //VEC3F positionCopy = position - _center + (Real)0.5 * _lengths - (Real)0.5 * dxs();
+  VEC3F positionCopy = position - _center + (Real)0.5 * _lengths;
 
   positionCopy[0] *= 1.0 / _dx;
   positionCopy[1] *= 1.0 / _dy;
@@ -2568,7 +2569,7 @@ void VECTOR3_FIELD_3D::drawBoundingBox()
     VEC3F v110 = cellCenter(_xRes,_yRes,0);
     VEC3F v111 = cellCenter(_xRes, _yRes, _zRes);
 
-    glColor4f(1,0,0,1);
+    glColor4f(1,1,1,1);
 
     glBegin(GL_LINES);
 #ifdef SINGLE_PRECISION
@@ -3119,6 +3120,19 @@ VECTOR VECTOR3_FIELD_3D::flattened()
           final[index] = (*this)(x,y,z)[i];
 
   return final;
+}
+
+//////////////////////////////////////////////////////////////////////
+// do the reverse of a flatten operation
+//////////////////////////////////////////////////////////////////////
+void VECTOR3_FIELD_3D::unflatten(const VECTOR& v)
+{
+  int index = 0;
+  for (int z = 0; z < _zRes; z++)
+    for (int y = 0; y < _yRes; y++)
+      for (int x = 0; x < _xRes; x++)
+        for (int i = 0; i < 3; i++, index++)
+          (*this)(x,y,z)[i] = v[index];
 }
 
 //////////////////////////////////////////////////////////////////////
@@ -4153,4 +4167,178 @@ void VECTOR3_FIELD_3D::normalizeToLargest()
   Real inverse = 1.0 / maxMagnitude;
   for (int x = 0; x < _totalCells; x++)
     _data[x] *= inverse;
+}
+
+//////////////////////////////////////////////////////////////////////
+// compute the vorticity function according to the 
+// DeWitt et al. paper
+//////////////////////////////////////////////////////////////////////
+void VECTOR3_FIELD_3D::vorticity(int i, int k1, int k2, int k3)
+{
+  int index = 0;
+  Real dx = 3.14f / (_xRes - 1);
+  Real dy = 3.14f / (_yRes - 1);
+  Real dz = 3.14f / (_zRes - 1);
+  for (int z = 0; z < _zRes; z++)
+    for (int y = 0; y < _yRes; y++)
+      for (int x = 0; x < _xRes; x++, index++)
+      {
+        VEC3F center = cellCenter(x,y,z);
+
+        //Real xReal = center[0];
+        //Real yReal = center[1];
+        Real xReal = x * dx;
+        Real yReal = y * dy;
+        Real zReal = z * dz;
+
+        if (i == 0)
+        {
+          _data[index][0] = 0;
+          _data[index][1] =  k3 * sin(k1 * xReal) * cos(k2 * yReal) * sin(k3 * zReal);
+          _data[index][2] = -k2 * sin(k1 * xReal) * sin(k2 * yReal) * cos(k3 * zReal);
+        }
+        else if (i == 1)
+        {
+          _data[index][0] =  k3 * cos(k1 * xReal) * sin(k2 * yReal) * sin(k3 * zReal);
+          _data[index][1] =  0;
+          _data[index][2] = -k1 * sin(k1 * xReal) * sin(k2 * yReal) * cos(k3 * zReal);
+        }
+        else if (i == 2)
+        {
+          _data[index][0] =  k2 * cos(k1 * xReal) * sin(k2 * yReal) * sin(k3 * zReal);
+          _data[index][1] = -k1 * sin(k1 * xReal) * cos(k2 * yReal) * sin(k3 * zReal);
+          _data[index][2] =  0;
+        }
+        else
+        {
+          cout << __FILE__ << " " << __FUNCTION__ << " " << __LINE__ << " : " << endl;
+          cout << __FILE__ << " " << __FUNCTION__ << " " << __LINE__ << " : " << endl;
+          cout << " Invalid i value: " << i << " !!!!" << endl;
+          cout << __FILE__ << " " << __FUNCTION__ << " " << __LINE__ << " : " << endl;
+          cout << __FILE__ << " " << __FUNCTION__ << " " << __LINE__ << " : " << endl;
+        }
+      }
+}
+
+//////////////////////////////////////////////////////////////////////
+// compute the Laplacian Eigenfunction according to the 
+// DeWitt et al. paper
+//////////////////////////////////////////////////////////////////////
+void VECTOR3_FIELD_3D::eigenfunctionUnscaled(int i, int k1, int k2, int k3)
+{
+  int index = 0;
+
+  //Real dx = 3.14f / (_xRes - 1);
+  //Real dy = 3.14f / (_yRes - 1);
+  //Real dz = 3.14f / (_zRes - 1);
+  Real dx = 3.14159265f / (_xRes - 1);
+  Real dy = 3.14159265f / (_yRes - 1);
+  Real dz = 3.14159265f / (_zRes - 1);
+
+  int k1Sq = k1 * k1;
+  int k2Sq = k2 * k2;
+  int k3Sq = k3 * k3;
+
+  for (int z = 0; z < _zRes; z++)
+    for (int y = 0; y < _yRes; y++)
+      for (int x = 0; x < _xRes; x++, index++)
+      {
+        Real xReal = x * dx;
+        Real yReal = y * dy;
+        Real zReal = z * dz;
+
+        if (i == 0)
+        {
+          //_data[index][0] =  (k2Sq + k3Sq) * cos(k1 * xReal) * sin(k2 * yReal) * sin(k3 * zReal); 
+          //_data[index][1] = -k1 * k2       * sin(k1 * xReal) * cos(k2 * yReal) * sin(k3 * zReal);
+          //_data[index][2] = -k1 * k3       * sin(k1 * xReal) * sin(k2 * yReal) * cos(k3 * zReal);
+          _data[index][0] = -(k2Sq + k3Sq) * sin(k1 * xReal) * cos(k2 * yReal) * cos(k3 * zReal); 
+          _data[index][1] = k1 * k2        * cos(k1 * xReal) * sin(k2 * yReal) * cos(k3 * zReal);
+          _data[index][2] = k1 * k3        * cos(k1 * xReal) * cos(k2 * yReal) * sin(k3 * zReal);
+        }
+        else if (i == 1)
+        {
+          //_data[index][0] =  k2 * k1       * cos(k1 * xReal) * sin(k2 * yReal) * sin(k3 * zReal); 
+          //_data[index][1] = -(k1Sq + k3Sq) * sin(k1 * xReal) * cos(k2 * yReal) * sin(k3 * zReal);
+          //_data[index][2] =  k2 * k3       * sin(k1 * xReal) * sin(k2 * yReal) * cos(k3 * zReal);
+          _data[index][0] =  -k2 * k1     * sin(k1 * xReal) * cos(k2 * yReal) * cos(k3 * zReal); 
+          _data[index][1] = (k1Sq + k3Sq) * cos(k1 * xReal) * sin(k2 * yReal) * cos(k3 * zReal);
+          _data[index][2] =  -k2 * k3     * cos(k1 * xReal) * cos(k2 * yReal) * sin(k3 * zReal);
+        }
+        else if (i == 2)
+        {
+          _data[index][0] =  k3 * k1       * sin(k1 * xReal) * cos(k2 * yReal) * cos(k3 * zReal); 
+          _data[index][1] =  k3 * k2       * cos(k1 * xReal) * sin(k2 * yReal) * cos(k3 * zReal);
+          _data[index][2] = -(k1Sq + k2Sq) * cos(k1 * xReal) * cos(k2 * yReal) * sin(k3 * zReal);
+        }
+      }
+}
+
+//////////////////////////////////////////////////////////////////////
+// compute the Laplacian Eigenfunction according to the 
+// DeWitt et al. paper
+//////////////////////////////////////////////////////////////////////
+void VECTOR3_FIELD_3D::eigenfunction(int i, int k1, int k2, int k3)
+{
+  Real eig = 1.0 / (k1 * k1 + k2 * k2 + k3 * k3);
+  eigenfunctionUnscaled(i,k1,k2,k3);
+
+  (*this) *= eig;
+}
+
+//////////////////////////////////////////////////////////////////////
+// get the structure coefficient
+//////////////////////////////////////////////////////////////////////
+Real VECTOR3_FIELD_3D::structureCoefficient(vector<int> a, vector<int> b, vector<int> k, int xRes, int yRes, int zRes)
+{
+  VEC3F center(M_PI / 2, M_PI / 2, M_PI / 2);
+  VEC3F lengths(M_PI, M_PI, M_PI);
+
+  // i advects j
+  VECTOR3_FIELD_3D iVelocity(xRes, yRes, zRes, center, lengths);
+  VECTOR3_FIELD_3D jVelocity(xRes, yRes, zRes, center, lengths);
+
+  // get the analytic eigenfunctions
+  iVelocity.eigenfunctionUnscaled(a[3], a[0],a[1],a[2]);
+  jVelocity.eigenfunctionUnscaled(b[3], b[0],b[1],b[2]);
+
+  // the vorticity field
+  VECTOR3_FIELD_3D kVorticity(xRes, yRes, zRes, center, lengths);
+  kVorticity.vorticity(k[3], k[0],k[1],k[2]);
+
+  // advect field j using field i
+  VECTOR3_FIELD_3D crossField(xRes, yRes, zRes, center, lengths);
+  for (int z = 0; z < zRes; z++)
+    for (int y = 0; y < yRes; y++)
+      for (int x = 0; x < xRes; x++)
+      {
+        MATRIX3 cross = MATRIX3::cross(iVelocity(x,y,z));
+        crossField(x,y,z) = cross * jVelocity(x,y,z);
+      }
+
+  // dot product of vorticity and advected velocity
+  VECTOR crossFieldFlat = crossField.flattened();
+  Real dot = crossFieldFlat.dot(kVorticity.flattened());
+
+  // do some picky final scalings that arise from the domain dimensions
+  const Real dxCubed = (lengths[0] / xRes) * (lengths[0] / xRes) * (lengths[0] / xRes);
+  Real final = dot * dxCubed;
+
+  // the integral is actuall defined over [-pi, pi], not [0, pi], but it's just 4 repetitions
+  // of the same function
+  //
+  // 8 tiles of the same function in 3D
+  //final *= 4.0;
+  final *= 8.0;
+
+  // get rid of the double pi that appears because of the domain dimensions
+  //
+  // triple pi in three dimensions, as there is another integration direction
+  //final *= 1.0 / (M_PI * M_PI);
+  final *= 1.0 / (M_PI * M_PI * M_PI);
+
+  // scale according to the eigenvalue
+  final *= 1.0 / (b[0] * b[0] + b[1] * b[1] + b[2] * b[2]);
+
+  return final;
 }
