@@ -96,6 +96,7 @@ public:
   
   // dot product
   Real operator*(const VECTOR& vector) const;
+  Real dot(const VECTOR& vector) const;
 
   // raw data pointer
   Real* data() { return _vector; };
