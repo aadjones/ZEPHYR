@@ -98,6 +98,53 @@ void MATRIX::write(const char* filename)
   fclose(file);
 }
 
+//////////////////////////////////////////////////////////////////////
+// write the matrix to a file
+//////////////////////////////////////////////////////////////////////
+void MATRIX::write(FILE* file)
+{
+  // write dimensions
+  fwrite((void*)&_rows, sizeof(int), 1, file);
+  fwrite((void*)&_cols, sizeof(int), 1, file);
+
+  // always write out as a double
+  if (sizeof(Real) != sizeof(double))
+  {
+    double* matrixDouble = new double[_rows * _cols];
+    for (int x = 0; x < _rows * _cols; x++)
+      matrixDouble[x] = _matrix[x];
+
+    fwrite((void*)matrixDouble, sizeof(double), _rows * _cols, file);
+    delete[] matrixDouble;
+    fclose(file);
+  }
+  else
+    fwrite((void*)_matrix, sizeof(Real), _rows * _cols, file);
+}
+
+//////////////////////////////////////////////////////////////////////
+// write the gzipped matrix to a stream
+//////////////////////////////////////////////////////////////////////
+void MATRIX::writeGz(gzFile& file) const
+{
+  // write dimensions
+  gzwrite(file, (void*)&_rows, sizeof(int));
+  gzwrite(file, (void*)&_cols, sizeof(int));
+
+  // always write out as a double
+  if (sizeof(Real) != sizeof(double))
+  {
+    double* matrixDouble = new double[_rows * _cols];
+    for (int x = 0; x < _rows * _cols; x++)
+      matrixDouble[x] = _matrix[x];
+
+    gzwrite(file, (void*)matrixDouble, sizeof(double) * _rows * _cols);
+    delete[] matrixDouble;
+  }
+  else
+    gzwrite(file, (void*)_matrix, sizeof(Real) * _rows * _cols);
+}
+
 //////////////////////////////////////////////////////////////////////////////
 // MATRIX_OSX include starts here
 //////////////////////////////////////////////////////////////////////////////
