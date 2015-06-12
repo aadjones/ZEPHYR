@@ -60,8 +60,8 @@ VEC3F center(0,0,0);
 //VEC3F center(0.5, 0.5, 0.5);
 VEC3F lengths(1,1,1);
 FIELD_3D field(10,10,10, center, lengths);
-VECTOR3_FIELD_3D velocityField(50,50,50, center, lengths);
-//VECTOR3_FIELD_3D velocityField(100,100,100, center, lengths);
+//VECTOR3_FIELD_3D velocityField(50,50,50, center, lengths);
+VECTOR3_FIELD_3D velocityField(100,100,100, center, lengths);
 //VECTOR3_FIELD_3D velocityField(20,20,20, center, lengths);
 
 vector<VEC3F> particles;
@@ -207,6 +207,7 @@ int reverseLookup(const vector<int>& a123)
 ///////////////////////////////////////////////////////////////////////
 void buildVorticityBasis()
 {
+  TIMER functionTimer(__FUNCTION__);
   vector<VECTOR> columns(ixyz.size());
 #pragma omp parallel
 #pragma omp for  schedule(dynamic)
@@ -232,6 +233,7 @@ void buildVorticityBasis()
 ///////////////////////////////////////////////////////////////////////
 void buildVelocityBasis()
 {
+  TIMER functionTimer(__FUNCTION__);
   vector<VECTOR> columns(ixyz.size());
 #pragma omp parallel
 #pragma omp for  schedule(dynamic)
@@ -257,6 +259,7 @@ void buildVelocityBasis()
 ///////////////////////////////////////////////////////////////////////
 void buildC()
 {
+  TIMER functionTimer(__FUNCTION__);
   int basisRank = ixyz.size();
 
   int xRes = velocityField.xRes();
@@ -264,11 +267,11 @@ void buildC()
   int zRes = velocityField.zRes();
 
   C = TENSOR3(basisRank, basisRank, basisRank);
-#pragma omp parallel
-#pragma omp for  schedule(dynamic)
   for (int d1 = 0; d1 < basisRank; d1++)
   {
     vector<int> a123 = ixyz[d1];
+#pragma omp parallel
+#pragma omp for  schedule(dynamic)
     for (int d2 = 0; d2 < basisRank; d2++) 
     {
       vector<int> b123 = ixyz[d2];
@@ -571,7 +574,7 @@ int glvuWindow()
 //////////////////////////////////////////////////////////////////////////////
 int main(int argc, char *argv[])
 {
-  int dim = 2;
+  int dim = 3;
   buildTableIXYZ(dim);
   bool success = velocityU.read("./data/velocityU.matrix");
 
@@ -585,6 +588,7 @@ int main(int argc, char *argv[])
     buildVelocityBasis();
     buildVorticityBasis();
     buildC();
+    TIMER::printTimings();
   }
 
   //exit(0);
