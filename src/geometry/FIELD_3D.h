@@ -225,6 +225,9 @@ public:
   // set to a Gaussian
   void insertGaussian(const VEC3F& center, const Real amplitude = 1.0, const VEC3F sigmas = VEC3F(0.1, 0.1, 0.1));
 
+  // insert a sphere of smoke into the grid
+  void insertSphere(const VEC3F& center, const Real radius);
+
   // convolve this field with a smaller field
   FIELD_3D convolve(const FIELD_3D& filter);
   FIELD_3D convolveToroidal(const FIELD_3D& filter);

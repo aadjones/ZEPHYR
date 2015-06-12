@@ -60,9 +60,17 @@ VEC3F center(0,0,0);
 //VEC3F center(0.5, 0.5, 0.5);
 VEC3F lengths(1,1,1);
 FIELD_3D field(10,10,10, center, lengths);
+
+// these determine the size of the basis that will be used
+//int res = 20;
+//int dim = 2;
+int res = 100;
+int dim = 3;
+
+//int res = 100;
 //VECTOR3_FIELD_3D velocityField(50,50,50, center, lengths);
 //VECTOR3_FIELD_3D velocityField(100,100,100, center, lengths);
-VECTOR3_FIELD_3D velocityField(20,20,20, center, lengths);
+VECTOR3_FIELD_3D velocityField(res, res, res, center, lengths);
 
 vector<VEC3F> particles;
 vector<list<VEC3F> > ribbons;
@@ -82,7 +90,7 @@ int xRes;
 
 VECTOR w;
 VECTOR wDot;
-Real dt = 0.0001;
+Real dt = 0.001;
 
 ///////////////////////////////////////////////////////////////////////
 // step the system forward in time
@@ -111,27 +119,19 @@ void stepEigenfunctions()
     Real lambda = -(eigenvalues[k]);
 
     //const Real viscosity = 0.5;
-    //const Real viscosity = 10;
-    const Real viscosity = 0.0;
+    //const Real viscosity = 1.0;
+    //const Real viscosity = 5;
+    const Real viscosity = 10;
 
     // diffuse
     w[k] *= exp(lambda * dt * viscosity);
   }
-
-  // goose the lowest mode?
-  //cout << "w0: " << w[0] << endl;
-  //w[0] += 1;
 
   {
   TIMER reconstructionTimer("Velocity Reconstruction");
   VECTOR final = velocityU * w;
   velocityField.unflatten(final);
   }
-  //vectorField2D.stompBorder();
-
-  // visualize...
-  //distanceField = vectorField2D.LIC();
-  //updateViewingTexture();
 }
 
 ///////////////////////////////////////////////////////////////////////
@@ -205,7 +205,7 @@ int reverseLookup(const vector<int>& a123)
 ///////////////////////////////////////////////////////////////////////
 // Build up the velocity basis matrix
 ///////////////////////////////////////////////////////////////////////
-void buildVorticityBasis()
+void buildVorticityBasis(const string& filename)
 {
   TIMER functionTimer(__FUNCTION__);
   vector<VECTOR> columns(ixyz.size());
@@ -225,13 +225,14 @@ void buildVorticityBasis()
   cout << " Built " << ixyz.size() << " vorticity functions " << endl;
 
   vorticityU = MATRIX(columns);
-  vorticityU.write("./data/vorticityU.matrix");
+  //vorticityU.write("./data/vorticityU.matrix");
+  vorticityU.write(filename.c_str());
 }
 
 ///////////////////////////////////////////////////////////////////////
 // Build up the velocity basis matrix
 ///////////////////////////////////////////////////////////////////////
-void buildVelocityBasis()
+void buildVelocityBasis(const string& filename)
 {
   TIMER functionTimer(__FUNCTION__);
   vector<VECTOR> columns(ixyz.size());
@@ -251,13 +252,13 @@ void buildVelocityBasis()
   cout << " Built " << ixyz.size() << " eigenfunctions " << endl;
 
   velocityU = MATRIX(columns);
-  velocityU.write("./data/velocityU.matrix");
+  velocityU.write(filename.c_str());
 }
 
 ///////////////////////////////////////////////////////////////////////
 // build the structure coefficient tensor
 ///////////////////////////////////////////////////////////////////////
-void buildC()
+void buildC(const string& filename)
 {
   TIMER functionTimer(__FUNCTION__);
   int basisRank = ixyz.size();
@@ -294,7 +295,7 @@ void buildC()
     }
     cout << d1 << endl;
   }
-  C.write("./data/C.tensor");
+  C.write(filename);
 
   //cout << " newC = " << newC << endl;
   //cout << " numericalC= " << C.slab(0) << endl; 
@@ -431,6 +432,7 @@ void glutKeyboard(unsigned char key, int x, int y)
       animate = !animate;
       break;
     case 'q':
+      TIMER::printTimings();
       exit(0);
       break;
     case 'v':
@@ -574,24 +576,36 @@ int glvuWindow()
 //////////////////////////////////////////////////////////////////////////////
 int main(int argc, char *argv[])
 {
-  int dim = 3;
   buildTableIXYZ(dim);
-  /*
-  bool success = velocityU.read("./data/velocityU.matrix");
 
-  if (success)
-  {
-    vorticityU.read("./data/vorticityU.matrix");
-    C.read("./data/C.tensor");
-  }
+  char buffer[256];
+  bool success = true;
+
+  sprintf(buffer, "./data/C.res.%i.dim.%i.tensor", res, dim);
+  success = C.read(buffer);
+  if (!success)
+    buildC(buffer);
   else
-  */
-  {
-    buildVelocityBasis();
-    buildVorticityBasis();
-    buildC();
-    TIMER::printTimings();
-  }
+    cout << buffer << " found! " << endl;
+
+  // this is not actually needed at runtime
+  /*
+  sprintf(buffer, "./data/vorticity.res.%i.dim.%i.matrix", res, dim);
+  success = vorticityU.read(buffer);
+  if (!success)
+    buildVorticityBasis(buffer);
+  else
+    cout << buffer << " found! " << endl;
+    */
+
+  sprintf(buffer, "./data/velocity.res.%i.dim.%i.matrix", res, dim);
+  success = velocityU.read(buffer);
+  if (!success)
+    buildVelocityBasis(buffer);
+  else
+    cout << buffer << " found! " << endl;
+
+  TIMER::printTimings();
 
   //exit(0);
   w = VECTOR(ixyz.size());
@@ -599,7 +613,10 @@ int main(int argc, char *argv[])
 
   VECTOR3_FIELD_3D impulse(velocityField);
   impulse = 0;
-  impulse(impulse.xRes() / 2, impulse.yRes() / 2, impulse.zRes() / 2)[1] = 1;
+  //impulse(impulse.xRes() / 2, impulse.yRes() / 2, impulse.zRes() / 2)[1] = 1;
+  int half = impulse.xRes() / 2;
+  impulse(half, half, half)[1] = 1;
+  //impulse(half, half, half)[1] = 1;
   VECTOR force = velocityU ^ impulse.flattened();
   w += force;
 
@@ -645,6 +662,8 @@ void runEverytime()
   stepEigenfunctions();
   
   TIMER advectionTimer("Particle advection");
+#pragma omp parallel
+#pragma omp for  schedule(dynamic)
   for (int x = 0; x < particles.size(); x++)
   {
     particles[x] += dt * velocityField(particles[x]);

@@ -6944,3 +6944,20 @@ FIELD_3D FIELD_3D::yRampField(const FIELD_3D& example, const Real plumeBase)
   
   return final;
 }
+
+//////////////////////////////////////////////////////////////////////
+// insert a sphere of smoke into the grid
+//////////////////////////////////////////////////////////////////////
+void FIELD_3D::insertSphere(const VEC3F& center, const Real radius)
+{
+  for (int z = 0; z < _zRes; z++)
+    for (int y = 0; y < _yRes; y++)
+      for (int x = 0; x < _xRes; x++)
+      {
+        VEC3F cell = cellCenter(x,y,z);
+        VEC3F diff = center - cell;
+
+        if (norm(diff) < radius)
+          (*this)(x,y,z) = 1.0;
+      }
+}
