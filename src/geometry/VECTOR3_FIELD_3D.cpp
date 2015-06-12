@@ -4299,8 +4299,10 @@ Real VECTOR3_FIELD_3D::structureCoefficient(vector<int> a, vector<int> b, vector
   VECTOR3_FIELD_3D jVelocity(xRes, yRes, zRes, center, lengths);
 
   // get the analytic eigenfunctions
-  iVelocity.eigenfunctionUnscaled(a[3], a[0],a[1],a[2]);
-  jVelocity.eigenfunctionUnscaled(b[3], b[0],b[1],b[2]);
+  //iVelocity.eigenfunctionUnscaled(a[3], a[0],a[1],a[2]);
+  iVelocity.eigenfunctionUnscaled(a[0],a[1],a[2],a[3]);
+  //jVelocity.eigenfunctionUnscaled(b[3], b[0],b[1],b[2]);
+  jVelocity.eigenfunctionUnscaled(b[0],b[1],b[2],b[3]);
 
   // the vorticity field
   VECTOR3_FIELD_3D kVorticity(xRes, yRes, zRes, center, lengths);

@@ -207,6 +207,7 @@ int reverseLookup(const vector<int>& a123)
 ///////////////////////////////////////////////////////////////////////
 void buildVorticityBasis()
 {
+  TIMER functionTimer(__FUNCTION__);
   vector<VECTOR> columns(ixyz.size());
 #pragma omp parallel
 #pragma omp for  schedule(dynamic)
@@ -232,6 +233,7 @@ void buildVorticityBasis()
 ///////////////////////////////////////////////////////////////////////
 void buildVelocityBasis()
 {
+  TIMER functionTimer(__FUNCTION__);
   vector<VECTOR> columns(ixyz.size());
 #pragma omp parallel
 #pragma omp for  schedule(dynamic)
@@ -257,6 +259,7 @@ void buildVelocityBasis()
 ///////////////////////////////////////////////////////////////////////
 void buildC()
 {
+  TIMER functionTimer(__FUNCTION__);
   int basisRank = ixyz.size();
 
   int xRes = velocityField.xRes();
@@ -264,11 +267,11 @@ void buildC()
   int zRes = velocityField.zRes();
 
   C = TENSOR3(basisRank, basisRank, basisRank);
-#pragma omp parallel
-#pragma omp for  schedule(dynamic)
   for (int d1 = 0; d1 < basisRank; d1++)
   {
     vector<int> a123 = ixyz[d1];
+#pragma omp parallel
+#pragma omp for  schedule(dynamic)
     for (int d2 = 0; d2 < basisRank; d2++) 
     {
       vector<int> b123 = ixyz[d2];
@@ -587,6 +590,7 @@ int main(int argc, char *argv[])
     buildVelocityBasis();
     buildVorticityBasis();
     buildC();
+    TIMER::printTimings();
   }
 
   //exit(0);
