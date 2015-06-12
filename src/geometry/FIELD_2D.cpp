@@ -5,11 +5,14 @@
 
 ///////////////////////////////////////////////////////////////////////
 ///////////////////////////////////////////////////////////////////////
-FIELD_2D::FIELD_2D(const int& rows, const int& cols) :
-  _xRes(rows), _yRes(cols)
+FIELD_2D::FIELD_2D(const int& rows, const int& cols, const VEC3F& lengths) :
+  _xRes(rows), _yRes(cols), _lengths(lengths)
 {
   _totalCells = _xRes * _yRes;
   _data = new float[_totalCells];
+
+  _dx = _lengths[0] / _xRes;
+  _dy = _lengths[1] / _yRes;
 
   for (int x = 0; x < _totalCells; x++)
     _data[x] = 0.0;
@@ -20,6 +23,9 @@ FIELD_2D::FIELD_2D(const FIELD_2D& m) :
 {
   _totalCells = _xRes * _yRes;
   _data = new float[_totalCells];
+  _lengths = m._lengths;
+  _dx = m._dx;
+  _dy = m._dy;
 
   for (int x = 0; x < _totalCells; x++)
     _data[x] = m[x];
@@ -698,4 +704,127 @@ void FIELD_2D::setToCheckerboard(int xChecks, int yChecks)
       if ((xMod && yMod) || (!xMod && !yMod))
         (*this)(x,y) = 1;
     }
+}
+
+///////////////////////////////////////////////////////////////////////
+///////////////////////////////////////////////////////////////////////
+Real FIELD_2D::Dx(const int x, const int y) const
+{
+  assert(x >= 0);
+  assert(x < _xRes);
+  assert(y >= 0);
+  assert(y < _yRes);
+  int index = x + y * _xRes;
+  const Real right = (x < _xRes - 1) ? _data[index + 1] : _data[index];
+  const Real left  = (x > 0)         ? _data[index - 1] : _data[index];
+  const Real denom = (x > 0 && x < _xRes -1) ? 1.0 / (2.0 * _dx) : 1.0 / _dx;
+  return (right - left) * denom;
+}
+
+///////////////////////////////////////////////////////////////////////
+///////////////////////////////////////////////////////////////////////
+Real FIELD_2D::Dy(const int x, const int y) const
+{
+  assert(x >= 0);
+  assert(x < _xRes);
+  assert(y >= 0);
+  assert(y < _yRes);
+
+  int index = x + y * _xRes;
+
+  const Real up   = (y < _yRes - 1) ? _data[index + _xRes] : _data[index];
+  const Real down = (y > 0)         ? _data[index - _xRes] : _data[index];
+  const Real denom = (y > 0 && y < _yRes -1) ? 1.0 / (2.0 * _dy) : 1.0 / _dy;
+  return (up - down) * denom;
+}
+
+///////////////////////////////////////////////////////////////////////
+///////////////////////////////////////////////////////////////////////
+FIELD_2D FIELD_2D::Dx() const
+{
+  FIELD_2D final(_xRes, _yRes, _lengths);
+
+  for (int y = 0; y < _yRes; y++)
+    for (int x = 0; x < _xRes; x++)
+      final(x,y) = Dx(x,y);
+
+  return final;
+}
+
+///////////////////////////////////////////////////////////////////////
+///////////////////////////////////////////////////////////////////////
+FIELD_2D FIELD_2D::Dy() const
+{
+  FIELD_2D final(_xRes, _yRes, _lengths);
+
+  for (int y = 0; y < _yRes; y++)
+    for (int x = 0; x < _xRes; x++)
+      final(x,y) = Dy(x,y);
+
+  return final;
+}
+
+///////////////////////////////////////////////////////////////////////
+///////////////////////////////////////////////////////////////////////
+FIELD_2D FIELD_2D::Dz() const
+{
+  FIELD_2D final(_xRes, _yRes, _lengths);
+
+  // for a 2D field, the z derivative is always zero
+
+  return final;
+}
+
+///////////////////////////////////////////////////////////////////////
+///////////////////////////////////////////////////////////////////////
+VEC3F FIELD_2D::maxIndex()
+{
+  Real maxFound = _data[0];
+
+  VEC3F maxFoundIndex;
+  int index = 0;
+  for (int y = 0; y < _yRes; y++)
+    for (int x = 0; x < _xRes; x++, index++)
+      if (_data[index] > maxFound)
+      {
+        maxFound = _data[index];
+
+        maxFoundIndex[0] = x;
+        maxFoundIndex[1] = y;
+      }
+
+  return maxFoundIndex;
+}
+
+///////////////////////////////////////////////////////////////////////
+///////////////////////////////////////////////////////////////////////
+VEC3F FIELD_2D::minIndex()
+{
+  Real minFound = _data[0];
+
+  VEC3F minFoundIndex;
+  int index = 0;
+  for (int y = 0; y < _yRes; y++)
+    for (int x = 0; x < _xRes; x++, index++)
+      if (_data[index] < minFound)
+      {
+        minFound = _data[index];
+
+        minFoundIndex[0] = x;
+        minFoundIndex[1] = y;
+      }
+
+  return minFoundIndex;
+}
+
+///////////////////////////////////////////////////////////////////////
+// pass a field to fieldViewer2D
+///////////////////////////////////////////////////////////////////////
+void FIELD_2D::fieldViewer(const FIELD_2D& field, string name)
+{
+  field.write("temp.field");
+  string execute("./bin/fieldViewer temp.field \"");
+  execute = execute + name + string("\" &");
+  cout << " Executing " << execute.c_str() << endl;
+  system(execute.c_str());
 }

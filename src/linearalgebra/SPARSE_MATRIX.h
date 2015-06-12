@@ -71,6 +71,7 @@ public:
   void clearAndStompSparsity() { _matrix.clear(); };
 
   // write to a file stream
+  void write(const string& filename) const;
   void write(FILE* file) const;
   void writeGz(gzFile& file) const;
 
@@ -88,6 +89,12 @@ public:
   // project by the given left and right matrices, where we assume the left one needs
   // to be transposed
   MatrixXd project(const MatrixXd& left, const MatrixXd& right) const;
+
+  // call Matlab to get the eigendecomposition
+  //
+  // Since a sparse solver is called, "howMany" determines how many eigenvalues
+  // are solved for. The results are stored in the specified filenames
+  void matlabEigs(const int howMany, const string& matrixFilename, const string& vectorFilename);
   
 protected:
   int _rows;

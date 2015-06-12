@@ -503,6 +503,23 @@ void SPARSE_MATRIX::readGz(gzFile& file)
 }
 
 //////////////////////////////////////////////////////////////////////
+//////////////////////////////////////////////////////////////////////
+void SPARSE_MATRIX::write(const string& filename) const
+{
+  FILE* file = NULL;
+  file = fopen(filename.c_str(), "wb");
+  if (file == NULL)
+  {
+    cout << __FILE__ << " " << __FUNCTION__ << " " << __LINE__ << " : " << endl;
+    cout << " Failed to open file " << filename.c_str() << "!!!" << endl;
+    return;
+  }
+
+  write(file);
+  fclose(file);
+}
+
+//////////////////////////////////////////////////////////////////////
 // write to a file stream
 //////////////////////////////////////////////////////////////////////
 void SPARSE_MATRIX::write(FILE* file) const
@@ -558,4 +575,24 @@ void SPARSE_MATRIX::writeGz(gzFile& file) const
     gzwrite(file, (void*)&col, sizeof(int));
     gzwrite(file, (void*)&entry, sizeof(Real));
   }
+}
+
+
+//////////////////////////////////////////////////////////////////////
+// call Matlab to get the eigendecomposition
+//
+// Since a sparse solver is called, "howMany" determines how many eigenvalues
+// are solved for. The results are stored in the specified filenames
+//////////////////////////////////////////////////////////////////////
+void SPARSE_MATRIX::matlabEigs(const int howMany, const string& matrixFilename, const string& vectorFilename)
+{
+  string inputFilename("temp.sparse");
+  write(inputFilename.c_str());
+
+  char buffer[1024];
+  sprintf(buffer, "matlab ./matlab -nosplash -nodisplay -nodesktop -nojvm -r \"getEigs(%i, '%s', '%s', '%s');exit\"", howMany, inputFilename.c_str(), matrixFilename.c_str(), vectorFilename.c_str());
+  system(buffer);
+
+  //string rm("rm " + inputFilename);
+  //system(rm.c_str());
 }

@@ -60,9 +60,9 @@ VEC3F center(0,0,0);
 //VEC3F center(0.5, 0.5, 0.5);
 VEC3F lengths(1,1,1);
 FIELD_3D field(10,10,10, center, lengths);
-VECTOR3_FIELD_3D velocityField(50,50,50, center, lengths);
+//VECTOR3_FIELD_3D velocityField(50,50,50, center, lengths);
 //VECTOR3_FIELD_3D velocityField(100,100,100, center, lengths);
-//VECTOR3_FIELD_3D velocityField(20,20,20, center, lengths);
+VECTOR3_FIELD_3D velocityField(20,20,20, center, lengths);
 
 vector<VEC3F> particles;
 vector<list<VEC3F> > ribbons;
@@ -571,8 +571,9 @@ int glvuWindow()
 //////////////////////////////////////////////////////////////////////////////
 int main(int argc, char *argv[])
 {
-  int dim = 2;
+  int dim = 3;
   buildTableIXYZ(dim);
+  /*
   bool success = velocityU.read("./data/velocityU.matrix");
 
   if (success)
@@ -581,6 +582,7 @@ int main(int argc, char *argv[])
     C.read("./data/C.tensor");
   }
   else
+  */
   {
     buildVelocityBasis();
     buildVorticityBasis();

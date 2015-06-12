@@ -4304,7 +4304,8 @@ Real VECTOR3_FIELD_3D::structureCoefficient(vector<int> a, vector<int> b, vector
 
   // the vorticity field
   VECTOR3_FIELD_3D kVorticity(xRes, yRes, zRes, center, lengths);
-  kVorticity.vorticity(k[3], k[0],k[1],k[2]);
+  //kVorticity.vorticity(k[3], k[0],k[1],k[2]);
+  kVorticity.vorticity(k[0],k[1],k[2],k[3]);
 
   // advect field j using field i
   VECTOR3_FIELD_3D crossField(xRes, yRes, zRes, center, lengths);

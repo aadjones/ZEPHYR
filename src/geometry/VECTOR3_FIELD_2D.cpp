@@ -9,7 +9,8 @@
 #include <GL/glut.h> // GLUT support library.
 #endif
 
-
+#include "MERSENNETWISTER.h"
+#include "MATRIX3.h"
 
 ///////////////////////////////////////////////////////////////////////
 ///////////////////////////////////////////////////////////////////////
@@ -21,6 +22,8 @@ VECTOR3_FIELD_2D::VECTOR3_FIELD_2D(const int& xRes, const int& yRes, const VEC3F
 
   _dx = _lengths[0] / _xRes;
   _dy = _lengths[1] / _yRes;
+  _invDx = 1.0 / _dx;
+  _invDy = 1.0 / _dy;
 }
 
 VECTOR3_FIELD_2D::VECTOR3_FIELD_2D(double* data, const int& xRes, const int& yRes, const VEC3F& center, const VEC3F& lengths) :
@@ -31,6 +34,8 @@ VECTOR3_FIELD_2D::VECTOR3_FIELD_2D(double* data, const int& xRes, const int& yRe
 
   _dx = _lengths[0] / _xRes;
   _dy = _lengths[1] / _yRes;
+  _invDx = 1.0 / _dx;
+  _invDy = 1.0 / _dy;
 
   for (int x = 0; x < _totalCells; x++)
   {
@@ -48,6 +53,8 @@ VECTOR3_FIELD_2D::VECTOR3_FIELD_2D(float* xData, float* yData, const int& xRes, 
 
   _dx = _lengths[0] / _xRes;
   _dy = _lengths[1] / _yRes;
+  _invDx = 1.0 / _dx;
+  _invDy = 1.0 / _dy;
 
   for (int x = 0; x < _totalCells; x++)
   {
@@ -64,6 +71,8 @@ VECTOR3_FIELD_2D::VECTOR3_FIELD_2D(const VECTOR3_FIELD_2D& m) :
 
   _dx = _lengths[0] / _xRes;
   _dy = _lengths[1] / _yRes;
+  _invDx = 1.0 / _dx;
+  _invDy = 1.0 / _dy;
 
   for (int x = 0; x < _totalCells; x++)
     _data[x] = m[x];
@@ -81,6 +90,8 @@ VECTOR3_FIELD_2D::VECTOR3_FIELD_2D(const FIELD_2D& m) :
 
   _dx = _lengths[0] / _xRes;
   _dy = _lengths[1] / _yRes;
+  _invDx = 1.0 / _dx;
+  _invDy = 1.0 / _dy;
 
   for (int x = 0; x < _totalCells; x++)
     _data[x] = 0;
@@ -167,6 +178,8 @@ VECTOR3_FIELD_2D& VECTOR3_FIELD_2D::operator=(const VECTOR3_FIELD_2D& input)
 
   _dx = _lengths[0] / _xRes;
   _dy = _lengths[1] / _yRes;
+  _invDx = 1.0 / _dx;
+  _invDy = 1.0 / _dy;
   
   for (int x = 0; x < _totalCells; x++)
     _data[x] = input[x];
@@ -176,11 +189,24 @@ VECTOR3_FIELD_2D& VECTOR3_FIELD_2D::operator=(const VECTOR3_FIELD_2D& input)
   return *this;
 }
 
+//////////////////////////////////////////////////////////////////////
+//////////////////////////////////////////////////////////////////////
+VECTOR3_FIELD_2D& VECTOR3_FIELD_2D::operator-=(const VECTOR3_FIELD_2D& input)
+{
+  assert(input.xRes() == _xRes);
+  assert(input.yRes() == _yRes);
+
+  for (int x = 0; x < _totalCells; x++)
+    _data[x] -= input[x];
+
+  return *this;
+}
+
 ///////////////////////////////////////////////////////////////////////
 ///////////////////////////////////////////////////////////////////////
 FIELD_2D VECTOR3_FIELD_2D::scalarField(int component) const
 {
-  assert(component >= 0 && component < 2);
+  assert(component >= 0 && component <= 2);
 
   FIELD_2D final(_xRes, _yRes);
 
@@ -246,9 +272,23 @@ VECTOR3_FIELD_2D operator*(const FIELD_2D&u, const VECTOR3_FIELD_2D& v)
 ///////////////////////////////////////////////////////////////////////
 const VEC3F VECTOR3_FIELD_2D::operator()(const VEC3F& position) const
 {
-  int x0 = (int)position[0];
+  VEC3F positionCopy = position;
+
+  // get the lower corner position
+  VEC3F corner = _center - (Real)0.5 * _lengths;
+  VEC3F dxs(_dx, _dy, 0);
+  corner += (Real)0.5 * dxs;
+
+  // recenter position
+  positionCopy -= corner;
+
+  positionCopy[0] *= _invDx;
+  positionCopy[1] *= _invDy;
+  positionCopy[2] *= 0;
+
+  int x0 = (int)positionCopy[0];
   int x1    = x0 + 1;
-  int y0 = (int)position[1];
+  int y0 = (int)positionCopy[1];
   int y1    = y0 + 1;
 
   // clamp everything
@@ -265,9 +305,9 @@ const VEC3F VECTOR3_FIELD_2D::operator()(const VEC3F& position) const
   y1 = (y1 > _yRes - 1) ? _yRes - 1 : y1;
 
   // get interpolation weights
-  const Real s1 = position[0]- x0;
+  const Real s1 = positionCopy[0]- x0;
   const Real s0 = 1.0f - s1;
-  const Real t1 = position[1]- y0;
+  const Real t1 = positionCopy[1]- y0;
   const Real t0 = 1.0f - t1;
 
   const int i00 = x0 + y0 * _xRes;
@@ -495,6 +535,147 @@ void VECTOR3_FIELD_2D::writeLIC(int scaleUp, const char* filename)
 // write a LIC image
 // http://www.zhanpingliu.org/research/flowvis/LIC/MiniLIC.c
 //////////////////////////////////////////////////////////////////////
+FIELD_2D VECTOR3_FIELD_2D::LIC()
+{
+  // create the filters
+  int filterSize = 64;
+  float* forwardFilter = new float[filterSize];
+  float* backwardFilter = new float[filterSize];
+  for(int i = 0; i < filterSize; i++)  
+    forwardFilter[i] = backwardFilter[i] = i;
+
+  float kernelLength = 10;
+  VECTOR3_FIELD_2D& vectorField = *this;
+  int xRes = vectorField.xRes();
+  int yRes = vectorField.yRes();
+
+  // generate a noise field
+  FIELD_2D noiseField(xRes, yRes);
+  MERSENNETWISTER twister(123456);
+  for(int j = 0; j < yRes; j++)
+    for(int i = 0; i < xRes; i++)
+    { 
+      Real r = 255 * twister.rand();
+      //r = (  (r & 0xff) + ( (r & 0xff00) >> 8 )  ) & 0xff;
+      noiseField(i,j) = r;
+    }
+
+  // create the final image field
+  FIELD_2D finalImage(xRes, yRes);
+
+  int   maxAdvects = kernelLength * 3;
+  float len2ID = (filterSize - 1) / kernelLength; ///map a curve LENgth TO an ID in the LUT
+
+  ///for each pixel in the 2D output LIC image///
+  for (int j = 0; j < yRes; j++)
+    for (int i = 0; i < xRes; i++)
+    { 
+      ///init the composite texture accumulators and the weight accumulators///
+      float textureAccum[] = {0,0};
+      float weightAccum[]  = {0,0};
+      float textureValue = 0;
+    
+      ///for either advection direction///
+      for(int advectionDirection = 0; advectionDirection < 2; advectionDirection++)
+      { 
+        ///init the step counter, curve-length measurer, and streamline seed///
+        int advects = 0;
+        float currentLength = 0.0f;
+        float clippedX0 = i + 0.5f;
+        float clippedY0 = j + 0.5f;
+
+        ///access the target filter LUT///
+        float* weightLUT = (advectionDirection == 0) ? forwardFilter : backwardFilter;
+
+        /// until the streamline is advected long enough or a tightly  spiralling center / focus is encountered///
+        while (currentLength < kernelLength && advects < maxAdvects) 
+        {
+          ///access the vector at the sample
+          float vectorX = vectorField(i,j)[0];
+          float vectorY = vectorField(i,j)[1];
+
+          /// negate the vector for the backward-advection case///
+          vectorX = (advectionDirection == 0) ? vectorX : -vectorX;
+          vectorY = (advectionDirection == 0) ? vectorY : -vectorY;
+
+          ///clip the segment against the pixel boundaries --- find the shorter from the two clipped segments///
+          ///replace  all  if-statements  whenever  possible  as  they  might  affect the computational speed///
+          const float lineSquare = 100000;
+          const float vectorMin = 0.05;
+          float segmentLength = lineSquare;
+          segmentLength = (vectorX < -vectorMin) ? ( int(     clippedX0         ) - clippedX0 ) / vectorX : segmentLength;
+          segmentLength = (vectorX >  vectorMin) ? ( int( int(clippedX0) + 1.5f ) - clippedX0 ) / vectorX : segmentLength;
+
+          if (vectorY < -vectorMin)
+          {
+            float tmpLength = (int(clippedY0) - clippedY0) / vectorY;
+            
+            if (tmpLength < segmentLength) 
+              segmentLength = tmpLength;
+          }
+
+          if (vectorY > vectorMin)
+          {
+            float tmpLength = (int(int(clippedY0) + 1.5f) - clippedY0) / vectorY;
+            if (tmpLength <  segmentLength)
+              segmentLength = tmpLength;
+          }
+          
+          ///update the curve-length measurers///
+          float previousLength  = currentLength;
+          currentLength += segmentLength;
+          segmentLength += 0.0004f;
+         
+          ///check if the filter has reached either end///
+          segmentLength = (currentLength > kernelLength) ? ( (currentLength = kernelLength) - previousLength ) : segmentLength;
+
+          ///obtain the next clip point///
+          float clippedX1 = clippedX0 + vectorX * segmentLength;
+          float clippedY1 = clippedY0 + vectorY * segmentLength;
+
+          ///obtain the middle point of the segment as the texture-contributing sample///
+          float sampleX = (clippedX0 + clippedX1) * 0.5f;
+          float sampleY = (clippedY0 + clippedY1) * 0.5f;
+
+          ///obtain the texture value of the sample///
+          textureValue = noiseField(sampleX, sampleY);
+
+          ///update the accumulated weight and the accumulated composite texture (texture x weight)
+          float currentWeightAccum = weightLUT[ int(currentLength * len2ID) ];
+          float sampleWeight = currentWeightAccum - weightAccum[advectionDirection];     
+          weightAccum[advectionDirection] = currentWeightAccum;               
+          textureAccum[advectionDirection] += textureValue * sampleWeight;
+        
+          ///update the step counter and the "current" clip point
+          advects++;
+          clippedX0 = clippedX1;
+          clippedY0 = clippedY1;
+
+          ///check if the streamline has gone beyond the flow field
+          if (clippedX0 < 0.0f || clippedX0 >= xRes ||
+              clippedY0 < 0.0f || clippedY0 >= yRes)  break;
+        } 
+      }
+
+      ///normalize the accumulated composite texture
+      textureValue = (textureAccum[0] + textureAccum[1]) / (weightAccum[0] + weightAccum[1]);
+
+      ///clamp the texture value against the displayable intensity range [0, 255]
+      textureValue = (textureValue <   0.0f) ?   0.0f : textureValue;
+      textureValue = (textureValue > 255.0f) ? 255.0f : textureValue; 
+      finalImage(i,j) = textureValue / 255.0;
+    }
+
+  delete[] forwardFilter;
+  delete[] backwardFilter;
+
+  return finalImage;
+}
+
+//////////////////////////////////////////////////////////////////////
+// write a LIC image
+// http://www.zhanpingliu.org/research/flowvis/LIC/MiniLIC.c
+//////////////////////////////////////////////////////////////////////
 void VECTOR3_FIELD_2D::writeLIC(const char* filename)
 {
   // create the filters
@@ -628,4 +809,314 @@ void VECTOR3_FIELD_2D::writeLIC(const char* filename)
   finalImage.writeJPG(filename);
   delete[] forwardFilter;
   delete[] backwardFilter;
+}
+
+//////////////////////////////////////////////////////////////////////
+// compute the Laplacian Eigenfunction according to the 
+// DeWitt et al. paper
+//////////////////////////////////////////////////////////////////////
+void VECTOR3_FIELD_2D::eigenfunction(int k1, int k2)
+{
+  Real invKs = 1.0 / (k1 * k1 + k2 * k2);
+  int index = 0;
+
+  //Real dx = 3.14f / (_xRes - 1);
+  //Real dy = 3.14f / (_yRes - 1);
+  Real dx = M_PI / (_xRes - 1);
+  Real dy = M_PI / (_yRes - 1);
+
+  //for (int x = 0; x < _xRes; x++)
+  //  for (int y = 0; y < _yRes; y++, index++)
+  for (int y = 0; y < _yRes; y++)
+    for (int x = 0; x < _xRes; x++, index++)
+    {
+      Real xReal = x * dx;
+      Real yReal = y * dy;
+
+      //_data[index][0] =  k2 * sin(k1 * xReal) * cos(k2 * (yReal + 0.5 * dy));
+      //_data[index][1] = -k1 * cos(k1 * (xReal + 0.5 * dx)) * sin(k2 * yReal);
+      _data[index][0] =  invKs * k2 * sin(k1 * xReal) * cos(k2 * (yReal + 0.5 * dy));
+      _data[index][1] = -invKs * k1 * cos(k1 * (xReal + 0.5 * dx)) * sin(k2 * yReal);
+      //_data[index][0] =  invKs * k2 * sin(k1 * xReal) * cos(k2 * yReal);
+      //_data[index][1] = -invKs * k1 * cos(k1 * xReal) * sin(k2 * yReal);
+      _data[index][2] = 0;
+    }
+}
+
+//////////////////////////////////////////////////////////////////////
+// compute the Laplacian Eigenfunction according to the 
+// DeWitt et al. paper
+//////////////////////////////////////////////////////////////////////
+void VECTOR3_FIELD_2D::eigenfunctionUnscaled(int k1, int k2)
+{
+  int index = 0;
+
+  Real dx = 3.14f / (_xRes - 1);
+  Real dy = 3.14f / (_yRes - 1);
+
+  //for (int x = 0; x < _xRes; x++)
+  //  for (int y = 0; y < _yRes; y++, index++)
+  for (int y = 0; y < _yRes; y++)
+    for (int x = 0; x < _xRes; x++, index++)
+    {
+      Real xReal = x * dx;
+      Real yReal = y * dy;
+
+      _data[index][0] =  k2 * sin(k1 * xReal) * cos(k2 * yReal);
+      _data[index][1] = -k1 * cos(k1 * xReal) * sin(k2 * yReal);
+      //_data[index][0] =  k2 * sin(k1 * xReal) * cos(k2 * (yReal + 0.5 * dy));
+      //_data[index][1] = -k1 * cos(k1 * (xReal + 0.5 * dx)) * sin(k2 * yReal);
+      //_data[index][0] =  invKs * k2 * sin(k1 * xReal) * cos(k2 * yReal);
+      //_data[index][1] = -invKs * k1 * cos(k1 * xReal) * sin(k2 * yReal);
+      _data[index][2] = 0;
+    }
+}
+
+//////////////////////////////////////////////////////////////////////
+// compute the vorticity function according to the 
+// DeWitt et al. paper
+//////////////////////////////////////////////////////////////////////
+void VECTOR3_FIELD_2D::vorticity(int k1, int k2)
+{
+  int index = 0;
+  Real dx = 3.14f / (_xRes - 1);
+  Real dy = 3.14f / (_yRes - 1);
+  for (int y = 0; y < _yRes; y++)
+    for (int x = 0; x < _xRes; x++, index++)
+    {
+      VEC3F center = cellCenter(x,y);
+
+      //Real xReal = center[0];
+      //Real yReal = center[1];
+      Real xReal = x * dx;
+      Real yReal = y * dy;
+
+      _data[index][0] = 0;
+      _data[index][1] = 0;
+      _data[index][2] = sin(k1 * xReal) * sin(k2 * yReal);
+    }
+}
+
+//////////////////////////////////////////////////////////////////////
+// convert to and from a big vector
+//////////////////////////////////////////////////////////////////////
+VECTOR VECTOR3_FIELD_2D::flatten()
+{
+  VECTOR final(_xRes * _yRes * 3);
+
+  int index = 0;
+  int index3 = 0;
+  for (int y = 0; y < _yRes; y++)
+    for (int x = 0; x < _xRes; x++, index++, index3 += 3)
+    {
+      final[index3] = _data[index][0];
+      final[index3 + 1] = _data[index][1];
+      final[index3 + 2] = _data[index][2];
+    }
+  return final;
+}
+
+//////////////////////////////////////////////////////////////////////
+// convert to and from a big vector
+//////////////////////////////////////////////////////////////////////
+VECTOR VECTOR3_FIELD_2D::flattenXY()
+{
+  VECTOR final(_xRes * _yRes * 2);
+
+  int index = 0;
+  int index2 = 0;
+  for (int y = 0; y < _yRes; y++)
+    for (int x = 0; x < _xRes; x++, index++, index2 += 2)
+    {
+      final[index2] = _data[index][0];
+      final[index2 + 1] = _data[index][1];
+    }
+  return final;
+}
+
+//////////////////////////////////////////////////////////////////////
+// convert to and from a big vector
+//////////////////////////////////////////////////////////////////////
+void VECTOR3_FIELD_2D::unflatten(const VECTOR& v)
+{
+  assert(v.size() == _xRes * _yRes * 3);
+
+  int index = 0;
+  int index3 = 0;
+  for (int y = 0; y < _yRes; y++)
+    for (int x = 0; x < _xRes; x++, index++, index3 += 3)
+    {
+      _data[index][0] = v[index3];
+      _data[index][1] = v[index3 + 1];
+      _data[index][2] = v[index3 + 2];
+    }
+}
+
+//////////////////////////////////////////////////////////////////////
+// convert to and from a big vector
+//////////////////////////////////////////////////////////////////////
+void VECTOR3_FIELD_2D::unflattenXY(const VECTOR& v)
+{
+  assert(v.size() == _xRes * _yRes * 2);
+
+  int index = 0;
+  int index2 = 0;
+  for (int y = 0; y < _yRes; y++)
+    for (int x = 0; x < _xRes; x++, index++, index2 += 2)
+    {
+      _data[index][0] = v[index2];
+      _data[index][1] = v[index2 + 1];
+      _data[index][2] = 0;
+    }
+}
+
+//////////////////////////////////////////////////////////////////////
+// stomp the border to zero
+//////////////////////////////////////////////////////////////////////
+void VECTOR3_FIELD_2D::stompBorder()
+{
+  for (int y = 0; y < _yRes; y++)
+    for (int x = 0; x < _xRes; x++)
+      if (x == 0 || y == 0 || x == _xRes - 1 || y == _yRes - 1)
+        (*this)(x,y) = 0;
+}
+
+//////////////////////////////////////////////////////////////////////
+// compute the curl of two crossed vorticity functions
+//////////////////////////////////////////////////////////////////////
+void VECTOR3_FIELD_2D::curlCrossedVorticity(int a1, int a2, int b1, int b2)
+{
+  Real dx = 3.14f / (_xRes - 1);
+  Real dy = 3.14f / (_yRes - 1);
+
+  for (int j = 0; j < _yRes; j++)
+    for (int i = 0; i < _xRes; i++)
+    {
+      Real x = i * dx;
+      Real y = j * dy;
+
+      // a_1 b_2 \cos(a_1 x) \cos(b_2 y) \sin(a_2 x) \sin(b_1 y) -
+      // a_2 b_1 \cos(a_2 x) \cos(b_1 y) \sin(a_1 x) \sin(b_2 y).
+      //Real cross = a1 * b2 * cos(a1 * x) * cos(b2 * y) * sin(a2 * x) * sin(b1 * y) -
+      //             a2 * b1 * cos(a2 * x) * cos(b1 * y) * sin(a1 * x) * sin(b2 * y);
+      Real cross = a1 * b2 * cos(a1 * x) * cos(b2 * y) * sin(a2 * y) * sin(b1 * x) -
+                   a2 * b1 * cos(a2 * y) * cos(b1 * x) * sin(a1 * x) * sin(b2 * y);
+                   
+      (*this)(i,j)[0] = 0;
+      (*this)(i,j)[1] = 0;
+      (*this)(i,j)[2] = cross; 
+    }
+  return;
+}
+
+//////////////////////////////////////////////////////////////////////
+// compute the curl of two crossed vorticity functions, and project
+// it onto a third
+//////////////////////////////////////////////////////////////////////
+void VECTOR3_FIELD_2D::dotCurledCrossed(int a1, int a2, int b1, int b2, int k1, int k2)
+{
+  Real dx = 3.14f / (_xRes - 1);
+  Real dy = 3.14f / (_yRes - 1);
+
+  for (int j = 0; j < _yRes; j++)
+    for (int i = 0; i < _xRes; i++)
+    {
+      Real x = i * dx;
+      Real y = j * dy;
+
+      // a_1 b_2 \cos(a_1 x) \cos(b_2 y) \sin(a_2 x) \sin(b_1 y) -
+      // a_2 b_1 \cos(a_2 x) \cos(b_1 y) \sin(a_1 x) \sin(b_2 y).
+      Real cross = a1 * b2 * cos(a1 * x) * cos(b2 * y) * sin(a2 * y) * sin(b1 * x) -
+                   a2 * b1 * cos(a2 * y) * cos(b1 * x) * sin(a1 * x) * sin(b2 * y);
+                   
+      (*this)(i,j)[2] = cross * sin(k1 * x) * sin(k2 * y); 
+    }
+}
+
+//////////////////////////////////////////////////////////////////////
+// get the curl of the scalar field
+//////////////////////////////////////////////////////////////////////
+VECTOR3_FIELD_2D VECTOR3_FIELD_2D::curl(const FIELD_2D& scalar)
+{
+  const int xRes = scalar.xRes();
+  const int yRes = scalar.yRes();
+  VECTOR3_FIELD_2D final(xRes, yRes, VEC3F(0,0,0), scalar.lengths());
+
+  const FIELD_2D Dx = scalar.Dx();
+  const FIELD_2D Dy = scalar.Dy();
+
+  for (int y = 0; y < yRes; y++)
+    for (int x = 0; x < xRes; x++)
+    {
+      final(x,y)[0] = Dy(x,y);
+      final(x,y)[1] = -Dx(x,y);
+      final(x,y)[2] = 0;
+    }
+
+  return final;
+}
+
+
+//////////////////////////////////////////////////////////////////////
+// get a single structure coefficient
+//////////////////////////////////////////////////////////////////////
+Real VECTOR3_FIELD_2D::structureCoefficient(int a1, int a2, int b1, int b2, int k1, int k2, int xRes, int yRes)
+{
+  VEC3F center(M_PI / 2, M_PI / 2, 0);
+  VEC3F lengths(M_PI, M_PI, 0);
+
+  // i advects j
+  VECTOR3_FIELD_2D iVelocity(xRes, yRes, center, lengths);
+  VECTOR3_FIELD_2D jVelocity(xRes, yRes, center, lengths);
+
+  // get the analytic eigenfunctions
+  iVelocity.eigenfunctionUnscaled(a1,a2);
+  jVelocity.eigenfunctionUnscaled(b1,b2);
+
+  // the vorticity field
+  VECTOR3_FIELD_2D kVorticity(xRes, yRes, center, lengths);
+  kVorticity.vorticity(k1, k2);
+
+  // advect field j using field i
+  VECTOR3_FIELD_2D crossField(xRes, yRes, center, lengths);
+  for (int y = 0; y < yRes; y++)
+    for (int x = 0; x < xRes; x++)
+    {
+      MATRIX3 cross = MATRIX3::cross(iVelocity(x,y));
+      crossField(x,y) = cross * jVelocity(x,y);
+    }
+
+  // dot product of vorticity and advected velocity
+  FIELD_2D crossFieldZ = crossField.scalarField(2);
+  crossFieldZ *= kVorticity.scalarField(2);
+  Real dot = crossFieldZ.sum();
+
+  // do some picky final scalings that arise from the domain dimensions
+  const Real dxSq = (lengths[0] / xRes) * (lengths[0] / xRes);
+  Real final = dot * dxSq;
+
+  // the integral is actuall defined over [-pi, pi], not [0, pi], but it's just 4 repetitions
+  // of the same function
+  final *= 4.0;
+
+  // get rid of the double pi that appears because of the domain dimensions
+  final *= 1.0 / (M_PI * M_PI);
+
+  // scale according to the eigenvalue
+  final *= 1.0 / (b1 * b1 + b2 * b2);
+
+  return final;
+}
+
+//////////////////////////////////////////////////////////////////////
+// get the summed square of all the entries
+//////////////////////////////////////////////////////////////////////
+Real VECTOR3_FIELD_2D::sumSq()
+{
+  Real final = 0;
+
+  for (int x = 0; x < _totalCells; x++)
+    final += norm(_data[x]);
+
+  return final;
 }

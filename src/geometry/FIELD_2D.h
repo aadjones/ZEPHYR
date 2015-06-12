@@ -7,12 +7,19 @@
 //#include "VEC3F.h"
 #include "VEC3.h"
 
+#ifndef VARNAME
+#define VARNAME(x) #x
+#endif
+#ifndef FIELDVIEW2D
+#define FIELDVIEW2D(x) FIELD_2D::fieldViewer(x, VARNAME(x)); sleep(1);
+#endif
+
 using namespace std;
 
 class FIELD_2D {
 public:
   FIELD_2D();
-  FIELD_2D(const int& rows, const int& cols);
+  FIELD_2D(const int& rows, const int& cols, const VEC3F& lengths = VEC3F(1,1,0));
   FIELD_2D(const FIELD_2D& m);
   ~FIELD_2D();
 
@@ -25,6 +32,7 @@ public:
   const int xRes() const { return _xRes; };
   const int yRes() const { return _yRes; };
   const int totalCells() const { return _totalCells; };
+  const VEC3F& lengths() const { return _lengths; };
 
   // common field operations
   void clear();
@@ -33,6 +41,12 @@ public:
 
   float min();
   float max();
+
+  // field maximum cell index
+  VEC3F maxIndex();
+
+  // field minimum cell index
+  VEC3F minIndex();
 
   // take the log
   void log(float base = 2.0);
@@ -66,10 +80,25 @@ public:
   
   // set to a checkboard for debugging
   void setToCheckerboard(int xChecks = 10, int yChecks = 10);
+
+  // pass a field to fieldViewer2D
+  static void fieldViewer(const FIELD_2D& field, string name);
+
+  // take the spatial derivative
+  Real Dx(const int x, const int y) const;
+  Real Dy(const int x, const int y) const;
+  FIELD_2D Dx() const;
+  FIELD_2D Dy() const;
+  FIELD_2D Dz() const;
   
 private:
   int _xRes;
   int _yRes;
+
+  VEC3F _lengths;
+  Real _dx;
+  Real _dy;
+
   int _totalCells;
   float* _data;
 };
