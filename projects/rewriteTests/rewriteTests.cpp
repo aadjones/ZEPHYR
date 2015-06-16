@@ -20,7 +20,7 @@
 /*
  * Multi-dimensional DCT testing
  * Aaron Demby Jones
- * Fall 2014
+ * Summer 2015
  */
 
 #include <iostream>
@@ -34,13 +34,19 @@
 int xRes = 46;
 int yRes = 62;
 int zRes = 46;
+int xPadded = 48;
+int yPadded = 64;
+int zPadded = 48;
 int numRows = 3 * xRes * yRes * zRes;
 int numCols = 151;
-int numBlocks = (48 * 64 * 48) / (BLOCK_SIZE * BLOCK_SIZE * BLOCK_SIZE);
+int numBlocks = (xPadded * yPadded * zPadded) / (BLOCK_SIZE * BLOCK_SIZE * BLOCK_SIZE);
 VEC3I dims(xRes, yRes, zRes);
+VEC3I g_paddedDims(xPadded, yPadded, zPadded);
 MatrixXd U(numRows, numCols);
 VECTOR3_FIELD_3D V(xRes, yRes, zRes);
 FIELD_3D F(xRes, yRes, zRes);
+vector<FIELD_3D> g_blocks;
+vector<VectorXd> g_blocksEigen;
 fftw_plan plan;
 string path("../../U.preadvect.matrix");
 COMPRESSION_DATA compression_data0, compression_data1, compression_data2;
@@ -48,9 +54,9 @@ int* allData0;
 int* allData1;
 int* allData2;
 MATRIX_COMPRESSION_DATA matrix_data;
-int nBits = 16;
-double percent = 0.99;
-int maxIterations = 16;
+int nBits = 24;
+double percent = 1.0;
+int maxIterations = 50;
 
 ////////////////////////////////////////////////////////
 // Function Declarations
@@ -107,6 +113,9 @@ void CumSumTest();
 // test the full matrix compression pipeline
 void MatrixCompressionTest();
 
+// test the matrix compression pipeline using gamma zero everywhere
+void MatrixCompressionDebugTest();
+
 // test the reading of a binary file to memory
 void ReadToMemoryTest();
 
@@ -128,6 +137,25 @@ void DecodeVectorFieldTest(int col);
 // test the frequency domain projection
 void PeeledCompressedProjectTransformTest();
 
+// test the entire matrix decoder
+void DecodeMatrixTest();
+
+// test the 'eigen' version of decode scalar field
+void DecodeScalarFieldEigenTest(int col, COMPRESSION_DATA* data);
+
+// test the eigen version of block dct
+void UnitaryBlockDCTEigenTest();
+
+// test the frequency domain projection without using compression
+void PeeledProjectTransformTest();
+
+// test the peeled unprojection
+void PeeledCompressedUnprojectTest();
+
+// test DecodeFromRowCol
+void DecodeFromRowColTest(int row, int col);
+
+
 ////////////////////////////////////////////////////////
 // Main
 ////////////////////////////////////////////////////////
@@ -137,16 +165,30 @@ int main(int argc, char* argv[])
   TIMER functionTimer(__FUNCTION__);
   InitGlobals();
 
-  InitMatrixCompressionData();
- 
   // int blockNumber = 287;
-  int col = 0;
+  int row = 303;
+  int col = 24;
 
   // EncodeOneBlockTest(blockNumber, col, &compression_data0);
 
   // DecodeScalarFieldTest(col, &compression_data0);
   
-  PeeledCompressedProjectTransformTest();
+  // PeeledCompressedProjectTransformTest();
+
+  // MatrixCompressionTest();
+
+  // PeeledCompressedUnprojectTest();
+
+  // DecodeVectorFieldTest(col);
+
+
+  DecodeFromRowColTest(row, col);
+
+  // MatrixCompressionDebugTest();
+  
+  // DecodeMatrixTest();
+
+
   
 
   functionTimer.printTimings();
@@ -170,9 +212,11 @@ void InitGlobals()
 
   EIGEN::read(path.c_str(), U); 
 
-  // V = VECTOR3_FIELD_3D(U.col(150), xRes, yRes, zRes);
-  // TransformVectorFieldSVDCompression(&V, &compression_data1);
-  // F = V.scalarField(0);
+  V = VECTOR3_FIELD_3D(U.col(0), xRes, yRes, zRes);
+  TransformVectorFieldSVDCompression(&V, &compression_data1);
+  F = V.scalarField(0);
+  GetBlocks(F, &g_blocks);
+  // UnitaryBlockDCT(1, &g_blocks);
 }
 
 ////////////////////////////////////////////////////////
@@ -187,6 +231,7 @@ void InitCompressionData(double percent, int maxIterations, int nBits,
   compression_data0.set_numBlocks(numBlocks);
   compression_data0.set_numCols(numCols);
   compression_data0.set_dims(dims);
+  compression_data0.set_paddedDims(g_paddedDims);
 
   // build the damping and zigzag arrays
   compression_data0.set_dampingArray();
@@ -198,6 +243,7 @@ void InitCompressionData(double percent, int maxIterations, int nBits,
   compression_data1.set_numBlocks(numBlocks);
   compression_data1.set_numCols(numCols);
   compression_data1.set_dims(dims);
+  compression_data1.set_paddedDims(g_paddedDims);
 
   compression_data1.set_dampingArray();
   compression_data1.set_zigzagArray();
@@ -208,6 +254,7 @@ void InitCompressionData(double percent, int maxIterations, int nBits,
   compression_data2.set_numBlocks(numBlocks);
   compression_data2.set_numCols(numCols);
   compression_data2.set_dims(dims);
+  compression_data2.set_paddedDims(g_paddedDims);
 
   compression_data2.set_dampingArray();
   compression_data2.set_zigzagArray();
@@ -496,7 +543,17 @@ void MatrixCompressionTest()
       &compression_data1, &compression_data2);
 }
 
+////////////////////////////////////////////////////////
+// test the compression and writing to a binary file
+// of a full matrix using gamma as zero everywhere
+////////////////////////////////////////////////////////
+void MatrixCompressionDebugTest()
+{
+  const char* filename = "U.preadvect.compressed.matrix";
+  CompressAndWriteMatrixComponentsDebug(filename, U, &compression_data0,
+      &compression_data1, &compression_data2);
 
+}
 ////////////////////////////////////////////////////////
 // test the reading into memory of a binary file that
 // is the result of a previous matrix compression
@@ -644,6 +701,9 @@ void InitMatrixCompressionData()
 
   matrix_data = MATRIX_COMPRESSION_DATA(allData0, allData1, allData2, 
       &compression_data0, &compression_data1, &compression_data2);
+
+  int direction = -1;
+  matrix_data.dct_setup(direction);
 }
 
 
@@ -664,18 +724,226 @@ void DecodeVectorFieldTest(int col)
 } 
 
 
+////////////////////////////////////////////////////////
+// compare the frequency domain projection to the ground truth
+////////////////////////////////////////////////////////
 void PeeledCompressedProjectTransformTest()
 {
   InitMatrixCompressionData();
 
+
   VECTOR3_FIELD_3D randomV(xRes, yRes, zRes);
   randomV.setToRandom();
   VectorXd q;
-  PeeledCompressedProjectTransform(V, &matrix_data, &q);
+  PeeledCompressedProjectTransform(randomV, &matrix_data, &q);
+  cout << "q from transform projection: " << endl;
+  cout << EIGEN::convert(q) << endl;
+ 
+  MatrixXd decodedMatrix;
+  DecodeMatrix(&matrix_data, &decodedMatrix);
+  VectorXd q_spatial = randomV.peeledProject(decodedMatrix);
+  cout << "q from regular projection: " << endl;
+  cout << EIGEN::convert(q_spatial) << endl;
+
+  double diff = (q - q_spatial).norm();
+  cout << "projection diff: " << diff << endl;
 
   VectorXd ground = randomV.peeledProject(U);
+  cout << "ground truth for q: " << endl;
+  cout << EIGEN::convert(ground) << endl;
 
-  double diff = (q - ground).norm();
+  diff = (q - ground).norm();
   cout << "projection diff: " << diff << endl;
+
+  diff = (q_spatial - ground).norm();
+  cout << "what projection diff should be: " << diff << endl;
+
+
+
+}
+
+////////////////////////////////////////////////////////
+// test the decoding of the full matrix
+////////////////////////////////////////////////////////
+void DecodeMatrixTest() 
+{
+  InitMatrixCompressionData();
+
+  MatrixXd decodedMatrix;
+  DecodeMatrix(&matrix_data, &decodedMatrix);
+
+  EIGEN::write("U.preadvect.decoded.debug.matrix", decodedMatrix);
+
+}
+
+////////////////////////////////////////////////////////
+// test the eigen version of decode scalar field
+////////////////////////////////////////////////////////
+void DecodeScalarFieldEigenTest(int col, COMPRESSION_DATA* data)
+{
+  const char* filename = "U.preadvect.compressed.matrix0";
+  
+  int* allData = ReadBinaryFileToMemory(filename, data);
+  
+  vector<VectorXd> decoded;
+  DecodeScalarFieldEigen(data, allData, col, &decoded);
+
+  FILE* pFile;
+  pFile = fopen("U.preadvect.decoded.col150.x", "wb");
+
+  if (pFile == NULL) {
+    perror("Error opening file");
+    exit(EXIT_FAILURE);
+  }
+
+  // write out the blocks for debugging
+  int totalCells = decoded.size() * decoded[0].size();
+  fwrite(&totalCells, sizeof(int), 1, pFile);
+
+  int numBlocks = data->get_numBlocks();
+  for (int i = 0; i < numBlocks; i++) {
+    fwrite(decoded[i].data(), sizeof(double), decoded[i].size(), pFile);
+  }
+
+  // write out the 'ground truth' blocks 
+  pFile = fopen("U.preadvect.col150.x", "wb");
+
+  if (pFile == NULL) {
+    perror("Error opening file");
+    exit(EXIT_FAILURE);
+  }
+
+  totalCells = g_blocks.size() * g_blocks[0].totalCells();
+  fwrite(&totalCells, sizeof(int), 1, pFile);
+  
+  for (int i = 0; i < numBlocks; i++) {
+    fwrite(g_blocks[i].data(), sizeof(double), g_blocks[i].totalCells(), pFile);
+  }
+
+  fclose(pFile);
+
+}
+
+
+////////////////////////////////////////////////////////
+// test the eigen version of block dct
+////////////////////////////////////////////////////////
+void UnitaryBlockDCTEigenTest() 
+{
+  // do the non-eigen version first
+  GetBlocks(F, &g_blocks);
+  UnitaryBlockDCT(1, &g_blocks);
+
+  // now do the eigen one
+  GetBlocksEigen(F, &g_blocksEigen);
+  UnitaryBlockDCTEigen(1, &g_blocksEigen);
+
+  // compare
+  double error = 0.0;
+  for (int i = 0; i < numBlocks; i++) {
+    error += (g_blocks[i].flattenedEigen() - g_blocksEigen[i]).norm();
+  }
+
+  cout << "accumulated error across each block: " << error << endl;
+
+}
+
+////////////////////////////////////////////////////////
+// test the project transform without using compression
+////////////////////////////////////////////////////////
+void PeeledProjectTransformTest()
+{
+
+  VECTOR3_FIELD_3D randomV(xRes, yRes, zRes);
+  randomV.setToRandom();
+
+  // ground truth projection
+  VectorXd ground = randomV.peeledProject(U);
+
+  // fill svdV
+  VectorXd s;
+  MatrixXd svdV;
+  VECTOR3_FIELD_3D randomVcopy = randomV;
+  TransformVectorFieldSVD(&s, &svdV, &randomV);
+
+  FIELD_3D V_X, V_Y, V_Z;
+  GetScalarFields(randomV, &V_X, &V_Y, &V_Z);
+
+  vector<VectorXd> blocksX, blocksY, blocksZ;
+  GetBlocksEigen(V_X, &blocksX);
+  GetBlocksEigen(V_Y, &blocksY);
+  GetBlocksEigen(V_Z, &blocksZ);
+  UnitaryBlockDCTEigen(1, &blocksX);
+  UnitaryBlockDCTEigen(1, &blocksY);
+  UnitaryBlockDCTEigen(1, &blocksZ);
+
+
+
+}
+
+////////////////////////////////////////////////////////
+// test the unprojection
+////////////////////////////////////////////////////////
+void PeeledCompressedUnprojectTest()
+{
+
+  InitMatrixCompressionData();
+
+  // initialize a random vector in the subspace 
+  VectorXd q;
+  q.setRandom(numCols);
+
+  // run the compressed unprojector
+  VECTOR3_FIELD_3D unprojected(xPadded, yPadded, zPadded);
+  PeeledCompressedUnproject(&matrix_data, q, &unprojected);
+  
+  FILE* pFile;
+  pFile = fopen("compressed.unprojectedV", "wb");
+  if (pFile == NULL) {
+    perror("Error opening file");
+  }
+  int length = 3 * xRes * yRes * zRes;
+  fwrite(&length, sizeof(int), 1, pFile);
+  fwrite(unprojected.peelBoundary().flattenedEigen().data(), sizeof(double), length, pFile);
+
+  // compute the ground truth (no compression)
+  VECTOR3_FIELD_3D ground(xPadded, yPadded, zPadded);
+  ground.peeledUnproject(U, q);
+
+  pFile = fopen("uncompressed.unprojectedV", "wb");
+  if (pFile == NULL) {
+    perror("Error opening file");
+  }
+  fwrite(&length, sizeof(int), 1, pFile);
+  fwrite(ground.peelBoundary().flattenedEigen().data(), sizeof(double), length, pFile);
+
+  // compare
+  double groundLength = ground.peelBoundary().flattenedEigen().norm();
+  double error = ( unprojected.peelBoundary().flattenedEigen() - ground.peelBoundary().flattenedEigen() ).norm();
+  error /= groundLength;
+  cout << "error between compressed unproject and no compression: " << error << endl;
+
+  fclose(pFile);
+
+}
+
+
+void DecodeFromRowColTest(int row, int col) 
+{
+
+  InitMatrixCompressionData();
+
+  Vector3d cell;
+  DecodeFromRowCol(row, col, &matrix_data, &cell);
+  cout << "Row, col: (" << row << ", " << col << ")" << endl;
+  cout << "DecodeFromRowCol: " << endl;
+  cout << cell << endl;
+
+  Vector3d ground;
+  ground[0] = U(row, col);
+  ground[1] = U(row + 1, col);
+  ground[2] = U(row + 2, col);
+  cout << "Ground: " << endl;
+  cout << ground << endl;
 
 }

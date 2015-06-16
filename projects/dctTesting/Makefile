@@ -2,11 +2,12 @@ include ../include.mk
 
 # calls:
 CC         = g++
-CFLAGS     = ${CFLAGS_COMMON} -I../../src/cubature -I../../src/Eigen/ -I../../src/compression
+CFLAGS     = ${CFLAGS_COMMON} -I../../src/cubature -I../../src/Eigen/ -I../../src/compression -I../rewriteTests/
 LDFLAGS    = ${LDFLAGS_COMMON}
 EXECUTABLE = ../../bin/dctTesting
 
 SOURCES    = dctTesting.cpp \
+						 ../rewriteTests/COMPRESSION_REWRITE.cpp \
 						 ../../src/glvu/glvu.cpp \
 						 ../../src/util/TIMER.cpp \
 						 ../../src/util/SIMPLE_PARSER.cpp \
@@ -26,7 +27,6 @@ SOURCES    = dctTesting.cpp \
 						 ../../src/geometry/FIELD_2D.cpp \
 						 ../../src/geometry/VECTOR3_FIELD_2D.cpp \
 						 ../../src/util/MIN_HEAP.cpp \
-						 ../../src/compression/COMPRESSION.cpp \
 						 ../../src/compression/COMPRESSION_DATA.cpp \
 						 ../../src/compression/DECOMPRESSION_DATA.cpp \
 						 ../../src/compression/MATRIX_COMPRESSION_DATA.cpp \

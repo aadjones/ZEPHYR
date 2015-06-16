@@ -25,7 +25,7 @@
 
 #include <iostream>
 #include <time.h>
-#include "COMPRESSION.h"
+#include "COMPRESSION_REWRITE.h"
 
 
 ///////////////////////////////////////////////////////
@@ -40,6 +40,7 @@ VEC3I dims(xRes, yRes, zRes);
 MATRIX U(numRows, numCols);
 VECTOR3_FIELD_3D V(xRes, yRes, zRes);
 MATRIX_COMPRESSION_DATA U_final_data;
+MatrixXd svdV;
 
 ////////////////////////////////////////////////////////
 // Function Declarations
@@ -74,7 +75,6 @@ void TestEigenRawBuffering();
 
 
 
-
 ////////////////////////////////////////////////////////
 // Main
 ////////////////////////////////////////////////////////
@@ -83,9 +83,11 @@ int main(int argc, char* argv[])
 {
   InitGlobals();
   // TestProjectionAndUnprojection();
-  TestCompressedProjections();
+  // TestCompressedProjections();
   // TestUnitaryDCTs();
   // BasicDCTTest();
+
+
 
   return 0;
 }
@@ -111,6 +113,13 @@ void InitGlobals()
   numRows = 3 * xRes * yRes * zRes;
   V = VECTOR3_FIELD_3D(xRes, yRes, zRes);
   U = MATRIX(numRows, numCols);
+
+  // initialize an svdV matrix
+  VectorXd s;
+  VECTOR3_FIELD_3D transformedV;
+  TransformVectorFieldSVD(V, &s, &svdV, &transformedV);
+  cout << " svdV: " << endl;
+  cout << svdV << endl;
 
 }
 
@@ -492,6 +501,7 @@ void TestEigenRawBuffering()
   X = NULL;
 }
 
+/*
 void TestCompressedProjections()
 {
   InitCompressionData();
@@ -509,7 +519,9 @@ void TestCompressedProjections()
   cout << "diff: " << diff << endl;
      
 }
+*/
 
+/*
 void InitCompressionData()
 {
   int* UallDataX = NULL;
@@ -531,6 +543,7 @@ void InitCompressionData()
   U_final_data = MATRIX_COMPRESSION_DATA(UallDataX, UallDataY, UallDataZ,
       Udecompression_dataX, Udecompression_dataY, Udecompression_dataZ);
 }
+*/
 
 void TestUnitaryDCTs()
 {

@@ -64,14 +64,23 @@ void GetBlocks(const FIELD_3D& F, vector<FIELD_3D>* blocks);
 
 // given a passed in FIELD_3D, pad it with zeros and  parse it 
 // into a vector of flattened 8 x 8 x 8 blocks (listed in row-major order
-void GetBlocksEigen(const FIELD_3D& F, vector<FIELD_3D>* blocks);
+void GetBlocksEigen(const FIELD_3D& F, vector<VectorXd>* blocks);
 
 // reassemble a big field from a row-major list of smaller blocks
 void AssimilateBlocks(const VEC3I& dims, const vector<FIELD_3D>& V, FIELD_3D* assimilatedField); 
 
+// reconstruct a FIELD_3D with the passed in dims
+// from a list of 8 x 8 x 8 flattened blocks
+void AssimilateBlocksEigen(const VEC3I& dims, vector<VectorXd>* blocks, 
+    FIELD_3D* assimilatedField);
+
 // perform a unitary dct on each block of a passed in list. direction 1 is dct,
 // -1 is idct
 void UnitaryBlockDCT(int direction, vector<FIELD_3D>* blocks); 
+
+// perform a unitary dct on each block of a passed in list of flattened-out fields.
+// direction 1 is dct, -1 is idct.
+void UnitaryBlockDCTEigen(int direction, vector<VectorXd>* blocks);
 
 // build a block diagonal matrix with A's as the kernel for
 // a 'count' number of times. inefficient usage of memory
@@ -122,12 +131,23 @@ void TuneGammaVerbose(const FIELD_3D& F, int blockNumber, int col,
 void TuneGamma(const FIELD_3D& F, int blockNumber, int col, COMPRESSION_DATA* data, 
     FIELD_3D* damp);
 
+// simply sets gamma equal to zero for no damping. for
+// debug purposes only.
+void TuneGammaDebug(const FIELD_3D& F, int blockNumber, int col, 
+    COMPRESSION_DATA* data, FIELD_3D* damp);
+
 // takes a passed in FIELD_3D (which is intended to be
 // the result of a DCT post-preprocess). calculates the best gamma value
 // for a damping array. then damps by that array and quantizes the result to an integer. 
 // stores the value of gamma for the damping.
 void EncodeBlock(const FIELD_3D& F, int blockNumber, int col, COMPRESSION_DATA* data, 
     INTEGER_FIELD_3D* quantized); 
+
+// takes a passed in FIELD_3D (which is intended to be
+// the result of a DCT post-preprocess). for debug purposes
+// only, does not perform any damping---gamma is set to 0.
+void EncodeBlockDebug(const FIELD_3D& F, int blockNumber, int col, COMPRESSION_DATA* data, 
+    INTEGER_FIELD_3D* quantized);
 
 // takes a passed in INTEGER_FIELD_3D (which is intended to be run-length
 // decoded and unzigzagged) at a particular blockNumber and column of the matrix.
@@ -172,6 +192,14 @@ void RunLengthDecodeBinary(int* allData, int blockNumber, int col,
 void CompressAndWriteField(const char* filename, const FIELD_3D& F, int col, 
     COMPRESSION_DATA* compression_data);
 
+// takes an input FIELD_3D at a particular matrix column
+// which is the result of an SVD coordinate transform, compresses
+// it according to the general scheme, and writes it to a binary file.
+// meant to be called in a chain so that the binary file
+// continues to grow. for debugging, gamma is set to zero everywhere! 
+void CompressAndWriteFieldDebug(const char* filename, const FIELD_3D& F, int col,
+    COMPRESSION_DATA* compression_data);
+
 // print four different percents for how far along each column we are
 void PrintProgress(int col, int numCols);
 
@@ -188,6 +216,13 @@ void DeleteIfExists(const char* filename);
 // of a matrix (which represents a vector field) and write them to
 // a binary file. applies svd coordinate transform first 
 void CompressAndWriteMatrixComponents(const char* filename, const MatrixXd& U,  
+      COMPRESSION_DATA* data0, COMPRESSION_DATA* data1, COMPRESSION_DATA* data2);
+
+// compress all of the scalar field components
+// of a matrix (which represents a vector field) and write them to
+// a binary file. applies svd coordinate transform first.
+// uses gamma as zero everywhere for debugging!
+void CompressAndWriteMatrixComponentsDebug(const char* filename, const MatrixXd& U,  
       COMPRESSION_DATA* data0, COMPRESSION_DATA* data1, COMPRESSION_DATA* data2);
 
 // reads from a binary file of the SVD data and sets the initializations
@@ -215,6 +250,9 @@ void DecodeScalarFieldEigen(COMPRESSION_DATA* compression_data, int* allData,
 void DecodeVectorField(MATRIX_COMPRESSION_DATA* data, int col, 
     VECTOR3_FIELD_3D* decoded);
 
+// uses DecodeVectorField on each column to recover a lossy entire matrix
+void DecodeMatrix(MATRIX_COMPRESSION_DATA* data, MatrixXd* decoded);
+
 // compute the block-wise dot product between two lists and sum them into one
 // large dot product
 double GetDotProductSum(const vector<VectorXd>& Vlist, const vector<VectorXd>& Wlist); 
@@ -222,13 +260,35 @@ double GetDotProductSum(const vector<VectorXd>& Vlist, const vector<VectorXd>& W
 // helper function for frequency domain projection. transforms 
 // V first by the SVD and then DCT. fills up the three vectors
 // with the three components.
-void TransformSVDAndDCT(int col, VECTOR3_FIELD_3D* V, 
+void TransformSVDAndDCT(int col, const VECTOR3_FIELD_3D& V, 
     MATRIX_COMPRESSION_DATA* U_data, 
     vector<VectorXd>* Xpart, vector<VectorXd>* Ypart, vector<VectorXd>* Zpart);
 
 // projection, implemented in the frequency domain
 void PeeledCompressedProjectTransform(const VECTOR3_FIELD_3D& V, 
     MATRIX_COMPRESSION_DATA* U_data, VectorXd* q);
+
+// set zeros at the places where we have artificially padded
+void SetZeroPadding(vector<VectorXd>* blocks, COMPRESSION_DATA* data);
+
+// unproject the reduced coordinate into the peeled cells in this field 
+// using compression data
+void PeeledCompressedUnproject(MATRIX_COMPRESSION_DATA* U_data, const VectorXd& q, 
+    VECTOR3_FIELD_3D* V);
+
+// given a row number and the dimensions, computes
+// which block number we need for the decoder. populates
+// blockIndex with the corresponding value as well.
+void ComputeBlockNumber(int row, const VEC3I& dims, int* blockNumber, int* blockIndex);
+
+
+// given a (row, col), decode the vector
+// at that cell from the lossy matrix. assumes row
+// is divisible by 3 since it is the start of the vector.
+void DecodeFromRowCol(int row, int col, MATRIX_COMPRESSION_DATA* data, Vector3d* cell);
+
+
+
 
 #endif
 

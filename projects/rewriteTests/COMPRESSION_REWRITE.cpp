@@ -527,6 +527,33 @@ void AssimilateBlocks(const VEC3I& dims, const vector<FIELD_3D>& V, FIELD_3D* as
 }
 
 ////////////////////////////////////////////////////////
+// reconstruct a FIELD_3D with the passed in dims
+// from a list of 8 x 8 x 8 flattened blocks
+////////////////////////////////////////////////////////
+void AssimilateBlocksEigen(const VEC3I& dims, vector<VectorXd>* V, 
+    FIELD_3D* assimilatedField)
+{
+  TIMER functionTimer(__FUNCTION__);
+
+  const int xRes = dims[0];
+  const int yRes = dims[1];
+  const int zRes = dims[2];
+
+  assert( xRes % BLOCK_SIZE == 0 && yRes % BLOCK_SIZE == 0 && zRes % BLOCK_SIZE == 0 );
+  assert( xRes == assimilatedField->xRes() && yRes == assimilatedField->yRes() && zRes == assimilatedField->zRes() );
+  assert( V->size() == (xRes / BLOCK_SIZE) * (yRes / BLOCK_SIZE) * (zRes / BLOCK_SIZE) );
+
+  int slabSize = BLOCK_SIZE * BLOCK_SIZE;
+  for (int z = 0; z < zRes; z++) {
+    for (int y = 0; y < yRes; y++) {
+      for (int x = 0; x < xRes; x++) {
+        int index = (x/BLOCK_SIZE) + (y/BLOCK_SIZE) * (xRes/BLOCK_SIZE) + (z/BLOCK_SIZE) * (xRes/BLOCK_SIZE) * (yRes/BLOCK_SIZE);     // warning, evil integer division happening!
+        (*assimilatedField)(x, y, z) = (*V)[index]( (z % BLOCK_SIZE) * slabSize + (y % BLOCK_SIZE) * BLOCK_SIZE + (x % BLOCK_SIZE) );
+      }
+    }
+  }
+}
+////////////////////////////////////////////////////////
 // performs a UNITARY dct/idct on each individual block of a passed in
 // vector of blocks. direction 1 is dct, -1 is idct.
 ////////////////////////////////////////////////////////
@@ -970,6 +997,38 @@ void TuneGamma(const FIELD_3D& F, int blockNumber, int col,
 }
 
 ////////////////////////////////////////////////////////
+// simply sets gamma equal to zero for no damping. for
+// debug purposes only.
+///////////////////////////////////////////////////////
+void TuneGammaDebug(const FIELD_3D& F, int blockNumber, int col, 
+    COMPRESSION_DATA* data, FIELD_3D* damp)
+{
+  TIMER functionTimer(__FUNCTION__);
+
+  // fetch parameters from data
+  int nBits = data->get_nBits();
+  int maxIterations = data->get_maxIterations();
+  double percent = data->get_percent();
+
+  // set gamma to zero always, for debugging
+  double gamma = 0.0; 
+  damp->toPower(gamma);
+  
+  // fetch data to update gammaList
+  MatrixXd* gammaListMatrix = data->get_gammaListMatrix();
+  int numBlocks = data->get_numBlocks();
+  int numCols = data->get_numCols();
+
+  // if it's the first time TuneGammaDebug is called in a chain, resize
+  if (gammaListMatrix->cols() <= 0) { 
+    gammaListMatrix->setZero(numBlocks, numCols);
+  }
+
+  (*gammaListMatrix)(blockNumber, col) = gamma;
+
+}
+
+////////////////////////////////////////////////////////
 // takes a passed in FIELD_3D (which is intended to be
 // the result of a DCT post-preprocess). calculates the best gamma value
 // for a damping array. then damps by that array and
@@ -1004,6 +1063,36 @@ void EncodeBlock(const FIELD_3D& F, int blockNumber, int col, COMPRESSION_DATA* 
 
 }
 
+////////////////////////////////////////////////////////
+// takes a passed in FIELD_3D (which is intended to be
+// the result of a DCT post-preprocess). for debug purposes
+// only, does not perform any damping---gamma is set to 0.
+////////////////////////////////////////////////////////
+void EncodeBlockDebug(const FIELD_3D& F, int blockNumber, int col, COMPRESSION_DATA* data, 
+    INTEGER_FIELD_3D* quantized) 
+{
+  TIMER functionTimer(__FUNCTION__);
+
+  // size the return value appropriately
+  quantized->resizeAndWipe(F.xRes(), F.yRes(), F.zRes());
+
+  // grab the pre-cached vanila damping array
+  const FIELD_3D& dampingArray = data->get_dampingArray();
+
+  // make a copy for modification during TuneGamma
+  FIELD_3D damp = dampingArray;
+
+  int numBlocks = data->get_numBlocks();
+  assert(blockNumber >= 0 && blockNumber < numBlocks);
+ 
+  // sets gamma to zero for debugging purposes.
+  // updates damp to be all 1s
+  TuneGammaDebug(F, blockNumber, col, data, &damp);
+
+  // fill the return value with rounded damped entries
+  RoundFieldToInt( (F / damp), quantized );
+
+}
 ////////////////////////////////////////////////////////
 // takes a passed in INTEGER_FIELD_3D (which is inteneded to
 // be run-length decoded and unzigzagged) corresponding to
@@ -1189,8 +1278,6 @@ void RunLengthDecodeBinary(int* allData, int blockNumber, int col,
 
   TIMER functionTimer(__FUNCTION__);
 
-  int nBits = compression_data->get_nBits();
-   
   MatrixXi* blockLengthsMatrix = compression_data->get_blockLengthsMatrix(); 
   int compressedBlockSize = (*blockLengthsMatrix)(blockNumber, col);
   assert(compressedBlockSize >= 0 && 
@@ -1229,19 +1316,16 @@ void RunLengthDecodeBinary(int* allData, int blockNumber, int col,
     // write the value once
     data[j] = allData[blockIndex + i];
 
-    /*
+    
     // *************************************************** 
-    // purely for debugging!
+    // purely for debugging---the zeroth entry of each block
+    // should decode to the largest signed nBit integer!
     if (j == 0) {
-      if (data[j] != pow(2, nBits - 1) - 1) {
-        cout << "Error: DC term parsed wrong!" << endl;
-        cout << "DC term was thought to be: " << data[j] << endl;
-        cout << "Block number is: " << blockNumber << endl;
-        cout << "Column is: " << col << endl;
-      }
+      int nBits = compression_data->get_nBits();
+      assert( data[j] == pow(2, nBits - 1) - 1 );
     }
     // *************************************************** 
-    */
+    
     
     if ( (i + 1 < compressedBlockSize) && 
         allData[blockIndex + i] == allData[blockIndex + i + 1]) {
@@ -1339,7 +1423,9 @@ void ReadSVDData(const char* filename, COMPRESSION_DATA* data)
   // the values in the V matrix. there are 3 singular values,
   // and the V matrices are all 3 x 3.
   for (int col = 0; col < numCols; col++) {
+
     fread((*singularList)[col].data(), sizeof(double), 3, pFile);
+
     fread((*vList)[col].data(), sizeof(double), 3 * 3, pFile);
   }
   
@@ -1377,7 +1463,7 @@ int* ReadBinaryFileToMemory(const char* filename,
     int nBits;
     fread(&nBits, 1, sizeof(int), pFile);
     data->set_nBits(nBits);
-    cout << "nBits: " << nBits << endl;
+    // cout << "nBits: " << nBits << endl;
 
     // read dims, numCols, and numBlocks
     int xRes, yRes, zRes;
@@ -1386,7 +1472,7 @@ int* ReadBinaryFileToMemory(const char* filename,
     fread(&zRes, 1, sizeof(int), pFile);
     VEC3I dims(xRes, yRes, zRes);
     data->set_dims(dims);
-    cout << "dims: " << dims << endl;
+    // cout << "dims: " << dims << endl;
 
     int numCols, numBlocks;
     fread(&numCols, 1, sizeof(int), pFile);
@@ -1394,8 +1480,8 @@ int* ReadBinaryFileToMemory(const char* filename,
     // set the decompression data accordingly
     data->set_numCols(numCols);
     data->set_numBlocks(numBlocks);
-    cout << "numCols: " << numCols << endl;
-    cout << "numBlocks: " << numBlocks << endl;
+    // cout << "numCols: " << numCols << endl;
+    // cout << "numBlocks: " << numBlocks << endl;
     
     // read in the sListMatrix and set the data
     int blocksXcols = numBlocks * numCols;
@@ -1525,6 +1611,62 @@ void CompressAndWriteField(const char* filename, const FIELD_3D& F, int col,
   
 }
 
+////////////////////////////////////////////////////////
+// takes an input FIELD_3D at a particular matrix column
+// which is the result of an SVD coordinate transform, compresses
+// it according to the general scheme, and writes it to a binary file.
+// meant to be called in a chain so that the binary file
+// continues to grow. for debugging, gamma is set to zero everywhere! 
+////////////////////////////////////////////////////////
+
+void CompressAndWriteFieldDebug(const char* filename, const FIELD_3D& F, int col,
+    COMPRESSION_DATA* compression_data)
+{
+  TIMER functionTimer(__FUNCTION__);
+ 
+  // fetch some compression data 
+  int numBlocks = compression_data->get_numBlocks();
+  int numCols = compression_data->get_numCols();
+
+  const INTEGER_FIELD_3D& zigzagArray = compression_data->get_zigzagArray();
+  MatrixXi* blockLengthsMatrix = compression_data->get_blockLengthsMatrix();
+
+  // if it's the first time calling this routine in a chain, preallocate
+  // the matrix
+  if (blockLengthsMatrix->cols() <= 0) {
+    blockLengthsMatrix->resize(numBlocks, numCols);
+  }
+
+  // subdivide F into blocks
+  vector<FIELD_3D> blocks;
+  GetBlocks(F, &blocks);
+
+  // do the forward transform 
+  UnitaryBlockDCT(1, &blocks);
+
+  // initialize the relevant variables before looping through all the blocks
+  VectorXi blockLengths(numBlocks);
+  INTEGER_FIELD_3D intEncoded_i;
+  VectorXi zigzagged_i;
+
+  // loop through the blocks and apply the encoding procedure
+  for (int i = 0; i < numBlocks; i++) {
+
+    // rescales data and updates sList
+    PreprocessBlock(&(blocks[i]), i, col, compression_data);
+
+    // performs quantization and damping. updates gammaList
+    EncodeBlockDebug(blocks[i], i, col, compression_data, &intEncoded_i);
+
+    // do the zigzag scan for run-length encoding
+    ZigzagFlatten(intEncoded_i, zigzagArray, &zigzagged_i);
+
+    // performs run-length encoding. updates blockLengthsMatrix. since
+    // it opens 'filename' in append mode, it can be called in a chain
+    RunLengthEncodeBinary(filename, i, col, zigzagged_i, compression_data);  
+  }
+  
+}
 
 ////////////////////////////////////////////////////////
 // build the block indices matrix from the block lengths matrix
@@ -1583,122 +1725,157 @@ void BuildBlockIndicesMatrixDebug(const MatrixXi blockLengths, MatrixXi* blockIn
 // which block number we need for the decoder. populates
 // blockIndex with the corresponding value as well.
 ////////////////////////////////////////////////////////
-/*
-int ComputeBlockNumber(int row, VEC3I dims, int& blockIndex) {
+
+void ComputeBlockNumber(int row, const VEC3I& dims, int* blockNumber, int* blockIndex) 
+{
   TIMER functionTimer(__FUNCTION__);
-    int xRes = dims[0];
-    int yRes = dims[1];
-    int zRes = dims[2];
-    
-    assert( row >= 0 && row < 3 * xRes * yRes * zRes);
 
-    // evil integer division!
-    int index = row / 3;
-    int z = index / (xRes * yRes);         // index = (xRes * yRes) * z + remainder1
-    int rem1 = index - (xRes * yRes * z);
-    int y = rem1 / xRes;                   // rem1  = xRes * y          + remainder2 
-    int rem2 = rem1 - xRes * y;
-    int x = rem2;
-
-    int u = x % BLOCK_SIZE;
-    int v = y % BLOCK_SIZE;
-    int w = z % BLOCK_SIZE;
-    blockIndex = u + BLOCK_SIZE * v + BLOCK_SIZE * BLOCK_SIZE * w;
-    
-    // sanity check!
-    assert(index == z * xRes * yRes + y * xRes + x);
- 
-    int xPadding;
-    int yPadding;
-    int zPadding;
-    
-    GetPaddings(dims, xPadding, yPadding, zPadding);
-    xRes += xPadding;
-    yRes += yPadding;
-    zRes += zPadding;
-    
-    // more evil integer division!
-    int blockNumber = x/BLOCK_SIZE + (y/BLOCK_SIZE * (xRes/BLOCK_SIZE)) + (z/BLOCK_SIZE * (xRes/BLOCK_SIZE) * (yRes/BLOCK_SIZE));
-
-    return blockNumber;
-  }
-*/
+  int xRes = dims[0];
+  int yRes = dims[1];
+  int zRes = dims[2];
   
+  assert( row >= 0 && row < 3 * xRes * yRes * zRes);
+
+  // evil integer division!
+  int index = row / 3;
+  int z = index / (xRes * yRes);         // index = (xRes * yRes) * z + remainder1
+  int rem1 = index - (xRes * yRes * z);
+  int y = rem1 / xRes;                   // rem1  = xRes * y          + remainder2 
+  int rem2 = rem1 - xRes * y;
+  int x = rem2;
+
+  int u = x % BLOCK_SIZE;
+  int v = y % BLOCK_SIZE;
+  int w = z % BLOCK_SIZE;
+  // return the blockIndex
+  *blockIndex = u + BLOCK_SIZE * v + BLOCK_SIZE * BLOCK_SIZE * w;
+  
+  // sanity check!
+  assert(index == z * xRes * yRes + y * xRes + x);
+
+  // get the padded resolutions 
+  VEC3I paddings; 
+  GetPaddings(dims, &paddings);
+  xRes += paddings[0];
+  yRes += paddings[1];
+  zRes += paddings[2];
+  
+  // more evil integer division to compute the block number!
+  *blockNumber = x/BLOCK_SIZE + (y/BLOCK_SIZE * (xRes/BLOCK_SIZE)) + (z/BLOCK_SIZE * (xRes/BLOCK_SIZE) * (yRes/BLOCK_SIZE));
+
+}
+
 ////////////////////////////////////////////////////////
-// given a (row, col), decode it from the lossy matrix
+// given a (row, col), decode the vector
+// at that cell from the lossy matrix. assumes row
+// is divisible by 3 since it is the start of the vector.
 ////////////////////////////////////////////////////////
-/*
-double DecodeFromRowColFast(int row, int col, MATRIX_COMPRESSION_DATA& data) { 
-     
+
+void DecodeFromRowCol(int row, int col, MATRIX_COMPRESSION_DATA* data, Vector3d* cell) 
+{ 
   TIMER functionTimer(__FUNCTION__);
 
-  DECOMPRESSION_DATA dataX = data.get_decompression_dataX();
+  assert ( row % 3 == 0 );
+
   // using X is arbitrary---it will be the same for all three
-  VEC3I dims = dataX.get_dims();
-  const INTEGER_FIELD_3D& zigzagArray = dataX.get_zigzagArray();
+  COMPRESSION_DATA* dataX = data->get_compression_dataX();
+
+  // initialize useful data
+  const VEC3I& dims = dataX->get_dims();
+  int numBlocks = dataX->get_numBlocks();
+  const INTEGER_FIELD_3D& zigzagArray = dataX->get_zigzagArray();
   
-  int* allDataX = data.get_dataX();
-  int* allDataY = data.get_dataY();
-  int* allDataZ = data.get_dataZ();
-  const DECOMPRESSION_DATA& dataY = data.get_decompression_dataY();
-  const DECOMPRESSION_DATA& dataZ = data.get_decompression_dataZ();
-
-  vector<int> decoded_runLength(BLOCK_SIZE * BLOCK_SIZE * BLOCK_SIZE);
-  VECTOR decoded_runLengthVector(BLOCK_SIZE * BLOCK_SIZE * BLOCK_SIZE);
-  INTEGER_FIELD_3D unzigzagged(BLOCK_SIZE, BLOCK_SIZE, BLOCK_SIZE);
-  FIELD_3D decoded_block(BLOCK_SIZE, BLOCK_SIZE, BLOCK_SIZE);
- 
-
-  // dummy initialization
-  int blockIndex = 0;
-  // fill blockIndex and compute the block number
-  int blockNumber = ComputeBlockNumber(row, dims, blockIndex);
-  if (row % 3 == 0) { // X coordinate
-    const MATRIX& blockLengthsMatrix = dataX.get_blockLengthsMatrix();
-    const MATRIX& blockIndicesMatrix = dataX.get_blockIndicesMatrix();
-        
-    
-    RunLengthDecodeBinaryFast(allDataX, blockNumber, col, blockLengthsMatrix, blockIndicesMatrix, decoded_runLength); 
-
-    CastIntToVectorFast(decoded_runLength, decoded_runLengthVector);
-    ZigzagUnflattenSmart(decoded_runLengthVector, zigzagArray, unzigzagged);
-    DecodeBlockFast(unzigzagged, blockNumber, col, dataX, decoded_block); 
-    double result = decoded_block[blockIndex];
-    return result;
-
-  }
-
-  else if (row % 3 == 1) { // Y coordinate
+  int* allDataX = data->get_dataX();
+  int* allDataY = data->get_dataY();
+  int* allDataZ = data->get_dataZ();
+  COMPRESSION_DATA* dataY = data->get_compression_dataY();
+  COMPRESSION_DATA* dataZ = data->get_compression_dataZ();
   
-    const MATRIX& blockLengthsMatrix = dataY.get_blockLengthsMatrix();
-    const MATRIX& blockIndicesMatrix = dataY.get_blockIndicesMatrix();
+  // compute the block number and index
+  int blockIndex, blockNumber;
+  ComputeBlockNumber(row, dims, &blockNumber, &blockIndex);
+  cout << "block number: " << blockNumber << endl;
+  cout << "block index: " << blockIndex << endl;
 
-    RunLengthDecodeBinaryFast(allDataY, blockNumber, col, blockLengthsMatrix, blockIndicesMatrix, decoded_runLength); 
+  // container for the encoded blocks
+  vector<FIELD_3D> blocks(numBlocks);
 
-    CastIntToVectorFast(decoded_runLength, decoded_runLengthVector);
-    ZigzagUnflattenSmart(decoded_runLengthVector, zigzagArray, unzigzagged);
-    DecodeBlockFast(unzigzagged, blockNumber, col, dataY, decoded_block); 
-    double result = decoded_block[blockIndex];
-    return result;
-  
-  }
+  // variable to store decoded run-length blocks
+  VectorXi runLengthDecoded;
 
-  else { // Z coordinate
-   
-    const MATRIX& blockLengthsMatrix = dataZ.get_blockLengthsMatrix();
-    const MATRIX& blockIndicesMatrix = dataZ.get_blockIndicesMatrix();
+  // vector prior to undoing the svd
+  Vector3d preSVD;
 
+  /*
+   *****************************************************************
+   * X coordinate
+   *****************************************************************
+  */  
 
-    RunLengthDecodeBinaryFast(allDataZ, blockNumber, col, blockLengthsMatrix, blockIndicesMatrix, decoded_runLength); 
+  // decode the run-length scheme
+  RunLengthDecodeBinary(allDataX, blockNumber, col, dataX, &runLengthDecoded); 
 
-    CastIntToVectorFast(decoded_runLength, decoded_runLengthVector);
-    ZigzagUnflattenSmart(decoded_runLengthVector, zigzagArray, unzigzagged);
-    DecodeBlockFast(unzigzagged, blockNumber, col, dataZ, decoded_block);
-    double result = decoded_block[blockIndex];
-    return result;
-  }
+  // undo the zigzag scan
+  INTEGER_FIELD_3D unflattened;
+  ZigzagUnflatten(runLengthDecoded, zigzagArray, &unflattened);
+
+  // undo the scaling from the quantizer
+  FIELD_3D decodedBlock;
+  DecodeBlockWithCompressionData(unflattened, blockNumber, col, dataX, &decodedBlock); 
+
+  // inverse DCT
+  const fftw_plan& plan = data->get_plan();
+  double* in = data->get_dct_in();
+  int direction = -1;
+  DCT_Smart_Unitary(plan, direction, in, &decodedBlock);
+  preSVD[0] = decodedBlock[blockIndex];
+
+  /*
+   *****************************************************************
+   * Y coordinate
+   *****************************************************************
+  */  
+
+  // decode the run-length scheme
+  RunLengthDecodeBinary(allDataY, blockNumber, col, dataY, &runLengthDecoded); 
+
+  // undo the zigzag scan
+  ZigzagUnflatten(runLengthDecoded, zigzagArray, &unflattened);
+
+  // undo the scaling from the quantizer
+  DecodeBlockWithCompressionData(unflattened, blockNumber, col, dataY, &decodedBlock); 
+
+  // inverse DCT
+  DCT_Smart_Unitary(plan, direction, in, &decodedBlock);
+
+  preSVD[1] = decodedBlock[blockIndex];
+
+  /*
+   *****************************************************************
+   * Z coordinate
+   *****************************************************************
+  */  
+
+  // decode the run-length scheme
+  RunLengthDecodeBinary(allDataZ, blockNumber, col, dataZ, &runLengthDecoded); 
+
+  // undo the zigzag scan
+  ZigzagUnflatten(runLengthDecoded, zigzagArray, &unflattened);
+
+  // undo the scaling from the quantizer
+  DecodeBlockWithCompressionData(unflattened, blockNumber, col, dataZ, &decodedBlock); 
+
+  // inverse DCT
+  DCT_Smart_Unitary(plan, direction, in, &decodedBlock);
+
+  preSVD[2] = decodedBlock[blockIndex];
+
+  // fetch the V matrix to undo the SVD
+  vector<Matrix3d>* vList = dataX->get_vList();
+  Matrix3d V = (*vList)[col];
+  *cell = V * preSVD;
+
 } 
-*/
 
    
 ////////////////////////////////////////////////////////
@@ -2003,11 +2180,6 @@ void WriteSVDData(const char* filename, COMPRESSION_DATA* data)
 // of a matrix (which represents a vector field) and write them to
 // a binary file. applies svd coordinate transform first.
 ////////////////////////////////////////////////////////
-
-// *****************************************************
-// Still in the process of editing this!
-// *****************************************************
-
 void CompressAndWriteMatrixComponents(const char* filename, const MatrixXd& U,  
       COMPRESSION_DATA* data0, COMPRESSION_DATA* data1, COMPRESSION_DATA* data2) 
 {
@@ -2057,6 +2229,95 @@ void CompressAndWriteMatrixComponents(const char* filename, const MatrixXd& U,
     CompressAndWriteField(filenameX.c_str(), V.scalarField(0), col, data0);
     CompressAndWriteField(filenameY.c_str(), V.scalarField(1), col, data1);
     CompressAndWriteField(filenameZ.c_str(), V.scalarField(2), col, data2);
+
+    // progress printout for the impatient user
+    PrintProgress(col, numCols);
+  }
+  
+  // once we've gone through each column, we can write the full SVD data
+  WriteSVDData("U.preadvect.SVD.data", data0);
+
+  // we can also build the block indices matrix for each component
+  BuildBlockIndicesMatrix(data0);
+  BuildBlockIndicesMatrix(data1);
+  BuildBlockIndicesMatrix(data2);
+
+  // write the metadata for each component one at a time
+  const char* metafile = "metadata.bin"; 
+  WriteMetaData(metafile, *data0);
+
+  // appends the metadata as a header to the main binary file and pipes them into final_string
+  PrefixBinary(metafile, filenameX, filename0);
+ 
+  // removes the now-redundant files 
+  CleanUpPrefix(metafile, filenameX.c_str());
+
+  // do the same for component 1
+  WriteMetaData(metafile, *data1);
+  PrefixBinary(metafile, filenameY, filename1);
+  CleanUpPrefix(metafile, filenameY.c_str());
+
+  // do the same for component 2
+  WriteMetaData(metafile, *data2);
+  PrefixBinary(metafile, filenameZ, filename2);
+  CleanUpPrefix(metafile, filenameZ.c_str());
+}
+
+////////////////////////////////////////////////////////
+// compress all of the scalar field components
+// of a matrix (which represents a vector field) and write them to
+// a binary file. applies svd coordinate transform first.
+// uses gamma as zero everywhere for debugging!
+////////////////////////////////////////////////////////
+void CompressAndWriteMatrixComponentsDebug(const char* filename, const MatrixXd& U,  
+      COMPRESSION_DATA* data0, COMPRESSION_DATA* data1, COMPRESSION_DATA* data2) 
+{
+  TIMER functionTimer(__FUNCTION__);
+  
+  // wipe any pre-existing binary file of the same name, since we will be opening
+  // in append mode! 
+  DeleteIfExists(filename);
+
+  // write to component X, Y, and Z accordingly
+  // initialize strings 0, 1, and 2 for the final result
+  string filenameX(filename); filenameX += 'X';
+  string filename0(filename); filename0 += '0';
+  DeleteIfExists(filenameX.c_str());
+  DeleteIfExists(filename0.c_str());
+  
+  string filenameY(filename); filenameY += 'Y';
+  string filename1(filename); filename1 += '1';
+  DeleteIfExists(filenameY.c_str());
+  DeleteIfExists(filename1.c_str());
+  
+  string filenameZ(filename); filenameZ += 'Z';
+  string filename2(filename); filename2 += '2';
+  DeleteIfExists(filenameZ.c_str());
+  DeleteIfExists(filename2.c_str());
+
+  // get useful compression data. it should be the same across all three,
+  // so just fetch it from data0
+  const VEC3I& dims = data0->get_dims();
+  int xRes = dims[0];
+  int yRes = dims[1];
+  int zRes = dims[2];
+  int numCols = U.cols();
+
+  for (int col = 0; col < numCols; col++) {  
+
+    // for each column, grab the vector field that it corresponds to
+    VECTOR3_FIELD_3D V(U.col(col), xRes, yRes, zRes);
+    
+    // do the svd coordinate transform in place and update the data for 
+    // vList and singularList. only data0 contains these!  
+    TransformVectorFieldSVDCompression(&V, data0);
+    
+   
+    // write the components to an (appended) binary file 
+
+    CompressAndWriteFieldDebug(filenameX.c_str(), V.scalarField(0), col, data0);
+    CompressAndWriteFieldDebug(filenameY.c_str(), V.scalarField(1), col, data1);
+    CompressAndWriteFieldDebug(filenameZ.c_str(), V.scalarField(2), col, data2);
 
     // progress printout for the impatient user
     PrintProgress(col, numCols);
@@ -2146,7 +2407,7 @@ void DecodeScalarField(COMPRESSION_DATA* compression_data, int* allData,
 
   for (int blockNumber = 0; blockNumber < numBlocks; blockNumber++) {
 
-    // decode the run length scheme
+    // decode the run-length scheme
     RunLengthDecodeBinary(allData, blockNumber, col, 
         compression_data, &runLengthDecoded);
 
@@ -2474,7 +2735,26 @@ void DecodeVectorField(MATRIX_COMPRESSION_DATA* data, int col,
 
 }
 
+////////////////////////////////////////////////////////
+// reconstruct an entire (lossy) matrix
+////////////////////////////////////////////////////////
+void DecodeMatrix(MATRIX_COMPRESSION_DATA* data, MatrixXd* decoded)
+{
+  TIMER functionTimer(__FUNCTION__);
 
+  COMPRESSION_DATA* compression_dataX = data->get_compression_dataX();
+  const VEC3I& dims = compression_dataX->get_dims();
+  int numRows = 3 * dims[0] * dims[1] * dims[2];
+  int numCols = compression_dataX->get_numCols();
+  decoded->resize(numRows, numCols);
+
+  VECTOR3_FIELD_3D decodedVecfield;
+  for (int i = 0; i < numCols; i++) {
+    DecodeVectorField(data, i, &decodedVecfield);
+    decoded->col(i) = decodedVecfield.flattenedEigen();
+  }
+
+}
 
 ////////////////////////////////////////////////////////
 // uses the decode vector field on each column to reconstruct
@@ -2504,40 +2784,43 @@ MatrixXd DecodeFullMatrixFast(MATRIX_COMPRESSION_DATA& data) {
 // unproject the reduced coordinate into the peeled cells in this field 
 // using compression data
 //////////////////////////////////////////////////////////////////////
-/*
-void PeeledCompressedUnproject(VECTOR3_FIELD_3D& V, MATRIX_COMPRESSION_DATA& U_data, const VectorXd& q) {
+
+void PeeledCompressedUnproject(MATRIX_COMPRESSION_DATA* U_data, const VectorXd& q, 
+    VECTOR3_FIELD_3D* V)
+{
   TIMER functionTimer(__FUNCTION__);
 
-  int xRes = V.xRes();
-  int yRes = V.yRes();
-  int zRes = V.zRes();
-  DECOMPRESSION_DATA dataX = U_data.get_decompression_dataX();
-  int totalColumns = dataX.get_numCols();
-  const VEC3I& dims = dataX.get_dims();
+  int xRes = V->xRes();
+  int yRes = V->yRes();
+  int zRes = V->zRes();
+  COMPRESSION_DATA* dataX = U_data->get_compression_dataX();
+  int totalColumns = dataX->get_numCols();
+  const VEC3I& dims = dataX->get_dims();
 
   // verify that the (peeled) dimensions match
-  assert( xRes - 2 == dims[0] && yRes - 2 == dims[1] && zRes - 2 == dims[2] );
+  void GetPaddings(const VEC3I& v, VEC3I* paddings);
+  VEC3I paddings;
+  GetPaddings(dims, &paddings);
+  paddings += dims;
+  assert( xRes == paddings[0] && yRes == paddings[1] && zRes == paddings[2] );
   assert ( totalColumns == q.size() );
 
   // times 3 since it is a vec3 field
-  const int numRows = 3 * (xRes - 2) * (yRes - 2) * (zRes - 2);
+  const int numRows = 3 * dims[0] * dims[1] * dims[2];
 
   VectorXd result(numRows);
   result.setZero();
   VECTOR3_FIELD_3D decodedVecField;
 
   for (int col = 0; col < totalColumns; col++) {
-
-    DecodeVectorFieldFast(U_data, col, decodedVecField);
-    VectorXd decodedEigen = decodedVecField.flattenedEigen(); 
-    double coeff = q[col];
-    result += (coeff * decodedEigen);
+    DecodeVectorField(U_data, col, &decodedVecField);
+    result += ( q[col] * decodedVecField.flattenedEigen() );
   }
 
-  V.setWithPeeled(result);
+  V->setWithPeeled(result);
 
 }
-*/
+
 
 //////////////////////////////////////////////////////////////////////
 // compute the block-wise dot product between two lists and sum them into one
@@ -2619,17 +2902,19 @@ VectorXd PeeledCompressedProject(VECTOR3_FIELD_3D& V, MATRIX_COMPRESSION_DATA& U
 // V first by the SVD and then DCT. fills up the three vectors
 // with the three components.
 //////////////////////////////////////////////////////////////////////
-void TransformSVDAndDCT(int col, VECTOR3_FIELD_3D* V, 
+void TransformSVDAndDCT(int col, const VECTOR3_FIELD_3D& V, 
     MATRIX_COMPRESSION_DATA* U_data, 
     vector<VectorXd>* Xpart, vector<VectorXd>* Ypart, vector<VectorXd>* Zpart) 
 {
   COMPRESSION_DATA* dataX = U_data->get_compression_dataX();
   vector<Matrix3d>* vList = dataX->get_vList();
 
-  TransformVectorFieldSVDCached(&(*vList)[col], V);
+  // make a copy of V to write over since V is read-only
+  VECTOR3_FIELD_3D Vcopy = V;
+  TransformVectorFieldSVDCached(&(*vList)[col], &Vcopy);
 
   FIELD_3D V_X, V_Y, V_Z;
-  GetScalarFields(V->peelBoundary(), &V_X, &V_Y, &V_Z);
+  GetScalarFields(Vcopy.peelBoundary(), &V_X, &V_Y, &V_Z);
 
   GetBlocksEigen(V_X, Xpart);
   GetBlocksEigen(V_Y, Ypart);
@@ -2638,6 +2923,17 @@ void TransformSVDAndDCT(int col, VECTOR3_FIELD_3D* V,
   UnitaryBlockDCTEigen(1, Xpart);
   UnitaryBlockDCTEigen(1, Ypart);
   UnitaryBlockDCTEigen(1, Zpart);
+
+  // it's okay to use dataX for all three since in the SetZeroPadding function
+  // it is used only for reading the dims and paddedDims
+
+  
+  SetZeroPadding(Xpart, dataX);
+
+  SetZeroPadding(Ypart, dataX);
+  SetZeroPadding(Zpart, dataX);
+  
+
 
 }
 
@@ -2663,11 +2959,10 @@ void PeeledCompressedProjectTransform(const VECTOR3_FIELD_3D& V,
 
   vector<VectorXd> Xpart, Ypart, Zpart;
   vector<VectorXd> blocks;
-  VECTOR3_FIELD_3D Vcopy = V;
 
   for (int col = 0; col < totalColumns; col++) {
     // transform V with an SVD and a DCT to mimic compression
-    TransformSVDAndDCT(col, &Vcopy, U_data, &Xpart, &Ypart, &Zpart); 
+    TransformSVDAndDCT(col, V, U_data, &Xpart, &Ypart, &Zpart); 
 
     double totalSum = 0.0;
     DecodeScalarFieldEigen(dataX, allDataX, col, &blocks);
@@ -2682,6 +2977,34 @@ void PeeledCompressedProjectTransform(const VECTOR3_FIELD_3D& V,
     (*q)[col] = totalSum;
  
   }
+
+}
+
+
+//////////////////////////////////////////////////////////////////////
+// set zeros at the places where we have artificially padded
+//////////////////////////////////////////////////////////////////////
+void SetZeroPadding(vector<VectorXd>* blocks, COMPRESSION_DATA* data)
+{
+  TIMER functionTimer(__FUNCTION__);
+
+  const VEC3I& paddedDims = data->get_paddedDims(); 
+  int xPadded = paddedDims[0];
+  int yPadded = paddedDims[1];
+  int zPadded = paddedDims[2];
+
+  const VEC3I& dims = data->get_dims();
+  int xRes = dims[0];
+  int yRes = dims[1];
+  int zRes = dims[2];
+
+  FIELD_3D assimilated(xPadded, yPadded, zPadded);
+  AssimilateBlocksEigen(paddedDims, blocks, &assimilated);
+  FIELD_3D sub = assimilated.subfield(0, xRes, 0, yRes, 0, zRes);
+
+  VEC3I paddings = paddedDims - dims;
+  FIELD_3D zeroPadded = sub.zeroPad_xyz(paddings);
+  GetBlocksEigen(zeroPadded, blocks);
 
 }
 
