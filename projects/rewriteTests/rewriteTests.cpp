@@ -155,6 +155,9 @@ void PeeledProjectTransformTest();
 // test the peeled unprojection
 void PeeledCompressedUnprojectTest();
 
+// test the peeled unprojection in the frequency domain
+void PeeledCompressedUnprojectTransformTest();
+
 // test DecodeFromRowCol
 void DecodeFromRowColTest(int row, int col);
 
@@ -184,6 +187,8 @@ int main(int argc, char* argv[])
 
   // PeeledCompressedUnprojectTest();
 
+  PeeledCompressedUnprojectTransformTest();
+
   // DecodeVectorFieldTest(col);
 
   // DecodeFromRowColTest(row, col);
@@ -192,7 +197,7 @@ int main(int argc, char* argv[])
   
   // DecodeMatrixTest();
  
-  PeeledCompressedProjectTest();
+  // PeeledCompressedProjectTest();
   
  
 
@@ -699,11 +704,11 @@ void DecodeScalarFieldTest(int col, COMPRESSION_DATA* data)
 void InitMatrixCompressionData() 
 {
   // put the svd data inside the 0 component
-  const char* filename = "U.preadvect.SVD.data";
-  ReadSVDData(filename, &compression_data0);
+  // const char* filename = "U.preadvect.SVD.data";
+  // ReadSVDData(filename, &compression_data0);
 
   // read all three 'allDatas' to memory
-  filename = "U.preadvect.compressed.matrix0";
+  const char* filename = "U.preadvect.compressed.matrix0";
   allData0 = ReadBinaryFileToMemory(filename, &compression_data0);
   filename = "U.preadvect.compressed.matrix1";
   allData1 = ReadBinaryFileToMemory(filename, &compression_data1);
@@ -882,7 +887,7 @@ void PeeledCompressedProjectTest()
   cout << EIGEN::convert(spatial) << endl;
 
   VectorXd freq;
-  PeeledCompressedProjectTransform(randomV, &matrix_data, &freq);
+  PeeledCompressedProjectTransformNoSVD(randomV, &matrix_data, &freq);
   cout << "freq: " << endl;
   cout << EIGEN::convert(freq) << endl;
 
@@ -1007,5 +1012,49 @@ void GetSubmatrixTest(int startRow)
 
   double diff = (ground - submatrix).norm();
   cout << "Diff: " << diff << endl; 
+
+}
+
+
+void PeeledCompressedUnprojectTransformTest()
+{
+
+  InitMatrixCompressionData();
+
+  // initialize a random vector in the subspace 
+  VectorXd q;
+  q.setRandom(numCols);
+
+  // run the compressed unprojector in frequency space
+  VECTOR3_FIELD_3D unprojected(xPadded, yPadded, zPadded);
+  PeeledCompressedUnprojectTransform(&matrix_data, q, &unprojected);
+  
+  FILE* pFile;
+  pFile = fopen("compressed.unprojected.freq.V", "wb");
+  if (pFile == NULL) {
+    perror("Error opening file");
+  }
+  int length = 3 * xRes * yRes * zRes;
+  fwrite(&length, sizeof(int), 1, pFile);
+  fwrite(unprojected.peelBoundary().flattenedEigen().data(), sizeof(double), length, pFile);
+
+  // compute the ground truth (no compression)
+  VECTOR3_FIELD_3D ground(xPadded, yPadded, zPadded);
+  ground.peeledUnproject(U, q);
+
+  pFile = fopen("uncompressed.unprojectedV", "wb");
+  if (pFile == NULL) {
+    perror("Error opening file");
+  }
+  fwrite(&length, sizeof(int), 1, pFile);
+  fwrite(ground.peelBoundary().flattenedEigen().data(), sizeof(double), length, pFile);
+
+  // compare
+  double groundLength = ground.peelBoundary().flattenedEigen().norm();
+  double error = ( unprojected.peelBoundary().flattenedEigen() - ground.peelBoundary().flattenedEigen() ).norm();
+  error /= groundLength;
+  cout << "error between compressed unproject and no compression: " << error << endl;
+
+  fclose(pFile);
 
 }

@@ -2129,7 +2129,7 @@ void CompressAndWriteMatrixComponents(const char* filename, const MatrixXd& U,
     
     // do the svd coordinate transform in place and update the data for 
     // vList and singularList. only data0 contains these!  
-    // TransformVectorFieldSVDCompression(&V, data0);
+    TransformVectorFieldSVDCompression(&V, data0);
     
    
     // write the components to an (appended) binary file 
@@ -2143,7 +2143,7 @@ void CompressAndWriteMatrixComponents(const char* filename, const MatrixXd& U,
   }
   
   // once we've gone through each column, we can write the full SVD data
-  // WriteSVDData("U.preadvect.SVD.data", data0);
+  WriteSVDData("U.preadvect.SVD.data", data0);
 
   // we can also build the block indices matrix for each component
   BuildBlockIndicesMatrix(data0);
@@ -2218,7 +2218,7 @@ void CompressAndWriteMatrixComponentsDebug(const char* filename, const MatrixXd&
     
     // do the svd coordinate transform in place and update the data for 
     // vList and singularList. only data0 contains these!  
-    // TransformVectorFieldSVDCompression(&V, data0);
+    TransformVectorFieldSVDCompression(&V, data0);
     
    
     // write the components to an (appended) binary file 
@@ -2232,7 +2232,7 @@ void CompressAndWriteMatrixComponentsDebug(const char* filename, const MatrixXd&
   }
   
   // once we've gone through each column, we can write the full SVD data
-  // WriteSVDData("U.preadvect.SVD.data", data0);
+  WriteSVDData("U.preadvect.SVD.data", data0);
 
   // we can also build the block indices matrix for each component
   BuildBlockIndicesMatrix(data0);
@@ -2424,8 +2424,8 @@ void DecodeVectorField(MATRIX_COMPRESSION_DATA* data, int col,
   (*decoded) = VECTOR3_FIELD_3D(scalarX.data(), scalarY.data(), scalarZ.data(), 
       xRes, yRes, zRes);
 
-  // vector<Matrix3d>* vList = compression_dataX->get_vList();
-  // UntransformVectorFieldSVD((*vList)[col], decoded);
+  vector<Matrix3d>* vList = compression_dataX->get_vList();
+  UntransformVectorFieldSVD((*vList)[col], decoded);
 
 }
 
@@ -2493,116 +2493,6 @@ void PeeledCompressedUnproject(MATRIX_COMPRESSION_DATA* U_data, const VectorXd& 
 
 }
 
-//////////////////////////////////////////////////////////////////////
-// scale a vector<VectorXd> each by the same scalar
-//////////////////////////////////////////////////////////////////////
-void ScaleVectorEigen(double alpha, vector<VectorXd>* V)
-{
-  for (int i = 0; i < V->size(); i++) {
-    (*V)[i] *= alpha;
-  }
-}
-
-//////////////////////////////////////////////////////////////////////
-// increment each element of a vector<VectorXd> correspondingly
-// by another vector<VectorXd>
-//////////////////////////////////////////////////////////////////////
-void AddVectorEigen(const vector<VectorXd> V, vector<VectorXd>* W)
-{
-  assert( V.size() == W->size() );
-  for (int i = 0; i < V.size(); i++) {
-    (*W)[i] += V[i];
-  }
-}
-
-//////////////////////////////////////////////////////////////////////
-// unproject the reduced coordinate into the peeled cells in this field 
-// using compression data. stays in the frequency domain until the end
-//////////////////////////////////////////////////////////////////////
-void PeeledCompressedUnprojectTransform(MATRIX_COMPRESSION_DATA* U_data, const VectorXd& q, 
-    VECTOR3_FIELD_3D* V)
-{
-  TIMER functionTimer(__FUNCTION__);
-
-  // fetch the relevant data
-  int xRes = V->xRes();
-  int yRes = V->yRes();
-  int zRes = V->zRes();
-  COMPRESSION_DATA* dataX = U_data->get_compression_dataX();
-  int totalColumns = dataX->get_numCols();
-  int numBlocks = dataX->get_numBlocks();
-  const VEC3I& dims = dataX->get_dims();
-  int* allDataX = U_data->get_dataX();
-  COMPRESSION_DATA* dataY = U_data->get_compression_dataY();
-  int* allDataY = U_data->get_dataY();
-  COMPRESSION_DATA* dataZ = U_data->get_compression_dataZ();
-  int* allDataZ = U_data->get_dataZ();
-
-  // verify that the (peeled) dimensions match
-  void GetPaddings(const VEC3I& v, VEC3I* paddings);
-  VEC3I paddings;
-  GetPaddings(dims, &paddings);
-  paddings += dims;
-  assert( xRes == paddings[0] && yRes == paddings[1] && zRes == paddings[2] );
-  assert ( totalColumns == q.size() );
-
-  // a dummy container for each decoded column
-  vector<VectorXd> blocks;
-  // three containers for the x, y, and z components
-  vector<VectorXd> resultX(numBlocks);
-  vector<VectorXd> resultY(numBlocks);
-  vector<VectorXd> resultZ(numBlocks);
-
-  // initialize the result blocks to contain all zeros
-  for (int i = 0; i < numBlocks; i++) {
-    resultX[i].setZero(BLOCK_SIZE * BLOCK_SIZE * BLOCK_SIZE);
-    resultY[i].setZero(BLOCK_SIZE * BLOCK_SIZE * BLOCK_SIZE);
-    resultZ[i].setZero(BLOCK_SIZE * BLOCK_SIZE * BLOCK_SIZE);
-  }
-
-  // loop through the columns and interpret the matrix-vector multiply as
-  // a linear combination of the columns
-  for (int col = 0; col < totalColumns; col++) {
-
-    // decode the data but stay in the freq domain
-    DecodeScalarFieldEigen(dataX, allDataX, col, &blocks);
-    // multiply by the corresponding entry in q
-    ScaleVectorEigen(q[col], &blocks);
-    // and store the growing linear combination in each of the x, y, z components
-    AddVectorEigen(blocks, &resultX);
- 
-    DecodeScalarFieldEigen(dataY, allDataY, col, &blocks);
-    ScaleVectorEigen(q[col], &blocks);
-    AddVectorEigen(blocks, &resultY);
-   
-    DecodeScalarFieldEigen(dataZ, allDataZ, col, &blocks);
-    ScaleVectorEigen(q[col], &blocks);
-    AddVectorEigen(blocks, &resultZ); 
-  }
-
-  // now go back to the spatial domain
-  int direction = -1;
-  UnitaryBlockDCTEigen(direction, &resultX);
-  UnitaryBlockDCTEigen(direction, &resultY);
-  UnitaryBlockDCTEigen(direction, &resultZ);
- 
-  // assimilate the blocks into the three component scalar fields 
-  FIELD_3D Xpart(paddings[0], paddings[1], paddings[2]); 
-  FIELD_3D Ypart(paddings[0], paddings[1], paddings[2]); 
-  FIELD_3D Zpart(paddings[0], paddings[1], paddings[2]); 
-  AssimilateBlocksEigen(paddings, &resultX, &Xpart);
-  AssimilateBlocksEigen(paddings, &resultY, &Ypart);
-  AssimilateBlocksEigen(paddings, &resultZ, &Zpart);
-
-  // form the corresponding vector field from the peeled scalar fields
-  VECTOR3_FIELD_3D result(Xpart.subfield(0, dims[0], 0, dims[1], 0, dims[2]).data(), 
-      Ypart.subfield(0, dims[0], 0, dims[1], 0, dims[2]).data(), 
-      Zpart.subfield(0, dims[0], 0, dims[1], 0, dims[2]).data(), dims[0], dims[1], dims[2]);
-
-  // set the result
-  V->setWithPeeled(result.flattenedEigen());
-
-}
 
 //////////////////////////////////////////////////////////////////////
 // compute the block-wise dot product between two lists and sum them into one
@@ -2678,31 +2568,18 @@ void TransformSVDAndDCT(int col, const VECTOR3_FIELD_3D& V,
   UnitaryBlockDCTEigen(1, Ypart);
   UnitaryBlockDCTEigen(1, Zpart);
 
-}
- 
-//////////////////////////////////////////////////////////////////////
-// helper function for frequency domain projection. transforms 
-// V by the DCT. fills up the three vectors
-// with the three components.
-//////////////////////////////////////////////////////////////////////
-void TransformDCT(const VECTOR3_FIELD_3D& V, 
-    MATRIX_COMPRESSION_DATA* U_data, vector<VectorXd>* Xpart, vector<VectorXd>* Ypart, 
-    vector<VectorXd>* Zpart) 
-{
-  TIMER functionTimer(__FUNCTION__);
+  // it's okay to use dataX for all three since in the SetZeroPadding function
+  // it is used only for reading the dims and paddedDims
 
-  FIELD_3D V_X, V_Y, V_Z;
-  GetScalarFields(V.peelBoundary(), &V_X, &V_Y, &V_Z);
-
-  GetBlocksEigen(V_X, Xpart);
-  GetBlocksEigen(V_Y, Ypart);
-  GetBlocksEigen(V_Z, Zpart);
   
-  UnitaryBlockDCTEigen(1, Xpart);
-  UnitaryBlockDCTEigen(1, Ypart);
-  UnitaryBlockDCTEigen(1, Zpart);
+  SetZeroPadding(Xpart, dataX);
+  SetZeroPadding(Ypart, dataX);
+  SetZeroPadding(Zpart, dataX);
+  
+
 
 }
+
 //////////////////////////////////////////////////////////////////////
 // projection, implemented in the frequency domain
 //////////////////////////////////////////////////////////////////////
@@ -2725,12 +2602,11 @@ void PeeledCompressedProjectTransform(const VECTOR3_FIELD_3D& V,
 
   vector<VectorXd> Xpart, Ypart, Zpart;
   vector<VectorXd> blocks;
-    
 
   for (int col = 0; col < totalColumns; col++) {
     // transform V with an SVD and a DCT to mimic compression
-
     TransformSVDAndDCT(col, V, U_data, &Xpart, &Ypart, &Zpart); 
+
     double totalSum = 0.0;
     DecodeScalarFieldEigen(dataX, allDataX, col, &blocks);
     totalSum += GetDotProductSum(blocks, Xpart);
@@ -2747,45 +2623,7 @@ void PeeledCompressedProjectTransform(const VECTOR3_FIELD_3D& V,
 
 }
 
-//////////////////////////////////////////////////////////////////////
-// projection, implemented in the frequency domain. assumes no SVD!
-//////////////////////////////////////////////////////////////////////
-void PeeledCompressedProjectTransformNoSVD(const VECTOR3_FIELD_3D& V, 
-    MATRIX_COMPRESSION_DATA* U_data, VectorXd* q)
-{
-  TIMER functionTimer(__FUNCTION__);
 
-  // fetch the compression data and the full data buffer for each component
-  COMPRESSION_DATA* dataX = U_data->get_compression_dataX();
-  int* allDataX = U_data->get_dataX();
-  COMPRESSION_DATA* dataY = U_data->get_compression_dataY();
-  int* allDataY = U_data->get_dataY();
-  COMPRESSION_DATA* dataZ = U_data->get_compression_dataZ();
-  int* allDataZ = U_data->get_dataZ();
-
-  // preallocate the resulting vector
-  int totalColumns = dataX->get_numCols();
-  q->resize(totalColumns);
-
-  vector<VectorXd> Xpart, Ypart, Zpart;
-  vector<VectorXd> blocks;
-
-  TransformDCT(V, U_data, &Xpart, &Ypart, &Zpart); 
-
-  for (int col = 0; col < totalColumns; col++) {
-    double totalSum = 0.0;
-    DecodeScalarFieldEigen(dataX, allDataX, col, &blocks);
-    totalSum += GetDotProductSum(blocks, Xpart);
-
-    DecodeScalarFieldEigen(dataY, allDataY, col, &blocks);
-    totalSum += GetDotProductSum(blocks, Ypart);
-
-    DecodeScalarFieldEigen(dataZ, allDataZ, col, &blocks);
-    totalSum += GetDotProductSum(blocks, Zpart);
-
-    (*q)[col] = totalSum;
-  }
-}
 //////////////////////////////////////////////////////////////////////
 // set zeros at the places where we have artificially padded
 //////////////////////////////////////////////////////////////////////

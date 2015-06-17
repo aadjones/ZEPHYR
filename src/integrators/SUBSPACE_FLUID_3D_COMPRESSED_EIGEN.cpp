@@ -342,7 +342,7 @@ void SUBSPACE_FLUID_3D_COMPRESSED_EIGEN::stepWithObstacle()
     TIMER projectionTimer("Velocity projection");
 
     // project into the subspace
-    _qDot = PeeledCompressedProject(_velocity, _U_preadvect_data);
+    PeeledCompressedProject(_velocity, &_U_preadvect_data, &_qDot);
     projectionTimer.stop();
 
     // then advect
@@ -364,11 +364,10 @@ void SUBSPACE_FLUID_3D_COMPRESSED_EIGEN::stepWithObstacle()
     // then pressure project
     reducedStagedProject();
 
-    cout << __FILE__ << " " << __FUNCTION__ << " " << __LINE__ << " : " << endl;
 
     // come back to full space
     TIMER unprojectionTimer("Velocity unprojection");
-    PeeledCompressedUnproject(_velocity, _U_final_data, _qDot);
+    PeeledCompressedUnproject(&_U_final_data, _qDot, &_velocity);
     unprojectionTimer.stop();
 
     currentTime += _dt;
@@ -434,7 +433,6 @@ void SUBSPACE_FLUID_3D_COMPRESSED_EIGEN::reducedSetZeroSphere()
   cout << "_reducedIOP.cols: " << _reducedIOP.cols() << endl;
   _qDot = _reducedIOP * _qDot;
 
-  cout << __FILE__ << " " << __FUNCTION__ << " " << __LINE__ << " : " << endl;
   
 }
 //////////////////////////////////////////////////////////////////////
@@ -875,7 +873,8 @@ VectorXd SUBSPACE_FLUID_3D_COMPRESSED_EIGEN::advectCellStamPeeled(const MatrixXd
 //
 // some kind of horrible version control disaster happened here...
 
-VectorXd SUBSPACE_FLUID_3D_COMPRESSED_EIGEN::advectCellStamPeeled(MATRIX_COMPRESSION_DATA& U_data, const MatrixXd& cellU, const Real& dt, const VectorXd& qDot, const int index, MatrixXd& submatrix)
+VectorXd SUBSPACE_FLUID_3D_COMPRESSED_EIGEN::advectCellStamPeeled(const MATRIX_COMPRESSION_DATA& U_data, const MatrixXd& cellU,
+    Real dt, const VectorXd& qDot, int index, MatrixXd* submatrix)
 {
   TIMER functionTimer(__FUNCTION__);
   // peeled coordinates were passed in -- need to promote to full grid
@@ -938,36 +937,36 @@ VectorXd SUBSPACE_FLUID_3D_COMPRESSED_EIGEN::advectCellStamPeeled(MATRIX_COMPRES
 
   // NOTE: it spends most of its time (+50%) here
   
-  const DECOMPRESSION_DATA& dataX = U_data.get_decompression_dataX();
-  const int totalCols = dataX.get_numCols();
+  COMPRESSION_DATA* dataX = U_data.get_decompression_dataX();
+  const int totalCols = dataX->get_numCols();
 
-  TIMER multiplyTimer2("multiplyTimer2");
+  TIMER multiplyTimer0("multiplyTimer0");
 
-  GetSubmatrixFast(i000, 3, U_data, submatrix);
-  const VectorXd v000 = submatrix * qDot;
+  GetSubmatrix(i000, &U_data, submatrix);
+  const VectorXd v000 = (*submatrix) * qDot;
 
-  GetSubmatrixFast(i010, 3, U_data, submatrix);
-  const VectorXd v010 = submatrix * qDot;
+  GetSubmatrix(i010, 3, U_data, submatrix);
+  const VectorXd v010 = (*submatrix) * qDot;
 
-  GetSubmatrixFast(i100, 3, U_data, submatrix);
-  const VectorXd v100 = submatrix * qDot;
+  GetSubmatrix(i100, 3, U_data, submatrix);
+  const VectorXd v100 = (*submatrix) * qDot;
 
-  GetSubmatrixFast(i110, 3, U_data, submatrix);
-  const VectorXd v110 = submatrix * qDot;
+  GetSubmatrix(i110, 3, U_data, submatrix);
+  const VectorXd v110 = (*submatrix) * qDot;
 
-  GetSubmatrixFast(i001, 3, U_data, submatrix);
-  const VectorXd v001 = submatrix * qDot;
+  GetSubmatrix(i001, 3, U_data, submatrix);
+  const VectorXd v001 = (*submatrix) * qDot;
 
-  GetSubmatrixFast(i011, 3, U_data, submatrix);
-  const VectorXd v011 = submatrix * qDot;
+  GetSubmatrix(i011, 3, U_data, submatrix);
+  const VectorXd v011 = (*submatrix) * qDot;
 
-  GetSubmatrixFast(i101, 3, U_data, submatrix);
-  const VectorXd v101 = submatrix * qDot;
+  GetSubmatrix(i101, 3, U_data, submatrix);
+  const VectorXd v101 = (*submatrix) * qDot;
 
-  GetSubmatrixFast(i111, 3, U_data, submatrix);
-  const VectorXd v111 = submatrix * qDot;
+  GetSubmatrix(i111, 3, U_data, submatrix);
+  const VectorXd v111 = (*submatrix) * qDot;
 
-  multiplyTimer2.stop();
+  multiplyTimer0.stop();
 
   const Real w000 = u0 * s0 * t0;
   const Real w010 = u0 * s0 * t1;
@@ -1179,23 +1178,27 @@ void SUBSPACE_FLUID_3D_COMPRESSED_EIGEN::readAdvectionCubature()
     // make the before cache
     _advectionCubatureBefore.clear();
     // TODO: insert the decoder for U.preadvect
-    // string preadvectFile = _reducedPath + string("U.preadvect.matrix");
 
-    int* allDataX = NULL;
-    int* allDataY = NULL;
-    int* allDataZ = NULL;
-    DECOMPRESSION_DATA decompression_dataX;
-    DECOMPRESSION_DATA decompression_dataY;
-    DECOMPRESSION_DATA decompression_dataZ;
-    string preadvectFile = _reducedPath + string("U.preadvect.componentX");
-    ReadBinaryFileToMemory(preadvectFile.c_str(), allDataX, decompression_dataX);
-    preadvectFile = _reducedPath + string("U.preadvect.componentY");
-    ReadBinaryFileToMemory(preadvectFile.c_str(), allDataY, decompression_dataY);
-    preadvectFile = _reducedPath + string("U.preadvect.componentZ");
-    ReadBinaryFileToMemory(preadvectFile.c_str(), allDataZ, decompression_dataZ);
-    MATRIX_COMPRESSION_DATA U_preadvect_data(allDataX, allDataY, allDataZ,
-        decompression_dataX, decompression_dataY, decompression_dataZ);
-    _U_preadvect_data = U_preadvect_data;
+  
+    COMPRESSION_DATA compression_data0;
+    COMPRESSION_DATA compression_data1;
+    COMPRESSION_DATA compression_data2;
+
+    const char* filename = "U.preadvect.SVD.data";
+    ReadSVDData(filename, &compression_dataX);
+
+    string preadvectFile = _reducedPath + string("U.preadvect.component0");
+    int* allData0 = ReadBinaryFileToMemory(preadvectFile.c_str(), &compression_data0);
+    preadvectFile = _reducedPath + string("U.preadvect.component1");
+    int* allData1 = ReadBinaryFileToMemory(preadvectFile.c_str(), &compression_data1);
+    preadvectFile = _reducedPath + string("U.preadvect.component2");
+    int* allData2 = ReadBinaryFileToMemory(preadvectFile.c_str(), &compression_data2);
+
+
+    _U_preadvect_data = MATRIX_COMPRESSION_DATA(allData0, allData1, allData2,
+        &compression_data0, &compression_data1, &compression_data2); 
+
+    _U_preadvect_data.dct_setup(-1);
     _U_preadvect_data.init_cache();
 
     // EIGEN::read(preadvectFile, _preadvectU);
@@ -1272,8 +1275,8 @@ void SUBSPACE_FLUID_3D_COMPRESSED_EIGEN::reducedAdvectStagedStamFast()
   assert(_advectionCubatureBefore.size() > 0);
 
   const MATRIX_COMPRESSION_DATA& data = (*this).U_final_data();
-  const DECOMPRESSION_DATA& dataX = data.get_decompression_dataX();
-  const int numCols = dataX.get_numCols();
+  COMPRESSION_DATA* dataX = data.get_decompression_dataX();
+  const int numCols = dataX->get_numCols();
   
   MatrixXd submatrix(3, numCols);
 
@@ -1475,7 +1478,9 @@ void SUBSPACE_FLUID_3D_COMPRESSED_EIGEN::stompAllBases()
 //////////////////////////////////////////////////////////////////////
 void SUBSPACE_FLUID_3D_COMPRESSED_EIGEN::initCompressionData()
 {
+  _U_final_data.dct_setup(-1);
   _U_final_data.init_cache();
+  _U_preadvect_data.dct_setup(-1);
   _U_preadvect_data.init_cache();
 }
 
@@ -1486,22 +1491,28 @@ void SUBSPACE_FLUID_3D_COMPRESSED_EIGEN::initCompressionData()
 void SUBSPACE_FLUID_3D_COMPRESSED_EIGEN::loadCubatureTrainingBases()
 {
   string filename;
+
   // TODO: insert the decoder for U.preadvect 
-  int* allDataX = NULL;
-  int* allDataY = NULL;
-  int* allDataZ = NULL;
-  DECOMPRESSION_DATA decompression_dataX;
-  DECOMPRESSION_DATA decompression_dataY;
-  DECOMPRESSION_DATA decompression_dataZ;
-  filename = _reducedPath + string("U.preadvect.componentX");
-  ReadBinaryFileToMemory(filename.c_str(), allDataX, decompression_dataX);
-  filename = _reducedPath + string("U.preadvect.componentY");
-  ReadBinaryFileToMemory(filename.c_str(), allDataY, decompression_dataY);
-  filename = _reducedPath + string("U.preadvect.componentZ");
-  ReadBinaryFileToMemory(filename.c_str(), allDataZ, decompression_dataZ);
-  MATRIX_COMPRESSION_DATA U_preadvect_data(allDataX, allDataY, allDataZ,
-      decompression_dataX, decompression_dataY, decompression_dataZ);
-  _U_preadvect_data = U_preadvect_data;
+   
+  COMPRESSION_DATA compression_data0;
+  COMPRESSION_DATA compression_data1;
+  COMPRESSION_DATA compression_data2;
+
+  const char* filename = "U.preadvect.SVD.data";
+  ReadSVDData(filename, &compression_dataX);
+
+  string preadvectFile = _reducedPath + string("U.preadvect.component0");
+  int* allDataX = ReadBinaryFileToMemory(preadvectFile.c_str(), &compression_data0);
+  preadvectFile = _reducedPath + string("U.preadvect.component1");
+  ReadBinaryFileToMemory(preadvectFile.c_str(), allDataY, decompression_data1);
+  preadvectFile = _reducedPath + string("U.preadvect.component2");
+  ReadBinaryFileToMemory(preadvectFile.c_str(), allDataZ, decompression_data2);
+
+
+  _U_preadvect_data = MATRIX_COMPRESSION_DATA(allData0, allData1, allData2,
+      &compression_data0, &compression_data1, &compression_data2); 
+
+  _U_preadvect_data.dct_setup(-1);
   _U_preadvect_data.init_cache();
 
   // EIGEN::read(filename, _preadvectU);
@@ -1554,22 +1565,26 @@ void SUBSPACE_FLUID_3D_COMPRESSED_EIGEN::loadReducedRuntimeBases(string path)
   if (numRows > 1000000) 
     purge();
     // TODO: what do we do here? do we need U.final in full?
-    filename = path + string("U.final.matrix");
-    int* UallDataX = NULL;
-    int* UallDataY = NULL;
-    int* UallDataZ = NULL;
-    DECOMPRESSION_DATA Udecompression_dataX;
-    DECOMPRESSION_DATA Udecompression_dataY;
-    DECOMPRESSION_DATA Udecompression_dataZ;
-    filename = _reducedPath + string("U.final.componentX");
-    ReadBinaryFileToMemory(filename.c_str(), UallDataX, Udecompression_dataX);
-    filename = _reducedPath + string("U.final.componentY");
-    ReadBinaryFileToMemory(filename.c_str(), UallDataY, Udecompression_dataY);
-    filename = _reducedPath + string("U.final.componentZ");
-    ReadBinaryFileToMemory(filename.c_str(), UallDataZ, Udecompression_dataZ);
-    MATRIX_COMPRESSION_DATA U_final_data(UallDataX, UallDataY, UallDataZ,
-        Udecompression_dataX, Udecompression_dataY, Udecompression_dataZ);
-    _U_final_data = U_final_data;
+ 
+    COMPRESSION_DATA compression_data0;
+    COMPRESSION_DATA compression_data1;
+    COMPRESSION_DATA compression_data2;
+
+    const char* filename = "U.final.SVD.data";
+    ReadSVDData(filename, &compression_dataX);
+
+    string finalFile = _reducedPath + string("U.final.component0");
+    int* allData0 = ReadBinaryFileToMemory(finalFile.c_str(), &compression_data0);
+    finalFile = _reducedPath + string("U.final.component1");
+    int* allData1 = ReadBinaryFileToMemory(finalFile.c_str(), &compression_data1);
+    finalFile = _reducedPath + string("U.final.component2");
+    int* allData2 = ReadBinaryFileToMemory(finalFile.c_str(), &compression_data2);
+
+
+    _U_final_data = MATRIX_COMPRESSION_DATA(allData0, allData1, allData2,
+        &compression_data0, &compression_data1, &compression_data2); 
+
+    _U_final_data.dct_setup(-1);
     _U_final_data.init_cache();
 
     // EIGEN::read(filename, _U);

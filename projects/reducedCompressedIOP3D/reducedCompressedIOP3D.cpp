@@ -31,7 +31,7 @@
 #endif
 #include "SUBSPACE_FLUID_3D_COMPRESSED_EIGEN.h"
 #include "MATRIX.h"
-#include "COMPRESSION.h"
+#include "COMPRESSION_REWRITE.h"
 #include "COMPRESSION_DATA.h"
 #include "DECOMPRESSION_DATA.h"
 #include "MATRIX_COMPRESSION_DATA.h"

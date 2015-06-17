@@ -78,8 +78,12 @@ public:
   MatrixXd cellBasisCompressedPeeled(MATRIX_COMPRESSION_DATA& U_data, const int index);
   // advect a single cell using Semi-Lagrangian,
   // assuming that "index" is a peeled index, not a full grid index
-  VectorXd advectCellStamPeeled(MATRIX_COMPRESSION_DATA& U_data, const Real& dt, const VectorXd& qDot, const int index, MatrixXd& submatrix);
-  VectorXd advectCellStamPeeled(MATRIX_COMPRESSION_DATA& U_data, const MatrixXd& cellU, const Real& dt, const VectorXd& qDot, const int index, MatrixXd& submatrix);
+  VectorXd advectCellStamPeeled(MATRIX_COMPRESSION_DATA& U_data, const Real& dt, const VectorXd& qDot, 
+      const int index, MatrixXd& submatrix);
+
+  VectorXd advectCellStamPeeled(const MATRIX_COMPRESSION_DATA& U_data, const MatrixXd& cellU, 
+      Real dt, const VectorXd& qDot, int index, MatrixXd* submatrix);
+
   VectorXd advectCellStamNoProject(const Real& dt, const int index);
 
   // stomp the other matrices and load the ones needed for cubature training
