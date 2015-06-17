@@ -32,7 +32,7 @@
 #include "MATRIX.h"
 #include "BIG_MATRIX.h"
 #include "SIMPLE_PARSER.h"
-#include "COMPRESSION.h"
+#include "COMPRESSION_REWRITE.h"
 #include <string>
 #include <cmath>
 #include <cfenv>
@@ -48,8 +48,7 @@ using std::string;
 ////////////////////////////////////////////////////////
 
 // set the damping matrix and compute the number of blocks
-void PreprocessEncoder(COMPRESSION_DATA& data);
-
+void PreprocessEncoder(COMPRESSION_DATA* data0, COMPRESSION_DATA* data1, COMPRESSION_DATA* data2, int maxIterations);
 
 ////////////////////////////////////////////////////////
 // Main
@@ -58,14 +57,11 @@ void PreprocessEncoder(COMPRESSION_DATA& data);
 int main(int argc, char* argv[]) {
   TIMER functionTimer(__FUNCTION__);
   
-  
   // read in the cfg file
   if (argc != 2) {
     cout << " Usage: " << argv[0] << " *.cfg" << endl;
     return 0;
   }
-  
-
   
   SIMPLE_PARSER parser(argv[1]);
   string reducedPath = parser.getString("reduced path", "./data/reduced.dummy/"); 
@@ -86,22 +82,23 @@ int main(int argc, char* argv[]) {
   
   // times 3 since it is a VELOCITY3_FIELD_3D flattened out
   int numRows = 3 * xRes * yRes * zRes;
+  cout << "numRows: " << numRows << endl;
+  cout << "numCols: "<< numCols << endl;
 
   MatrixXd U_preadvect(numRows, numCols);
   MatrixXd U_final(numRows, numCols);
-  MatrixXd U_preproject;
 
   if (usingIOP) {
-    MatrixXd U(numRows, numCols);
-    U_preproject = U;
+    // MatrixXd U(numRows, numCols);
+    // U_preproject = U;
   }
 
   int nBits = parser.getInt("nBits", 24); 
   cout << " nBits: " << nBits << endl;
-  double q = parser.getFloat("linear damping", 1.0);
-  cout << " q: " << q << endl;
-  double power = parser.getFloat("nonlinear damping", 6.0); 
-  cout << " power: " << power << endl;
+  double percent = parser.getFloat("percent", 0.99);
+  cout << " percent: " << percent << endl;
+  int maxIterations = parser.getInt("maxIterations", 32);
+  cout << " maxIterations: " << maxIterations << endl;
 
   string preAdvectPath = reducedPath + string("U.preadvect.matrix");
   string finalPath = reducedPath + string("U.final.matrix");
@@ -114,17 +111,23 @@ int main(int argc, char* argv[]) {
   }
 
   // set the parameters in compression data
-  COMPRESSION_DATA preadvect_compression_data(dims, numCols, q, power, nBits);
-  COMPRESSION_DATA final_compression_data(dims, numCols, q, power, nBits);
-  COMPRESSION_DATA preproject_compression_data;
+  COMPRESSION_DATA preadvect_compression_data0(dims, numCols, nBits, percent);
+  COMPRESSION_DATA preadvect_compression_data1(dims, numCols, nBits, percent);
+  COMPRESSION_DATA preadvect_compression_data2(dims, numCols, nBits, percent);
+  COMPRESSION_DATA final_compression_data0(dims, numCols, nBits, percent);
+  COMPRESSION_DATA final_compression_data1(dims, numCols, nBits, percent);
+  COMPRESSION_DATA final_compression_data2(dims, numCols, nBits, percent);
+  // COMPRESSION_DATA preproject_compression_data;
   if (usingIOP) {
     // COMPRESSION_DATA data(dims, numCols, q, power, nBits);
     // preproject_compression_data = data;
   }
 
   // compute some additional parameters for compression data
-  PreprocessEncoder(preadvect_compression_data);
-  PreprocessEncoder(final_compression_data);
+  PreprocessEncoder(&preadvect_compression_data0, &preadvect_compression_data1, &preadvect_compression_data2, 
+      maxIterations);
+  PreprocessEncoder(&final_compression_data0, &final_compression_data1, &final_compression_data2,
+      maxIterations);
   if (usingIOP) {
     // PreprocessEncoder(preproject_compression_data);
   }
@@ -136,16 +139,11 @@ int main(int argc, char* argv[]) {
   // string preprojectFilename = reducedPath + string("U.preproject.component");
 
   // write out the compressed matrix files
-  for (int component = 0; component < 3; component++) {
-    cout << "Writing component: " << component << endl;
-    CompressAndWriteMatrixComponent(preadvectFilename.c_str(), U_preadvect, component, preadvect_compression_data);
-  }  
+  CompressAndWriteMatrixComponents(preadvectFilename.c_str(), U_preadvect, &preadvect_compression_data0,
+      &preadvect_compression_data1, &preadvect_compression_data2);
   
-  
-  for (int component = 0; component < 3; component++) {
-    cout << "Writing component: " << component << endl;
-    CompressAndWriteMatrixComponent(finalFilename.c_str(), U_final, component, final_compression_data);
-  }  
+  CompressAndWriteMatrixComponents(finalFilename.c_str(), U_final, &final_compression_data0, 
+      &final_compression_data1, &final_compression_data2);
   
   if (usingIOP) {
     // for (int component = 0; component < 3; component++) {
@@ -160,40 +158,41 @@ int main(int argc, char* argv[]) {
   return 0;
 }
 
-
-
-void PreprocessEncoder(COMPRESSION_DATA& data) {
-
+void PreprocessEncoder(COMPRESSION_DATA* data0, COMPRESSION_DATA* data1, COMPRESSION_DATA* data2, int maxIterations)
+{
   // set integer rounding 'to nearest' 
   fesetround(FE_TONEAREST);
   
-  VEC3I dims = data.get_dims();
-  int xRes = dims[0];
-  int yRes = dims[1];
-  int zRes = dims[2];
-  
-  // precompute and set the damping array.
-  // this can only be executed after q and power are initialized!
-  data.set_dampingArray();
+  // precompute and set the damping  and zigzag arrays
+  data0->set_dampingArray();
+  data1->set_dampingArray();
+  data2->set_dampingArray();
 
-  // this can actually be executed at any time
-  data.set_zigzagArray();
+  data0->set_zigzagArray();
+  data1->set_zigzagArray();
+  data2->set_zigzagArray();
    
-  int xPadding;
-  int yPadding;
-  int zPadding;
-
   // fill in the appropriate paddings
-  GetPaddings(dims, xPadding, yPadding, zPadding);
+  const VEC3I& dims = data0->get_dims();
+  VEC3I paddings;
+  GetPaddings(dims, &paddings);
+  paddings += dims;
 
-  // update to the padded resolutions
-  xRes += xPadding;
-  yRes += yPadding;
-  zRes += zPadding;
+  data0->set_paddedDims(paddings);
+  data1->set_paddedDims(paddings);
+  data2->set_paddedDims(paddings);
 
-  // calculates number of blocks, assuming an 8 x 8 x 8 block size.
-  int numBlocks = xRes * yRes * zRes / (8 * 8 * 8);
-  data.set_numBlocks(numBlocks);
+  // calculates number of blocks, assuming BLOCK_SIZE 
+  int numBlocks = paddings[0] * paddings[1] * paddings[2] / (BLOCK_SIZE * BLOCK_SIZE * BLOCK_SIZE);
+
+  data0->set_numBlocks(numBlocks);
+  data1->set_numBlocks(numBlocks);
+  data2->set_numBlocks(numBlocks);
+
+  // set the maxIterations
+  data0->set_maxIterations(maxIterations);
+  data1->set_maxIterations(maxIterations);
+  data2->set_maxIterations(maxIterations);
   
 }
 

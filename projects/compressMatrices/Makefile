@@ -26,7 +26,7 @@ SOURCES    = compressMatrices.cpp \
 						 ../../src/geometry/FIELD_2D.cpp \
 						 ../../src/geometry/VECTOR3_FIELD_2D.cpp \
 						 ../../src/util/MIN_HEAP.cpp \
-						 ../../src/compression/COMPRESSION.cpp \
+						 ../../src/compression/COMPRESSION_REWRITE.cpp \
 						 ../../src/compression/COMPRESSION_DATA.cpp \
 						 ../../src/compression/DECOMPRESSION_DATA.cpp \
 						 ../../src/compression/MATRIX_COMPRESSION_DATA.cpp \
