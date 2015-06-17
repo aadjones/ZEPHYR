@@ -264,6 +264,10 @@ void TransformSVDAndDCT(int col, const VECTOR3_FIELD_3D& V,
     MATRIX_COMPRESSION_DATA* U_data, 
     vector<VectorXd>* Xpart, vector<VectorXd>* Ypart, vector<VectorXd>* Zpart);
 
+// do peeled compressed projection naively in the regular spatial domain
+void PeeledCompressedProject(const VECTOR3_FIELD_3D& V, MATRIX_COMPRESSION_DATA* U_data,
+    VectorXd* q);
+
 // projection, implemented in the frequency domain
 void PeeledCompressedProjectTransform(const VECTOR3_FIELD_3D& V, 
     MATRIX_COMPRESSION_DATA* U_data, VectorXd* q);

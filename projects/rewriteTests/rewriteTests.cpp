@@ -134,6 +134,9 @@ void DecodeScalarFieldTest(int col, COMPRESSION_DATA* data);
 // test the decoding of an entire vector field of a particular matrix column
 void DecodeVectorFieldTest(int col);
 
+// test the spatial domain projection
+void PeeledCompressedProjectTest();
+
 // test the frequency domain projection
 void PeeledCompressedProjectTransformTest();
 
@@ -168,7 +171,7 @@ int main(int argc, char* argv[])
   InitGlobals();
 
   // int blockNumber = 287;
-  int row = 0;
+  // int row = 0;
   // int col = 24;
 
   // EncodeOneBlockTest(blockNumber, col, &compression_data0);
@@ -188,12 +191,10 @@ int main(int argc, char* argv[])
   // MatrixCompressionDebugTest();
   
   // DecodeMatrixTest();
+ 
+  PeeledCompressedProjectTest();
   
-  InitMatrixCompressionData();
-  for (int i = 0; i < 3 * (BLOCK_SIZE + 1); i += 3) {
-    GetSubmatrixTest(i);
-  }
-
+ 
 
   
 
@@ -215,6 +216,8 @@ void InitGlobals()
   VECTOR::printVertical = false;
 
   InitCompressionData(percent, maxIterations, nBits, numBlocks, numCols);
+
+  InitMatrixCompressionData();
 
   EIGEN::read(path.c_str(), U); 
 
@@ -745,7 +748,7 @@ void PeeledCompressedProjectTransformTest()
   InitMatrixCompressionData();
 
 
-  VECTOR3_FIELD_3D randomV(xRes, yRes, zRes);
+  VECTOR3_FIELD_3D randomV(xPadded, yPadded, zPadded);
   randomV.setToRandom();
   VectorXd q;
   PeeledCompressedProjectTransform(randomV, &matrix_data, &q);
@@ -862,12 +865,35 @@ void UnitaryBlockDCTEigenTest()
 }
 
 ////////////////////////////////////////////////////////
+// test the projection naively in the spatial domain
+////////////////////////////////////////////////////////
+void PeeledCompressedProjectTest()
+{
+  VECTOR3_FIELD_3D randomV(xPadded, yPadded, zPadded);
+  randomV.setToRandom();
+
+  VectorXd ground = randomV.peeledProject(U);
+  cout << "ground: " << endl;
+  cout << EIGEN::convert(ground) << endl;
+
+  VectorXd spatial;
+  PeeledCompressedProject(randomV, &matrix_data, &spatial);
+  cout << "spatial: " << endl;
+  cout << EIGEN::convert(spatial) << endl;
+
+  VectorXd freq;
+  PeeledCompressedProjectTransform(randomV, &matrix_data, &freq);
+  cout << "freq: " << endl;
+  cout << EIGEN::convert(freq) << endl;
+
+}
+////////////////////////////////////////////////////////
 // test the project transform without using compression
 ////////////////////////////////////////////////////////
 void PeeledProjectTransformTest()
 {
 
-  VECTOR3_FIELD_3D randomV(xRes, yRes, zRes);
+  VECTOR3_FIELD_3D randomV(xPadded, yPadded, zPadded);
   randomV.setToRandom();
 
   // ground truth projection
