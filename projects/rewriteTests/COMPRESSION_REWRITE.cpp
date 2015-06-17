@@ -695,8 +695,13 @@ void PreprocessBlock(FIELD_3D* F, int blockNumber, int col, COMPRESSION_DATA* da
   TIMER functionTimer(__FUNCTION__);
   int nBits = data->get_nBits();
 
+  // *****************************************************
+  // debugging test--let's use absMax instead of DC component
+  // *****************************************************
+  double Fmax = F->absMax();
+  double s = (pow(2, nBits - 1) - 1) / Fmax;
   // normalize so that the DC component is at 2 ^ {nBits - 1} - 1
-  double s = (pow(2, nBits - 1) - 1) / (*F)[0];
+  // double s = (pow(2, nBits - 1) - 1) / (*F)[0];
   (*F) *= s;
 
   // fetch data for updating sList 
@@ -1202,15 +1207,20 @@ void RunLengthDecodeBinary(int* allData, int blockNumber, int col,
     // write the value once
     data[j] = allData[blockIndex + i];
 
-    
+   
+    /* 
     // *************************************************** 
     // purely for debugging---the zeroth entry of each block
     // should decode to the largest signed nBit integer!
     if (j == 0) {
       int nBits = compression_data->get_nBits();
-      assert( data[j] == pow(2, nBits - 1) - 1 );
+      // assert( abs(data[j]) == pow(2, nBits - 1) - 1 );
+      if ( abs(data[j]) != pow(2, nBits - 1) - 1 ) {
+        cout << "DC was mapped to: " << data[j] << endl;
+      }
     }
     // *************************************************** 
+    */
     
     
     if ( (i + 1 < compressedBlockSize) && 

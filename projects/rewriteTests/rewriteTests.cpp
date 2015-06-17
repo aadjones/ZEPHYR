@@ -54,7 +54,7 @@ int* allData0;
 int* allData1;
 int* allData2;
 MATRIX_COMPRESSION_DATA matrix_data;
-int nBits = 24;
+int nBits = 31;
 double percent = 1.0;
 int maxIterations = 50;
 
