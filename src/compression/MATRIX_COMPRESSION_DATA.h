@@ -18,7 +18,7 @@ class MATRIX_COMPRESSION_DATA {
         const DECOMPRESSION_DATA& decompression_dataX, const DECOMPRESSION_DATA& decompression_dataY, const DECOMPRESSION_DATA& decompression_dataZ);
 
     MATRIX_COMPRESSION_DATA(int* dataX, int* dataY, int* dataZ,
-        COMPRESSION_DATA* compression_dataX, COMPRESSION_DATA* compression_dataY, COMPRESSION_DATA* decompression_dataZ);
+        COMPRESSION_DATA* compression_dataX, COMPRESSION_DATA* compression_dataY, COMPRESSION_DATA* compression_dataZ);
     ~MATRIX_COMPRESSION_DATA();
 
    
@@ -36,14 +36,14 @@ class MATRIX_COMPRESSION_DATA {
     COMPRESSION_DATA* get_compression_dataY() { return &_compression_dataY; }
     COMPRESSION_DATA* get_compression_dataZ() { return &_compression_dataZ; }
 
-    vector<FIELD_3D>& get_cachedBlocksX() { return _cachedBlocksX; }
-    vector<FIELD_3D>& get_cachedBlocksY() { return _cachedBlocksY; }
-    vector<FIELD_3D>& get_cachedBlocksZ() { return _cachedBlocksZ; }
+    const fftw_plan& get_plan() { return _dct_plan; }
+    double* get_dct_in() { return _dct_in; }
+
+    vector<FIELD_3D>* get_cachedBlocksX() { return &_cachedBlocksX; }
+    vector<FIELD_3D>* get_cachedBlocksY() { return &_cachedBlocksY; }
+    vector<FIELD_3D>* get_cachedBlocksZ() { return &_cachedBlocksZ; }
 
     int get_cachedBlockNumber() const { return _cachedBlockNumber; }
-    // int get_decodeCounterX() const { return _decodeCounterX; }
-    // int get_decodeCounterY() const { return _decodeCounterY; }
-    // int get_decodeCounterZ() const { return _decodeCounterZ; }
     
     // setters
     
@@ -60,25 +60,21 @@ class MATRIX_COMPRESSION_DATA {
     void set_cachedBlocksZ(const vector<FIELD_3D>& cachedBlocksZ) { _cachedBlocksZ = cachedBlocksZ; }
 
     void set_cachedBlockNumber(int cachedBlockNumber) { _cachedBlockNumber = cachedBlockNumber; }
-    // void set_decodeCounterX(int decodeCounterX) { _decodeCounterX = decodeCounterX; }
-    // void set_decodeCounterY(int decodeCounterY) { _decodeCounterY = decodeCounterY; }
-    // void set_decodeCounterZ(int decodeCounterZ) { _decodeCounterZ = decodeCounterZ; }
    
-    // initializations
-    void init_cache() {
-      // don't call this until _numCols has been set!
+    // initializations.
+    // don't call this until _numCols has been set!
+    void init_cache()
+    {
 
-      // set block number to nonsense
+      // initialize cached block number to nonsense
       _cachedBlockNumber = -1;
-      // initialize decode counter
-      // _decodeCounter = 0;
 
       const int xRes = BLOCK_SIZE;
       const int yRes = BLOCK_SIZE;
       const int zRes = BLOCK_SIZE;
 
       // clunky, but it works
-      int numCols = (*this)._decompression_dataX.get_numCols();
+      int numCols = this->_compression_dataX.get_numCols();
 
       _cachedBlocksX.resize(numCols);
       for (auto itr = _cachedBlocksX.begin(); itr != _cachedBlocksX.end(); ++itr) {
@@ -97,36 +93,22 @@ class MATRIX_COMPRESSION_DATA {
 
     }
 
-    // incrementer
-    /* 
-    void increment_decodeCounter(const char c) {
-      if (c == 'X') {
-         _decodeCounterX++;
-      }
-      else if (c == 'Y') {
-        _decodeCounterY++;
-      }
-      else {
-        _decodeCounterZ++;
-      }
-    }
-    */
 
-    void dct_setup(int direction) {
+    void dct_setup(int direction)
+    {
       const int xRes = BLOCK_SIZE;
       const int yRes = BLOCK_SIZE;
       const int zRes = BLOCK_SIZE;
 
       _dct_in = (double*) fftw_malloc(xRes * yRes * zRes * sizeof(double));
-      _dct_out = (double*) fftw_malloc(xRes * yRes * zRes * sizeof(double));
 
       if (direction == 1) { // forward transform
-         _dct_plan = fftw_plan_r2r_3d(zRes, yRes, xRes, _dct_in, _dct_out, 
+         _dct_plan = fftw_plan_r2r_3d(zRes, yRes, xRes, _dct_in, _dct_in, 
              FFTW_REDFT10, FFTW_REDFT10, FFTW_REDFT10, FFTW_MEASURE); 
       }
 
       else { // direction == -1; backward transform
-         _dct_plan = fftw_plan_r2r_3d(zRes, yRes, xRes, _dct_in, _dct_out, 
+         _dct_plan = fftw_plan_r2r_3d(zRes, yRes, xRes, _dct_in, _dct_in, 
       FFTW_REDFT01, FFTW_REDFT01, FFTW_REDFT01, FFTW_MEASURE);
       }
     }
@@ -134,7 +116,6 @@ class MATRIX_COMPRESSION_DATA {
    void dct_cleanup() {
      fftw_destroy_plan(_dct_plan);
      fftw_free(_dct_in);
-     fftw_free(_dct_out);
      fftw_cleanup();
    } 
 
@@ -157,12 +138,8 @@ class MATRIX_COMPRESSION_DATA {
     vector<FIELD_3D> _cachedBlocksZ;
 
     int _cachedBlockNumber;
-    // int _decodeCounterX;
-    // int _decodeCounterY;
-    // int _decodeCounterZ;
 
     double* _dct_in;
-    double* _dct_out;
     fftw_plan _dct_plan;
 };
 

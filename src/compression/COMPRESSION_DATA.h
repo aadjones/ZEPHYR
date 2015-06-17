@@ -22,6 +22,7 @@ class COMPRESSION_DATA {
 
     // getters
     const VEC3I& get_dims() const { return _dims; }
+    const VEC3I& get_paddedDims() const { return _paddedDims; }
     int get_numCols() const { return _numCols; }
     int get_numBlocks() const { return _numBlocks; }
     int get_currBlockNum() const { return _currBlockNum; }
@@ -53,6 +54,7 @@ class COMPRESSION_DATA {
 
     // setters
     void set_dims(const VEC3I& dims) { _dims = dims; }
+    void set_paddedDims(const VEC3I& paddedDims) { _paddedDims = paddedDims; }
     void set_numCols(int numCols) { _numCols = numCols; }
     void set_numBlocks(int numBlocks) { _numBlocks = numBlocks; }
     void set_currBlockNum(int currBlockNum) { _currBlockNum = currBlockNum; }
@@ -157,6 +159,7 @@ class COMPRESSION_DATA {
 
   private:
     VEC3I _dims;
+    VEC3I _paddedDims;
     int _numCols;
     int _numBlocks;
     int _currBlockNum;

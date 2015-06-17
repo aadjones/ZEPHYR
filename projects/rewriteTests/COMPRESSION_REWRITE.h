@@ -287,7 +287,11 @@ void ComputeBlockNumber(int row, const VEC3I& dims, int* blockNumber, int* block
 // is divisible by 3 since it is the start of the vector.
 void DecodeFromRowCol(int row, int col, MATRIX_COMPRESSION_DATA* data, Vector3d* cell);
 
-
+   
+// given a start row, computes the 3 x numCols submatrix
+// given the compression data. assumes start row is 
+// divisible by 3!
+void GetSubmatrix(int startRow, MATRIX_COMPRESSION_DATA* data, MatrixXd* submatrix); 
 
 
 #endif

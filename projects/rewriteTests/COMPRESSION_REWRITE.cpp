@@ -1879,187 +1879,199 @@ void DecodeFromRowCol(int row, int col, MATRIX_COMPRESSION_DATA* data, Vector3d*
 
    
 ////////////////////////////////////////////////////////
-// given a start row and numRows (typically 3), computes
-// the submatrix given the compression data
+// given a start row, computes the 3 x numCols submatrix
+// given the compression data. assumes start row is 
+// divisible by 3!
 ////////////////////////////////////////////////////////
-/*
-void GetSubmatrixFast(int startRow, int numRows, MATRIX_COMPRESSION_DATA& data, MatrixXd& matrixToFill) {
-     
-    
+void GetSubmatrix(int startRow, MATRIX_COMPRESSION_DATA* data, MatrixXd* submatrix) 
+{
   TIMER functionTimer(__FUNCTION__);
+
+  assert ( startRow % 3 == 0 );
   
-  // only leave this commented out if you don't mind skipping an assertion! 
-  
-  const DECOMPRESSION_DATA& decompression_dataX = data.get_decompression_dataX();
-  int numCols = decompression_dataX.get_numCols();
-  assert( matrixToFill.rows() == numRows && matrixToFill.cols() == numCols );
+  // start fetching useful parameters
+  COMPRESSION_DATA* compression_dataX = data->get_compression_dataX();
+  const VEC3I& dims = compression_dataX->get_dims();
+  int numCols = compression_dataX->get_numCols();   
+ 
+  // info for undoing the SVD transformation. using X is arbitrary and by convention
+  vector<Matrix3d>* vList = compression_dataX->get_vList();
 
-  for (int i = 0; i < numRows; i++) {
-    GetRowFast(startRow + i, i, data, matrixToFill);
-  }    
-}
-*/
+  // if submatrix is not yet allocated, resize it to be 3 x numCols
+  if (submatrix->cols() <= 0) {
+    submatrix->resize(3, numCols);
+  }
 
+  // compute the block number and index
+  int blockNumber, blockIndex;
+  ComputeBlockNumber(startRow, dims, &blockNumber, &blockIndex);
 
-// get a whole row from a compressed matrix 
-/*
-void GetRowFast(int row, int matrixRow, MATRIX_COMPRESSION_DATA& data, MatrixXd& matrixToFill) {
-
-  TIMER functionTimer(__FUNCTION__);
-  
-  const DECOMPRESSION_DATA& decompression_dataX = data.get_decompression_dataX();
-  int numCols = decompression_dataX.get_numCols();   
-  assert( matrixToFill.cols() == numCols && matrixToFill.rows() == 3 );
-
-  // VectorXd result(numCols);
-  const VEC3I& dims = decompression_dataX.get_dims();
-  const INTEGER_FIELD_3D& zigzagArray = decompression_dataX.get_zigzagArray();
-  int blockIndex = 0;
-  // fill blockIndex
-  int blockNumber = ComputeBlockNumber(row, dims, blockIndex);
-  int cachedBlockNumber = data.get_cachedBlockNumber();
-
+  // compare the cache to the current
+  int cachedBlockNumber = data->get_cachedBlockNumber();
+  cout << "cachedBlockNumber: " << cachedBlockNumber << endl;
   if (blockNumber == cachedBlockNumber) { // if we've already decoded this block
-    TIMER cacheTimer("cache block");
+    TIMER cacheTimer("cached block");
 
-    // cout << "Used cache!" << endl;
+    cout << "Used cache!" << endl;
+    
+    // load the previously decoded data
+    vector<FIELD_3D>* cachedBlocksX = data->get_cachedBlocksX();
+    vector<FIELD_3D>* cachedBlocksY = data->get_cachedBlocksY();
+    vector<FIELD_3D>* cachedBlocksZ = data->get_cachedBlocksZ();
 
-    if (row % 3 == 0) { // X coordinate
-      TIMER xTimer("x coordinate cached");
-      
-      // load the previously decoded data
-      vector<FIELD_3D>& cachedBlocksX = data.get_cachedBlocksX();
-      for (int col = 0; col < numCols; col++) {
-        // FIELD_3D block = cachedBlocksX[col];
-        // note that square brackets are necessary to access a field data member by 
-        // linear index!!
-        // result[col] = block[blockIndex];
-        matrixToFill(matrixRow, col) = cachedBlocksX[col][blockIndex];
-      }   
+    // SVD transformation matrix container
+    Matrix3d V_i;
+
+    for (int i = 0; i < numCols; i++) {
+
+      // a dummy container for each column of the matrix
+      Vector3d col_i;
+      col_i[0] = (*cachedBlocksX)[i][blockIndex];
+      col_i[1] = (*cachedBlocksY)[i][blockIndex];
+      col_i[2] = (*cachedBlocksZ)[i][blockIndex];
+
+      // undo the SVD transformation
+      V_i = (*vList)[i];
+      Vector3d postSVD_i = V_i * col_i;
+
+      // set the column
+      submatrix->col(i) = postSVD_i;
     }
-    else if (row % 3 == 1) { // Y coordinate
-      vector<FIELD_3D>& cachedBlocksY = data.get_cachedBlocksY();
-      for (int col = 0; col < numCols; col++) {
-        
-        // FIELD_3D block = cachedBlocksY[col];
-        // result[col] = block[blockIndex];
-        matrixToFill(matrixRow, col) = cachedBlocksY[col][blockIndex];
-      }
-    }
-    else { // Z coordinate
-      vector<FIELD_3D>& cachedBlocksZ = data.get_cachedBlocksZ();
-      for (int col = 0; col < numCols; col++) {
-        // FIELD_3D block = cachedBlocksZ[col];
-        // result[col] = block[blockIndex];
-        matrixToFill(matrixRow, col) = cachedBlocksZ[col][blockIndex];
-      } 
-    }
+  return;
   }
 
   else { // no cache; have to compute it from scratch
-    // cout << "Didn't use cache!" << endl;  
+    cout << "Didn't use cache!" << endl;  
     TIMER uncachedTimer("uncached block");
-    INTEGER_FIELD_3D unzigzagged(8, 8, 8);
-    FIELD_3D decoded_block(8, 8, 8);
-    vector<int> decoded_runLength(512);
-    VECTOR decoded_runLengthVector(512);
 
-    if (row % 3 == 0) { // X coordinate
-      TIMER x_uncachedTimer("x coordinate uncached");
+    // initialize useful data
+    int numBlocks = compression_dataX->get_numBlocks();
+    const INTEGER_FIELD_3D& zigzagArray = compression_dataX->get_zigzagArray();
+    
+    int* allDataX = data->get_dataX();
+    int* allDataY = data->get_dataY();
+    int* allDataZ = data->get_dataZ();
+    COMPRESSION_DATA* compression_dataY = data->get_compression_dataY();
+    COMPRESSION_DATA* compression_dataZ = data->get_compression_dataZ();
+    
+    // container for the encoded blocks
+    vector<FIELD_3D> blocks(numBlocks);
 
-      int* allDataX = data.get_dataX();
-      const MATRIX& blockLengthsMatrix = decompression_dataX.get_blockLengthsMatrix();
-      const MATRIX& blockIndicesMatrix = decompression_dataX.get_blockIndicesMatrix();
+    // variable to store decoded run-length blocks
+    VectorXi runLengthDecoded;
 
-      for (int col = 0; col < numCols; col++) {
-        TIMER columnTimer("uncached column loop");  
-           
-        RunLengthDecodeBinaryFast(allDataX, blockNumber, col, blockLengthsMatrix, blockIndicesMatrix, decoded_runLength); 
+    // vector prior to undoing the svd
+    Vector3d preSVD;
 
-        CastIntToVectorFast(decoded_runLength, decoded_runLengthVector);
-        ZigzagUnflattenSmart(decoded_runLengthVector, zigzagArray, unzigzagged);
-
-        DecodeBlockFast(unzigzagged, blockNumber, col, decompression_dataX, decoded_block); 
-        
-        // set the cached block
-        vector<FIELD_3D>& cachedBlocksX = data.get_cachedBlocksX();
-
-        // update the cache
-        cachedBlocksX[col] = decoded_block;
-       
-        matrixToFill(matrixRow, col) = cachedBlocksX[col][blockIndex];
-      } 
-    }
-
-    else if (row % 3 == 1) { // Y coordinate
-      
-      TIMER x_uncachedTimer("y coordinate uncached");
-
-      int* allDataY = data.get_dataY();
-      const DECOMPRESSION_DATA& decompression_dataY = data.get_decompression_dataY();
-      const MATRIX& blockLengthsMatrix = decompression_dataY.get_blockLengthsMatrix();
-      const MATRIX& blockIndicesMatrix = decompression_dataY.get_blockIndicesMatrix();
-
-      for (int col = 0; col < numCols; col++) {
-           
-        RunLengthDecodeBinaryFast(allDataY, blockNumber, col, blockLengthsMatrix, blockIndicesMatrix, decoded_runLength); 
-
-        CastIntToVectorFast(decoded_runLength, decoded_runLengthVector);
-        ZigzagUnflattenSmart(decoded_runLengthVector, zigzagArray, unzigzagged);
-        DecodeBlockFast(unzigzagged, blockNumber, col, decompression_dataY, decoded_block); 
-        // set the cached block
-
-        vector<FIELD_3D>& cachedBlocksY = data.get_cachedBlocksY();
-        // update the cache
-        cachedBlocksY[col] = decoded_block;
-
-        matrixToFill(matrixRow, col) = cachedBlocksY[col][blockIndex];
-      }
+    // data for doing the inverse DCT
+    const fftw_plan& plan = data->get_plan();
+    double* in = data->get_dct_in();
+    int direction = -1;
 
      
+    // pointers to the cache 
+    vector<FIELD_3D>* cachedBlocksX = data->get_cachedBlocksX();
+    vector<FIELD_3D>* cachedBlocksY = data->get_cachedBlocksY();
+    vector<FIELD_3D>* cachedBlocksZ = data->get_cachedBlocksZ();
+
+    for (int i = 0; i < numCols; i++) {
+      
+      // a container for column i
+      Vector3d preSVD_i;
+      /*
+       *****************************************************************
+       * X coordinate
+       *****************************************************************
+      */  
+
+      // decode the run-length scheme
+      RunLengthDecodeBinary(allDataX, blockNumber, i, compression_dataX, &runLengthDecoded); 
+
+      // undo the zigzag scan
+      INTEGER_FIELD_3D unflattened;
+      ZigzagUnflatten(runLengthDecoded, zigzagArray, &unflattened);
+
+      // undo the scaling from the quantizer
+      FIELD_3D decodedBlock;
+      DecodeBlockWithCompressionData(unflattened, blockNumber, i, compression_dataX, &decodedBlock); 
+
+      // inverse DCT
+      DCT_Smart_Unitary(plan, direction, in, &decodedBlock);
+
+      preSVD_i[0] = decodedBlock[blockIndex];
+
+      // update the cache
+      (*cachedBlocksX)[i] = decodedBlock;
+
+      /*
+       *****************************************************************
+       * Y coordinate
+       *****************************************************************
+      */  
+
+      // decode the run-length scheme
+      RunLengthDecodeBinary(allDataY, blockNumber, i, compression_dataY, &runLengthDecoded); 
+
+      // undo the zigzag scan
+      ZigzagUnflatten(runLengthDecoded, zigzagArray, &unflattened);
+
+      // undo the scaling from the quantizer
+      DecodeBlockWithCompressionData(unflattened, blockNumber, i, compression_dataY, &decodedBlock); 
+
+      // inverse DCT
+      DCT_Smart_Unitary(plan, direction, in, &decodedBlock);
+
+      preSVD_i[1] = decodedBlock[blockIndex];
+
+      // update the cache
+      (*cachedBlocksY)[i] = decodedBlock;
+
+      /*
+       *****************************************************************
+       * Z coordinate
+       *****************************************************************
+      */  
+
+      // decode the run-length scheme
+      RunLengthDecodeBinary(allDataZ, blockNumber, i, compression_dataZ, &runLengthDecoded); 
+
+      // undo the zigzag scan
+      ZigzagUnflatten(runLengthDecoded, zigzagArray, &unflattened);
+
+      // undo the scaling from the quantizer
+      DecodeBlockWithCompressionData(unflattened, blockNumber, i, compression_dataZ, &decodedBlock); 
+
+      // inverse DCT
+      DCT_Smart_Unitary(plan, direction, in, &decodedBlock);
+
+      preSVD_i[2] = decodedBlock[blockIndex];
+
+      // update the cache
+      (*cachedBlocksZ)[i] = decodedBlock;
+
+      // fetch the V matrix to undo the SVD
+      Matrix3d V_i = (*vList)[i];
+      
+      // undo the SVD transformation
+      V_i = (*vList)[i];
+      Vector3d postSVD_i = V_i * preSVD_i;
+
+      // set the column
+      submatrix->col(i) = postSVD_i;
     }
 
-    else { // Z coordinate
+    // now that the cache has been filled, set the block number
+    data->set_cachedBlockNumber(blockNumber);
 
-      TIMER x_uncachedTimer("z coordinate uncached");
-
-      int* allDataZ = data.get_dataZ();
-      const DECOMPRESSION_DATA& decompression_dataZ = data.get_decompression_dataZ();
-      const MATRIX& blockLengthsMatrix = decompression_dataZ.get_blockLengthsMatrix();
-      const MATRIX& blockIndicesMatrix = decompression_dataZ.get_blockIndicesMatrix();
-
-      for (int col = 0; col < numCols; col++) {
-           
-      RunLengthDecodeBinaryFast(allDataZ, blockNumber, col, blockLengthsMatrix, blockIndicesMatrix, decoded_runLength); 
-
-        CastIntToVectorFast(decoded_runLength, decoded_runLengthVector);
-        ZigzagUnflattenSmart(decoded_runLengthVector, zigzagArray, unzigzagged);
-        DecodeBlockFast(unzigzagged, blockNumber, col, decompression_dataZ, decoded_block); 
-        // set the cached block
-
-        vector<FIELD_3D>& cachedBlocksZ = data.get_cachedBlocksZ();
-        
-        // update the cache
-        cachedBlocksZ[col] = decoded_block;
-
-        matrixToFill(matrixRow, col) = cachedBlocksZ[col][blockIndex];
-      }
-
-      // set the cached block number
-      data.set_cachedBlockNumber(blockNumber);
-
-    }
   }
 }
-*/
- 
+
 
 ////////////////////////////////////////////////////////
 // generates the header information in the binary file
 // need to include:
 //
 ////////////////////////////////////////////////////////
-
 void WriteMetaData(const char* filename, COMPRESSION_DATA& compression_data)
 { 
 

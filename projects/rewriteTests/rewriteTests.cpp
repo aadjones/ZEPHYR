@@ -155,6 +155,8 @@ void PeeledCompressedUnprojectTest();
 // test DecodeFromRowCol
 void DecodeFromRowColTest(int row, int col);
 
+// test getting a submatrix for the reduced compressed advection
+void GetSubmatrixTest(int startRow);
 
 ////////////////////////////////////////////////////////
 // Main
@@ -166,8 +168,8 @@ int main(int argc, char* argv[])
   InitGlobals();
 
   // int blockNumber = 287;
-  int row = 303;
-  int col = 24;
+  int row = 0;
+  // int col = 24;
 
   // EncodeOneBlockTest(blockNumber, col, &compression_data0);
 
@@ -181,12 +183,16 @@ int main(int argc, char* argv[])
 
   // DecodeVectorFieldTest(col);
 
-
-  DecodeFromRowColTest(row, col);
+  // DecodeFromRowColTest(row, col);
 
   // MatrixCompressionDebugTest();
   
   // DecodeMatrixTest();
+  
+  InitMatrixCompressionData();
+  for (int i = 0; i < 3 * (BLOCK_SIZE + 1); i += 3) {
+    GetSubmatrixTest(i);
+  }
 
 
   
@@ -212,10 +218,10 @@ void InitGlobals()
 
   EIGEN::read(path.c_str(), U); 
 
-  V = VECTOR3_FIELD_3D(U.col(0), xRes, yRes, zRes);
-  TransformVectorFieldSVDCompression(&V, &compression_data1);
-  F = V.scalarField(0);
-  GetBlocks(F, &g_blocks);
+  // V = VECTOR3_FIELD_3D(U.col(0), xRes, yRes, zRes);
+  // TransformVectorFieldSVDCompression(&V, &compression_data1);
+  // F = V.scalarField(0);
+  // GetBlocks(F, &g_blocks);
   // UnitaryBlockDCT(1, &g_blocks);
 }
 
@@ -692,6 +698,8 @@ void InitMatrixCompressionData()
   // put the svd data inside the 0 component
   const char* filename = "U.preadvect.SVD.data";
   ReadSVDData(filename, &compression_data0);
+
+  // read all three 'allDatas' to memory
   filename = "U.preadvect.compressed.matrix0";
   allData0 = ReadBinaryFileToMemory(filename, &compression_data0);
   filename = "U.preadvect.compressed.matrix1";
@@ -699,11 +707,16 @@ void InitMatrixCompressionData()
   filename = "U.preadvect.compressed.matrix2";
   allData2 = ReadBinaryFileToMemory(filename, &compression_data2);
 
+  // call the constructor
   matrix_data = MATRIX_COMPRESSION_DATA(allData0, allData1, allData2, 
       &compression_data0, &compression_data1, &compression_data2);
 
+  // initialize dct information 
   int direction = -1;
   matrix_data.dct_setup(direction);
+
+  // initialize the cache for GetSubmatrix
+  matrix_data.init_cache();
 }
 
 
@@ -928,6 +941,9 @@ void PeeledCompressedUnprojectTest()
 }
 
 
+////////////////////////////////////////////////////////
+// a mini version of GetSubmatrix for just one cell
+////////////////////////////////////////////////////////
 void DecodeFromRowColTest(int row, int col) 
 {
 
@@ -945,5 +961,25 @@ void DecodeFromRowColTest(int row, int col)
   ground[2] = U(row + 2, col);
   cout << "Ground: " << endl;
   cout << ground << endl;
+
+}
+
+
+////////////////////////////////////////////////////////
+void GetSubmatrixTest(int startRow)
+{
+  
+  MatrixXd submatrix;
+  GetSubmatrix(startRow, &matrix_data, &submatrix);
+
+  // cout << "Submatrix from GetSubmatrixTest: " << endl;
+  // cout << submatrix << endl;
+
+  MatrixXd ground = U.block(startRow, 0, 3, numCols);
+  // cout << "Ground: " << endl;
+  // cout << ground << endl;
+
+  double diff = (ground - submatrix).norm();
+  cout << "Diff: " << diff << endl; 
 
 }
