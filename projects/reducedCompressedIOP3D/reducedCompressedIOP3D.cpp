@@ -352,6 +352,7 @@ int main(int argc, char *argv[])
 
 	fluid = new SUBSPACE_FLUID_3D_COMPRESSED_EIGEN(xRes, yRes, zRes, reducedPath, &boundaries[0], usingIOP);
   fluid->loadReducedIOP();
+  fluid->initCompressionData();
 
   fluid->fullRankPath() = snapshotPath;
   fluid->vorticityEps() = vorticity;

@@ -23,7 +23,7 @@
 #include "SUBSPACE_FLUID_3D_COMPRESSED_EIGEN.h"
 #include "BIG_MATRIX.h"
 #include "MATRIX_COMPRESSION_DATA.h"
-#include "COMPRESSION.h"
+#include "COMPRESSION_REWRITE.h"
 
 //////////////////////////////////////////////////////////////////////
 // Construction/Destruction
@@ -262,7 +262,7 @@ void SUBSPACE_FLUID_3D_COMPRESSED_EIGEN::stepReorderedCubatureStam()
 
     TIMER projectionTimer("Velocity projection");
 
-    _qDot = PeeledCompressedProject(_velocity, _U_preadvect_data);
+    PeeledCompressedProjectTransformNoSVD(_velocity, &_U_preadvect_data, &_qDot);
     // cout << "did peeled compressed project" << endl;
     // VECTOR qDot = EIGEN::convert(_qDot);
     // cout << "qDot preadvect: " << qDot << "; " << endl;
@@ -291,7 +291,7 @@ void SUBSPACE_FLUID_3D_COMPRESSED_EIGEN::stepReorderedCubatureStam()
     // qDot = EIGEN::convert(_qDot);
     // cout << "qDot post reduced project: " << qDot << "; " << endl;
      
-    PeeledCompressedUnproject(_velocity, _U_final_data, _qDot);
+    PeeledCompressedUnprojectTransform(&_U_final_data, _qDot, &_velocity);
     // VECTOR unprojectFlat = _velocity.flattened();
     // unprojectFlat.write("unprojectFlatUnstable.vector");
 
@@ -342,16 +342,20 @@ void SUBSPACE_FLUID_3D_COMPRESSED_EIGEN::stepWithObstacle()
     TIMER projectionTimer("Velocity projection");
 
     // project into the subspace
-    PeeledCompressedProject(_velocity, &_U_preadvect_data, &_qDot);
+    
+    PeeledCompressedProjectTransformNoSVD(_velocity, &_U_preadvect_data, &_qDot);
+    cout << "finished projection! " << endl;
     projectionTimer.stop();
 
     // then advect
 
     // full-space advect heat and density
     advectHeatAndDensityStam();
+    cout << "finished advect heat and density!" << endl;
 
     // reduced advect velocity
     reducedAdvectStagedStamFast();
+    cout << "finished reduced advection!" << endl;
 
     // then diffuse 
     TIMER diffusionProjectionTimer("Reduced diffusion");
@@ -367,7 +371,7 @@ void SUBSPACE_FLUID_3D_COMPRESSED_EIGEN::stepWithObstacle()
 
     // come back to full space
     TIMER unprojectionTimer("Velocity unprojection");
-    PeeledCompressedUnproject(&_U_final_data, _qDot, &_velocity);
+    PeeledCompressedUnprojectTransform(&_U_final_data, _qDot, &_velocity);
     unprojectionTimer.stop();
 
     currentTime += _dt;
@@ -626,13 +630,13 @@ MatrixXd SUBSPACE_FLUID_3D_COMPRESSED_EIGEN::cellBasisCompressedPeeled(MATRIX_CO
   const int y = (decompose % _slabPeeled) / _xPeeled;
   const int x = (decompose % _slabPeeled) % _xPeeled;
 
-  DECOMPRESSION_DATA dataX = U_data.get_decompression_dataX();
-  VEC3I dims = dataX.get_dims();
+  COMPRESSION_DATA* dataX = U_data.get_compression_dataX();
+  const VEC3I& dims = dataX->get_dims();
   const int xRes = dims[0];
   const int yRes = dims[1];
   const int zRes = dims[2];
   const int numRows = 3 * xRes * yRes * zRes;
-  const int numCols = dataX.get_numCols();
+  const int numCols = dataX->get_numCols();
 
   assert(x >= 0);
   assert(x < _xRes - 2);
@@ -640,240 +644,20 @@ MatrixXd SUBSPACE_FLUID_3D_COMPRESSED_EIGEN::cellBasisCompressedPeeled(MATRIX_CO
   assert(y < _yRes - 2);
   assert(z >= 0);
   assert(z < _zRes - 2);
-  // assert(3 * index < U.rows());
   assert(3 * index < numRows);
   
   MatrixXd result(3, numCols); 
-  GetSubmatrixFast(3 * index, 3, U_data, result); 
+  GetSubmatrixNoSVD(3 * index, &U_data, &result); 
   return result;
   // return EIGEN::getRows(3 * index, 3, U); 
 }
-//////////////////////////////////////////////////////////////////////
-// advect a single cell
-//////////////////////////////////////////////////////////////////////
 
-// TODO: integrate decoder here!
-VectorXd SUBSPACE_FLUID_3D_COMPRESSED_EIGEN::advectCellStamPeeled(MATRIX_COMPRESSION_DATA& U_data, const Real& dt, const VectorXd& qDot, const int index, MatrixXd& submatrix)
-{
-  TIMER functionTimer(__FUNCTION__);
-  // peeled coordinates were passed in -- need to promote to full grid
-  const int decompose = index;
-  const int z = decompose / _slabPeeled + 1;
-  const int y = (decompose % _slabPeeled) / _xPeeled + 1;
-  const int x = (decompose % _slabPeeled) % _xPeeled + 1;
-
-  // try using Eigen's block functionality
-  const int index3 = 3 * index;
-  // const int totalColumns = U.cols();
-  DECOMPRESSION_DATA dataX = U_data.get_decompression_dataX();
-  const int totalColumns = dataX.get_numCols();
-
-  GetSubmatrixFast(index3, 3, U_data, submatrix);
-  VectorXd v = submatrix * qDot;
-  // backtrace
-  const VEC3F velocity(v[0], v[1], v[2]);
-  Real xTrace = x - dt * velocity[0];
-  Real yTrace = y - dt * velocity[1];
-  Real zTrace = z - dt * velocity[2];
-
-  // clamp backtrace to grid boundaries
-  xTrace = (xTrace < 1.5) ? 1.5 : xTrace;
-  xTrace = (xTrace > _xRes - 2.5) ? _xRes - 2.5 : xTrace;
-  yTrace = (yTrace < 1.5) ? 1.5 : yTrace;
-  yTrace = (yTrace > _yRes - 2.5) ? _yRes - 2.5 : yTrace;
-  zTrace = (zTrace < 1.5) ? 1.5 : zTrace;
-  zTrace = (zTrace > _zRes - 2.5) ? _zRes - 2.5 : zTrace;
-
-  // locate neighbors to interpolate --
-  // since we're in peeled coordinates, the lookup needs to be modified slightly
-  const int x0 = (int)xTrace - 1;
-  const int x1 = (x0 != _xPeeled - 1) ? x0 + 1 : x0;
-  const int y0 = (int)yTrace - 1;
-  const int y1 = (y0 != _yPeeled - 1) ? y0 + 1 : y0;
-  const int z0 = (int)zTrace - 1;
-  const int z1 = (z0 != _zPeeled - 1) ? z0 + 1 : z0;
-
-  // get interpolation weights
-  const Real s1 = (xTrace - 1) - x0;
-  const Real s0 = 1.0f - s1;
-  const Real t1 = (yTrace - 1) - y0;
-  const Real t0 = 1.0f - t1;
-  const Real u1 = (zTrace - 1) - z0;
-  const Real u0 = 1.0f - u1;
-
-  const int z0Scaled = z0 * _slabPeeled;
-  const int z1Scaled = z1 * _slabPeeled;
-  const int y0Scaled = y0 * _xPeeled;
-  const int y1Scaled = y1 * _xPeeled;
-
-  const int i000 = 3 * (x0 + y0Scaled + z0Scaled);
-  const int i010 = 3 * (x0 + y1Scaled + z0Scaled);
-  const int i100 = 3 * (x1 + y0Scaled + z0Scaled);
-  const int i110 = 3 * (x1 + y1Scaled + z0Scaled);
-  const int i001 = 3 * (x0 + y0Scaled + z1Scaled);
-  const int i011 = 3 * (x0 + y1Scaled + z1Scaled);
-  const int i101 = 3 * (x1 + y0Scaled + z1Scaled);
-  const int i111 = 3 * (x1 + y1Scaled + z1Scaled);
-
-  // NOTE: it spends most of its time (+50%) here
-  TIMER multiplyTimer1("multiplyTimer1");
-  TIMER multiplyTimer2("multiplyTimer2");
-  TIMER multiplyTimer("multiplyTimer");
-
-  GetSubmatrixFast(i000, 3, U_data, submatrix);
-  const VectorXd v000 = submatrix * qDot;
-
-  GetSubmatrixFast(i010, 3, U_data, submatrix);
-  const VectorXd v010 = submatrix * qDot;
-
-  GetSubmatrixFast(i100, 3, U_data, submatrix);
-  const VectorXd v100 = submatrix * qDot;
-
-  GetSubmatrixFast(i110, 3, U_data, submatrix);
-  const VectorXd v110 = submatrix * qDot;
-
-  GetSubmatrixFast(i001, 3, U_data, submatrix);
-  const VectorXd v001 = submatrix * qDot;
-
-  GetSubmatrixFast(i011, 3, U_data, submatrix);
-  const VectorXd v011 = submatrix * qDot;
-
-  GetSubmatrixFast(i101, 3, U_data, submatrix);
-  const VectorXd v101 = submatrix * qDot;
-
-  GetSubmatrixFast(i111, 3, U_data, submatrix);
-  const VectorXd v111 = submatrix * qDot;
-  multiplyTimer1.stop();
-  multiplyTimer2.stop();
-
-  const Real w000 = u0 * s0 * t0;
-  const Real w010 = u0 * s0 * t1;
-  const Real w100 = u0 * s1 * t0;
-  const Real w110 = u0 * s1 * t1;
-  const Real w001 = u1 * s0 * t0;
-  const Real w011 = u1 * s0 * t1;
-  const Real w101 = u1 * s1 * t0;
-  const Real w111 = u1 * s1 * t1;
-  
-  // interpolate
-  // (indices could be computed once)
-  //
-  // NOTE: it's deceptive to think this cuts down on
-  // multiplies, since they will all occur on a VECTOR,
-  // not just a scalar
-  //
-  //return u0 * (s0 * (t0 * v000 + t1 * v010) +
-  //             s1 * (t0 * v100 + t1 * v110)) +
-  //       u1 * (s0 * (t0 * v001 + t1 * v011) +
-  //             s1 * (t0 * v101 + t1 * v111));
-  return w000 * v000 + w010 * v010 + w100 * v100 + w110 * v110 +
-         w001 * v001 + w011 * v011 + w101 * v101 + w111 * v111;
-}
-//////////////////////////////////
-// advect a single cell (original)
-//////////////////////////////////
-/*
-VectorXd SUBSPACE_FLUID_3D_COMPRESSED_EIGEN::advectCellStamPeeled(const MatrixXd& U, const Real& dt, const VectorXd& qDot, const int index)
-{
-  TIMER functionTimer(__FUNCTION__);
-  // peeled coordinates were passed in -- need to promote to full grid
-  const int decompose = index;
-  const int z = decompose / _slabPeeled + 1;
-  const int y = (decompose % _slabPeeled) / _xPeeled + 1;
-  const int x = (decompose % _slabPeeled) % _xPeeled + 1;
-
-  // try using Eigen's block functionality
-  const int index3 = 3 * index;
-  const int totalColumns = U.cols();
-  VectorXd v = U.block(index3, 0, 3, totalColumns) * qDot;
-
-  // backtrace
-  const VEC3F velocity(v[0], v[1], v[2]);
-  Real xTrace = x - dt * velocity[0];
-  Real yTrace = y - dt * velocity[1];
-  Real zTrace = z - dt * velocity[2];
-
-  // clamp backtrace to grid boundaries
-  xTrace = (xTrace < 1.5) ? 1.5 : xTrace;
-  xTrace = (xTrace > _xRes - 2.5) ? _xRes - 2.5 : xTrace;
-  yTrace = (yTrace < 1.5) ? 1.5 : yTrace;
-  yTrace = (yTrace > _yRes - 2.5) ? _yRes - 2.5 : yTrace;
-  zTrace = (zTrace < 1.5) ? 1.5 : zTrace;
-  zTrace = (zTrace > _zRes - 2.5) ? _zRes - 2.5 : zTrace;
-
-  // locate neighbors to interpolate --
-  // since we're in peeled coordinates, the lookup needs to be modified slightly
-  const int x0 = (int)xTrace - 1;
-  const int x1 = (x0 != _xPeeled - 1) ? x0 + 1 : x0;
-  const int y0 = (int)yTrace - 1;
-  const int y1 = (y0 != _yPeeled - 1) ? y0 + 1 : y0;
-  const int z0 = (int)zTrace - 1;
-  const int z1 = (z0 != _zPeeled - 1) ? z0 + 1 : z0;
-
-  // get interpolation weights
-  const Real s1 = (xTrace - 1) - x0;
-  const Real s0 = 1.0f - s1;
-  const Real t1 = (yTrace - 1) - y0;
-  const Real t0 = 1.0f - t1;
-  const Real u1 = (zTrace - 1) - z0;
-  const Real u0 = 1.0f - u1;
-
-  const int z0Scaled = z0 * _slabPeeled;
-  const int z1Scaled = z1 * _slabPeeled;
-  const int y0Scaled = y0 * _xPeeled;
-  const int y1Scaled = y1 * _xPeeled;
-
-  const int i000 = 3 * (x0 + y0Scaled + z0Scaled);
-  const int i010 = 3 * (x0 + y1Scaled + z0Scaled);
-  const int i100 = 3 * (x1 + y0Scaled + z0Scaled);
-  const int i110 = 3 * (x1 + y1Scaled + z0Scaled);
-  const int i001 = 3 * (x0 + y0Scaled + z1Scaled);
-  const int i011 = 3 * (x0 + y1Scaled + z1Scaled);
-  const int i101 = 3 * (x1 + y0Scaled + z1Scaled);
-  const int i111 = 3 * (x1 + y1Scaled + z1Scaled);
-
-  // NOTE: it spends most of its time (+50%) here,
-  const VectorXd v000 = U.block(i000, 0, 3, totalColumns) * qDot;
-  const VectorXd v010 = U.block(i010, 0, 3, totalColumns) * qDot;
-  const VectorXd v100 = U.block(i100, 0, 3, totalColumns) * qDot;
-  const VectorXd v110 = U.block(i110, 0, 3, totalColumns) * qDot;
-  const VectorXd v001 = U.block(i001, 0, 3, totalColumns) * qDot;
-  const VectorXd v011 = U.block(i011, 0, 3, totalColumns) * qDot;
-  const VectorXd v101 = U.block(i101, 0, 3, totalColumns) * qDot;
-  const VectorXd v111 = U.block(i111, 0, 3, totalColumns) * qDot;
-
-  const Real w000 = u0 * s0 * t0;
-  const Real w010 = u0 * s0 * t1;
-  const Real w100 = u0 * s1 * t0;
-  const Real w110 = u0 * s1 * t1;
-  const Real w001 = u1 * s0 * t0;
-  const Real w011 = u1 * s0 * t1;
-  const Real w101 = u1 * s1 * t0;
-  const Real w111 = u1 * s1 * t1;
-  
-  // interpolate
-  // (indices could be computed once)
-  //
-  // NOTE: it's deceptive to think this cuts down on
-  // multiplies, since they will all occur on a VECTOR,
-  // not just a scalar
-  //
-  //return u0 * (s0 * (t0 * v000 + t1 * v010) +
-  //             s1 * (t0 * v100 + t1 * v110)) +
-  //       u1 * (s0 * (t0 * v001 + t1 * v011) +
-  //             s1 * (t0 * v101 + t1 * v111));
-  return w000 * v000 + w010 * v010 + w100 * v100 + w110 * v110 +
-         w001 * v001 + w011 * v011 + w101 * v101 + w111 * v111;
-}
-*/
 
 //////////////////////////////////////////////////////////////////////
 // advect a single cell
 //////////////////////////////////////////////////////////////////////
-//
-// some kind of horrible version control disaster happened here...
 
-VectorXd SUBSPACE_FLUID_3D_COMPRESSED_EIGEN::advectCellStamPeeled(const MATRIX_COMPRESSION_DATA& U_data, const MatrixXd& cellU,
+VectorXd SUBSPACE_FLUID_3D_COMPRESSED_EIGEN::advectCellStamPeeled(MATRIX_COMPRESSION_DATA& U_data, const MatrixXd& cellU,
     Real dt, const VectorXd& qDot, int index, MatrixXd* submatrix)
 {
   TIMER functionTimer(__FUNCTION__);
@@ -937,33 +721,33 @@ VectorXd SUBSPACE_FLUID_3D_COMPRESSED_EIGEN::advectCellStamPeeled(const MATRIX_C
 
   // NOTE: it spends most of its time (+50%) here
   
-  COMPRESSION_DATA* dataX = U_data.get_decompression_dataX();
-  const int totalCols = dataX->get_numCols();
+  // COMPRESSION_DATA* dataX = U_data.get_compression_dataX();
+  // const int totalCols = dataX->get_numCols();
 
   TIMER multiplyTimer0("multiplyTimer0");
 
-  GetSubmatrix(i000, &U_data, submatrix);
+  GetSubmatrixNoSVD(i000, &U_data, submatrix);
   const VectorXd v000 = (*submatrix) * qDot;
 
-  GetSubmatrix(i010, 3, U_data, submatrix);
+  GetSubmatrixNoSVD(i010, &U_data, submatrix);
   const VectorXd v010 = (*submatrix) * qDot;
 
-  GetSubmatrix(i100, 3, U_data, submatrix);
+  GetSubmatrixNoSVD(i100, &U_data, submatrix);
   const VectorXd v100 = (*submatrix) * qDot;
 
-  GetSubmatrix(i110, 3, U_data, submatrix);
+  GetSubmatrixNoSVD(i110, &U_data, submatrix);
   const VectorXd v110 = (*submatrix) * qDot;
 
-  GetSubmatrix(i001, 3, U_data, submatrix);
+  GetSubmatrixNoSVD(i001, &U_data, submatrix);
   const VectorXd v001 = (*submatrix) * qDot;
 
-  GetSubmatrix(i011, 3, U_data, submatrix);
+  GetSubmatrixNoSVD(i011, &U_data, submatrix);
   const VectorXd v011 = (*submatrix) * qDot;
 
-  GetSubmatrix(i101, 3, U_data, submatrix);
+  GetSubmatrixNoSVD(i101, &U_data, submatrix);
   const VectorXd v101 = (*submatrix) * qDot;
 
-  GetSubmatrix(i111, 3, U_data, submatrix);
+  GetSubmatrixNoSVD(i111, &U_data, submatrix);
   const VectorXd v111 = (*submatrix) * qDot;
 
   multiplyTimer0.stop();
@@ -994,128 +778,7 @@ VectorXd SUBSPACE_FLUID_3D_COMPRESSED_EIGEN::advectCellStamPeeled(const MATRIX_C
 
 
 
-/*
-VectorXd SUBSPACE_FLUID_3D_COMPRESSED_EIGEN::advectCellStamPeeled(MATRIX_COMPRESSION_DATA& U_data, const MatrixXd& cellU, const Real& dt, const VectorXd& qDot, const int index)
-  {
-    TIMER functionTimer(__FUNCTION__);
-    // peeled coordinates were passed in -- need to promote to full grid
-    const int decompose = index;
-    const int z = decompose / _slabPeeled + 1;
-    const int y = (decompose % _slabPeeled) / _xPeeled + 1;
-    const int x = (decompose % _slabPeeled) % _xPeeled + 1;
 
-    // get the velocity to backtrace
-    VectorXd v = cellU * qDot;
-
-    // backtrace
-    const VEC3F velocity(v[0], v[1], v[2]);
-    Real xTrace = x - dt * velocity[0];
-    Real yTrace = y - dt * velocity[1];
-    Real zTrace = z - dt * velocity[2];
-
-    // clamp backtrace to grid boundaries
-    
-    // keeping this comment block here for reference
-    xTrace = (xTrace < 1.5) ? 1.5 : xTrace;
-    xTrace = (xTrace > _xRes - 2.5) ? _xRes - 2.5 : xTrace;
-    yTrace = (yTrace < 1.5) ? 1.5 : yTrace;
-    yTrace = (yTrace > _yRes - 2.5) ? _yRes - 2.5 : yTrace;
-    zTrace = (zTrace < 1.5) ? 1.5 : zTrace;
-    zTrace = (zTrace > _zRes - 2.5) ? _zRes - 2.5 : zTrace;
-
-    // locate neighbors to interpolate --
-    // since we're in peeled coordinates, the lookup needs to be modified slightly
-    
-    // keeping this comment block here for reference
-    const int x0 = (int)xTrace - 1;
-    const int x1 = x0 + 1;
-    const int y0 = (int)yTrace - 1;
-    const int y1 = y0 + 1;
-    const int z0 = (int)zTrace - 1;
-    const int z1 = z0 + 1;
-
-    // get interpolation weights
-    const Real s1 = (xTrace - 1) - x0;
-    const Real s0 = 1.0f - s1;
-    const Real t1 = (yTrace - 1) - y0;
-    const Real t0 = 1.0f - t1;
-    const Real u1 = (zTrace - 1) - z0;
-    const Real u0 = 1.0f - u1;
-
-    const int z0Scaled = z0 * _slabPeeled;
-    const int z1Scaled = z1 * _slabPeeled;
-    const int y0Scaled = y0 * _xPeeled;
-    const int y1Scaled = y1 * _xPeeled;
-
-    const int i000 = 3 * (x0 + y0Scaled + z0Scaled);
-    const int i010 = 3 * (x0 + y1Scaled + z0Scaled);
-    const int i100 = 3 * (x1 + y0Scaled + z0Scaled);
-    const int i110 = 3 * (x1 + y1Scaled + z0Scaled);
-    const int i001 = 3 * (x0 + y0Scaled + z1Scaled);
-    const int i011 = 3 * (x0 + y1Scaled + z1Scaled);
-    const int i101 = 3 * (x1 + y0Scaled + z1Scaled);
-    const int i111 = 3 * (x1 + y1Scaled + z1Scaled);
-
-    // NOTE: it spends most of its time (+50%) here
-    
-    const DECOMPRESSION_DATA& dataX = U_data.get_decompression_dataX();
-    const int totalCols = dataX.get_numCols();
-
-    MatrixXd submatrix(3, totalCols);
-    
-    TIMER multiplyTimer("multiplies + getSubmatrixFast");
-    GetSubmatrixFast(i000, 3, U_data, submatrix);
-    const VectorXd v000 = submatrix * qDot;
-
-    GetSubmatrixFast(i010, 3, U_data, submatrix);
-    const VectorXd v010 = submatrix * qDot;
-
-    GetSubmatrixFast(i100, 3, U_data, submatrix);
-    const VectorXd v100 = submatrix * qDot;
-
-    GetSubmatrixFast(i110, 3, U_data, submatrix);
-    const VectorXd v110 = submatrix * qDot;
-
-    GetSubmatrixFast(i001, 3, U_data, submatrix);
-    const VectorXd v001 = submatrix * qDot;
-
-    GetSubmatrixFast(i011, 3, U_data, submatrix);
-    const VectorXd v011 = submatrix * qDot;
-
-    GetSubmatrixFast(i101, 3, U_data, submatrix);
-    const VectorXd v101 = submatrix * qDot;
-
-    GetSubmatrixFast(i111, 3, U_data, submatrix);
-    const VectorXd v111 = submatrix * qDot;
-
-    multiplyTimer.stop();
-
-      
-
-    const Real w000 = u0 * s0 * t0;
-    const Real w010 = u0 * s0 * t1;
-    const Real w100 = u0 * s1 * t0;
-    const Real w110 = u0 * s1 * t1;
-    const Real w001 = u1 * s0 * t0;
-    const Real w011 = u1 * s0 * t1;
-    const Real w101 = u1 * s1 * t0;
-    const Real w111 = u1 * s1 * t1;
-    
-    // interpolate
-    // (indices could be computed once)
-    //
-    // NOTE: it's deceptive to think this cuts down on
-    // multiplies, since they will all occur on a VECTOR,
-    // not just a scalar
-    //
-    //return u0 * (s0 * (t0 * v000 + t1 * v010) +
-    //             s1 * (t0 * v100 + t1 * v110)) +
-    //       u1 * (s0 * (t0 * v001 + t1 * v011) +
-    //             s1 * (t0 * v101 + t1 * v111));
-    return w000 * v000 + w010 * v010 + w100 * v100 + w110 * v110 +
-           w001 * v001 + w011 * v011 + w101 * v101 + w111 * v111;
-  }
-*/
 
 //////////////////////////////////////////////////////////////////////
 // read in a cubature scheme
@@ -1184,8 +847,8 @@ void SUBSPACE_FLUID_3D_COMPRESSED_EIGEN::readAdvectionCubature()
     COMPRESSION_DATA compression_data1;
     COMPRESSION_DATA compression_data2;
 
-    const char* filename = "U.preadvect.SVD.data";
-    ReadSVDData(filename, &compression_dataX);
+    // const char* filename = "U.preadvect.SVD.data";
+    // ReadSVDData(filename, &compression_data0);
 
     string preadvectFile = _reducedPath + string("U.preadvect.component0");
     int* allData0 = ReadBinaryFileToMemory(preadvectFile.c_str(), &compression_data0);
@@ -1274,8 +937,8 @@ void SUBSPACE_FLUID_3D_COMPRESSED_EIGEN::reducedAdvectStagedStamFast()
   assert(_advectionCubatureAfter.size() > 0);
   assert(_advectionCubatureBefore.size() > 0);
 
-  const MATRIX_COMPRESSION_DATA& data = (*this).U_final_data();
-  COMPRESSION_DATA* dataX = data.get_decompression_dataX();
+  MATRIX_COMPRESSION_DATA& data = (*this).U_final_data();
+  COMPRESSION_DATA* dataX = data.get_compression_dataX();
   const int numCols = dataX->get_numCols();
   
   MatrixXd submatrix(3, numCols);
@@ -1287,7 +950,7 @@ void SUBSPACE_FLUID_3D_COMPRESSED_EIGEN::reducedAdvectStagedStamFast()
   {
     const int index = _keyAdvectionCells[x];
     // finals[x] = _advectionCubatureAfter[x] * advectCellStamPeeled(_preadvectU, _advectionCubatureBefore[x], dt0, _qDot, index);
-    finals[x] = _advectionCubatureAfter[x] * advectCellStamPeeled(_U_preadvect_data, _advectionCubatureBefore[x], dt0, _qDot, index, submatrix);
+    finals[x] = _advectionCubatureAfter[x] * advectCellStamPeeled(_U_preadvect_data, _advectionCubatureBefore[x], dt0, _qDot, index, &submatrix);
   }
 
   for (int x = 0; x < totalPoints; x++)
@@ -1498,16 +1161,15 @@ void SUBSPACE_FLUID_3D_COMPRESSED_EIGEN::loadCubatureTrainingBases()
   COMPRESSION_DATA compression_data1;
   COMPRESSION_DATA compression_data2;
 
-  const char* filename = "U.preadvect.SVD.data";
-  ReadSVDData(filename, &compression_dataX);
+  // filename = string("U.preadvect.SVD.data");
+  // ReadSVDData(filename.c_str(), &compression_data0);
 
   string preadvectFile = _reducedPath + string("U.preadvect.component0");
-  int* allDataX = ReadBinaryFileToMemory(preadvectFile.c_str(), &compression_data0);
+  int* allData0 = ReadBinaryFileToMemory(preadvectFile.c_str(), &compression_data0);
   preadvectFile = _reducedPath + string("U.preadvect.component1");
-  ReadBinaryFileToMemory(preadvectFile.c_str(), allDataY, decompression_data1);
+  int* allData1 = ReadBinaryFileToMemory(preadvectFile.c_str(), &compression_data1);
   preadvectFile = _reducedPath + string("U.preadvect.component2");
-  ReadBinaryFileToMemory(preadvectFile.c_str(), allDataZ, decompression_data2);
-
+  int* allData2 = ReadBinaryFileToMemory(preadvectFile.c_str(), &compression_data2);
 
   _U_preadvect_data = MATRIX_COMPRESSION_DATA(allData0, allData1, allData2,
       &compression_data0, &compression_data1, &compression_data2); 
@@ -1535,67 +1197,70 @@ void SUBSPACE_FLUID_3D_COMPRESSED_EIGEN::loadReducedRuntimeBases(string path)
   string filename;
   
   // TODO: insert the decoder for U.preadvect
-  int* allDataX = NULL;
-  int* allDataY = NULL;
-  int* allDataZ = NULL;
-  DECOMPRESSION_DATA decompression_dataX;
-  DECOMPRESSION_DATA decompression_dataY;
-  DECOMPRESSION_DATA decompression_dataZ;
-  filename = _reducedPath + string("U.preadvect.componentX");
-  ReadBinaryFileToMemory(filename.c_str(), allDataX, decompression_dataX);
-  filename = _reducedPath + string("U.preadvect.componentY");
-  ReadBinaryFileToMemory(filename.c_str(), allDataY, decompression_dataY);
-  filename = _reducedPath + string("U.preadvect.componentZ");
-  ReadBinaryFileToMemory(filename.c_str(), allDataZ, decompression_dataZ);
-  MATRIX_COMPRESSION_DATA U_preadvect_data(allDataX, allDataY, allDataZ,
-      decompression_dataX, decompression_dataY, decompression_dataZ);
-  _U_preadvect_data = U_preadvect_data;
+  COMPRESSION_DATA compression_data0;
+  COMPRESSION_DATA compression_data1;
+  COMPRESSION_DATA compression_data2;
+
+  // filename = string("U.preadvect.SVD.data");
+  // ReadSVDData(filename, &compression_data0);
+
+  string preadvectFile = _reducedPath + string("U.preadvect.component0");
+  int* allData0 = ReadBinaryFileToMemory(preadvectFile.c_str(), &compression_data0);
+  preadvectFile = _reducedPath + string("U.preadvect.component1");
+  int* allData1 = ReadBinaryFileToMemory(preadvectFile.c_str(), &compression_data1);
+  preadvectFile = _reducedPath + string("U.preadvect.component2");
+  int* allData2 = ReadBinaryFileToMemory(preadvectFile.c_str(), &compression_data2);
+
+  _U_preadvect_data = MATRIX_COMPRESSION_DATA(allData0, allData1, allData2,
+      &compression_data0, &compression_data1, &compression_data2); 
+
+  _U_preadvect_data.dct_setup(-1);
   _U_preadvect_data.init_cache();
 
-  DECOMPRESSION_DATA preadvect_dataX = _U_preadvect_data.get_decompression_dataX();
-  VEC3I dims = preadvect_dataX.get_dims();
-  const int xRes = dims[0];
-  const int yRes = dims[1];
-  const int zRes = dims[2];
-  const int numRows = 3 * xRes * yRes * zRes;
+
+  COMPRESSION_DATA* preadvect_dataX = _U_preadvect_data.get_compression_dataX();
+  const VEC3I& dims = preadvect_dataX->get_dims();
+  int numRows = 3 * dims[0] * dims[1] * dims[2]; 
 
   // EIGEN::read(filename, _preadvectU);
- 
   // if (_preadvectU.rows() > 1000000)
+
   if (numRows > 1000000) 
     purge();
-    // TODO: what do we do here? do we need U.final in full?
- 
-    COMPRESSION_DATA compression_data0;
-    COMPRESSION_DATA compression_data1;
-    COMPRESSION_DATA compression_data2;
-
-    const char* filename = "U.final.SVD.data";
-    ReadSVDData(filename, &compression_dataX);
-
-    string finalFile = _reducedPath + string("U.final.component0");
-    int* allData0 = ReadBinaryFileToMemory(finalFile.c_str(), &compression_data0);
-    finalFile = _reducedPath + string("U.final.component1");
-    int* allData1 = ReadBinaryFileToMemory(finalFile.c_str(), &compression_data1);
-    finalFile = _reducedPath + string("U.final.component2");
-    int* allData2 = ReadBinaryFileToMemory(finalFile.c_str(), &compression_data2);
-
-
-    _U_final_data = MATRIX_COMPRESSION_DATA(allData0, allData1, allData2,
-        &compression_data0, &compression_data1, &compression_data2); 
-
-    _U_final_data.dct_setup(-1);
-    _U_final_data.init_cache();
-
-    // EIGEN::read(filename, _U);
   
+  COMPRESSION_DATA final_compression_data0;
+  COMPRESSION_DATA final_compression_data1;
+  COMPRESSION_DATA final_compression_data2;
+
+  // filename = string("U.final.SVD.data");
+  // ReadSVDData(filename, &compression_data0);
+
+  string finalFile = _reducedPath + string("U.final.component0");
+  allData0 = ReadBinaryFileToMemory(finalFile.c_str(), &final_compression_data0);
+  finalFile = _reducedPath + string("U.final.component1");
+  allData1 = ReadBinaryFileToMemory(finalFile.c_str(), &final_compression_data1);
+  finalFile = _reducedPath + string("U.final.component2");
+  allData2 = ReadBinaryFileToMemory(finalFile.c_str(), &final_compression_data2);
 
 
+  _U_final_data = MATRIX_COMPRESSION_DATA(allData0, allData1, allData2,
+      &final_compression_data0, &final_compression_data1, &final_compression_data2); 
+
+  _U_final_data.dct_setup(-1);
+  _U_final_data.init_cache();
+
+  // EIGEN::read(filename, _U);
+  
+  COMPRESSION_DATA* final_dataX = _U_final_data.get_compression_dataX();
+  const VEC3I& dimsFinal = final_dataX->get_dims();
+  numRows = 3 * dimsFinal[0] * dimsFinal[1] * dimsFinal[2]; 
+
+  // EIGEN::read(filename, _preadvectU);
+  // if (_U.rows() > 1000000)
+  if (numRows > 1000000) 
+    purge();
 
   TIMER::printTimings();
-  // if (_preadvectU.rows() > 1000000)
-  if (numRows > 1000000) 
-    purge();
 }
 
 //////////////////////////////////////////////////////////////////////
@@ -1615,50 +1280,71 @@ void SUBSPACE_FLUID_3D_COMPRESSED_EIGEN::loadReducedIOP(string path)
 
   string filename;
   
-  int* allDataX = NULL;
-  int* allDataY = NULL;
-  int* allDataZ = NULL;
-  DECOMPRESSION_DATA decompression_dataX;
-  DECOMPRESSION_DATA decompression_dataY;
-  DECOMPRESSION_DATA decompression_dataZ;
-  filename = _reducedPath + string("U.preadvect.componentX");
-  ReadBinaryFileToMemory(filename.c_str(), allDataX, decompression_dataX);
-  filename = _reducedPath + string("U.preadvect.componentY");
-  ReadBinaryFileToMemory(filename.c_str(), allDataY, decompression_dataY);
-  filename = _reducedPath + string("U.preadvect.componentZ");
-  ReadBinaryFileToMemory(filename.c_str(), allDataZ, decompression_dataZ);
-  MATRIX_COMPRESSION_DATA U_preadvect_data(allDataX, allDataY, allDataZ,
-      decompression_dataX, decompression_dataY, decompression_dataZ);
-  _U_preadvect_data = U_preadvect_data;
+  COMPRESSION_DATA compression_data0;
+  COMPRESSION_DATA compression_data1;
+  COMPRESSION_DATA compression_data2;
+
+  // filename = string("U.preadvect.SVD.data");
+  // ReadSVDData(filename, &compression_data0);
+
+  string preadvectFile = _reducedPath + string("U.preadvect.component0");
+  int* allData0 = ReadBinaryFileToMemory(preadvectFile.c_str(), &compression_data0);
+  preadvectFile = _reducedPath + string("U.preadvect.component1");
+  int* allData1 = ReadBinaryFileToMemory(preadvectFile.c_str(), &compression_data1);
+  preadvectFile = _reducedPath + string("U.preadvect.component2");
+  int* allData2 = ReadBinaryFileToMemory(preadvectFile.c_str(), &compression_data2);
+
+  _U_preadvect_data = MATRIX_COMPRESSION_DATA(allData0, allData1, allData2,
+      &compression_data0, &compression_data1, &compression_data2); 
+
+  _U_preadvect_data.dct_setup(-1);
   _U_preadvect_data.init_cache();
 
-  DECOMPRESSION_DATA preadvect_dataX = _U_preadvect_data.get_decompression_dataX();
-  VEC3I dims = preadvect_dataX.get_dims();
-  const int xRes = dims[0];
-  const int yRes = dims[1];
-  const int zRes = dims[2];
-  const int numRows = 3 * xRes * yRes * zRes;
+
+  COMPRESSION_DATA* preadvect_dataX = _U_preadvect_data.get_compression_dataX();
+  const VEC3I& dims = preadvect_dataX->get_dims();
+  int numRows = 3 * dims[0] * dims[1] * dims[2]; 
+
+  // EIGEN::read(filename, _preadvectU);
+  // if (_preadvectU.rows() > 1000000)
 
   if (numRows > 1000000) 
     purge();
 
   filename = path + string("U.final.matrix");
-  int* UallDataX = NULL;
-  int* UallDataY = NULL;
-  int* UallDataZ = NULL;
-  DECOMPRESSION_DATA Udecompression_dataX;
-  DECOMPRESSION_DATA Udecompression_dataY;
-  DECOMPRESSION_DATA Udecompression_dataZ;
-  filename = _reducedPath + string("U.final.componentX");
-  ReadBinaryFileToMemory(filename.c_str(), UallDataX, Udecompression_dataX);
-  filename = _reducedPath + string("U.final.componentY");
-  ReadBinaryFileToMemory(filename.c_str(), UallDataY, Udecompression_dataY);
-  filename = _reducedPath + string("U.final.componentZ");
-  ReadBinaryFileToMemory(filename.c_str(), UallDataZ, Udecompression_dataZ);
-  MATRIX_COMPRESSION_DATA U_final_data(UallDataX, UallDataY, UallDataZ,
-      Udecompression_dataX, Udecompression_dataY, Udecompression_dataZ);
-  _U_final_data = U_final_data;
+  
+  COMPRESSION_DATA final_compression_data0;
+  COMPRESSION_DATA final_compression_data1;
+  COMPRESSION_DATA final_compression_data2;
+
+  // filename = string("U.final.SVD.data");
+  // ReadSVDData(filename, &compression_data0);
+
+  string finalFile = _reducedPath + string("U.final.component0");
+  allData0 = ReadBinaryFileToMemory(finalFile.c_str(), &final_compression_data0);
+  finalFile = _reducedPath + string("U.final.component1");
+  allData1 = ReadBinaryFileToMemory(finalFile.c_str(), &final_compression_data1);
+  finalFile = _reducedPath + string("U.final.component2");
+  allData2 = ReadBinaryFileToMemory(finalFile.c_str(), &final_compression_data2);
+
+
+  _U_final_data = MATRIX_COMPRESSION_DATA(allData0, allData1, allData2,
+      &final_compression_data0, &final_compression_data1, &final_compression_data2); 
+
+  _U_final_data.dct_setup(-1);
   _U_final_data.init_cache();
+
+  // EIGEN::read(filename, _U);
+  
+  COMPRESSION_DATA* final_dataX = _U_final_data.get_compression_dataX();
+  const VEC3I& dimsFinal = final_dataX->get_dims();
+  numRows = 3 * dimsFinal[0] * dimsFinal[1] * dimsFinal[2]; 
+
+  // EIGEN::read(filename, _preadvectU);
+  // if (_U.rows() > 1000000)
+  if (numRows > 1000000) 
+    purge();
+
   
   /*
   filename = path + string("U.preproject.matrix");

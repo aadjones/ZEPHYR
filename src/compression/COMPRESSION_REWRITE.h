@@ -264,12 +264,23 @@ void TransformSVDAndDCT(int col, const VECTOR3_FIELD_3D& V,
     MATRIX_COMPRESSION_DATA* U_data, 
     vector<VectorXd>* Xpart, vector<VectorXd>* Ypart, vector<VectorXd>* Zpart);
 
+// helper function for frequency domain projection. transforms 
+// V by the DCT. fills up the three vectors
+// with the three components.
+void TransformDCT(const VECTOR3_FIELD_3D& V, 
+    MATRIX_COMPRESSION_DATA* U_data, vector<VectorXd>* Xpart, vector<VectorXd>* Ypart, 
+    vector<VectorXd>* Zpart);
+
 // do peeled compressed projection naively in the regular spatial domain
 void PeeledCompressedProject(const VECTOR3_FIELD_3D& V, MATRIX_COMPRESSION_DATA* U_data,
     VectorXd* q);
 
 // projection, implemented in the frequency domain
 void PeeledCompressedProjectTransform(const VECTOR3_FIELD_3D& V, 
+    MATRIX_COMPRESSION_DATA* U_data, VectorXd* q);
+
+// projection, implemented in the frequency domain. assumes no SVD!
+void PeeledCompressedProjectTransformNoSVD(const VECTOR3_FIELD_3D& V, 
     MATRIX_COMPRESSION_DATA* U_data, VectorXd* q);
 
 // set zeros at the places where we have artificially padded
@@ -279,6 +290,18 @@ void SetZeroPadding(vector<VectorXd>* blocks, COMPRESSION_DATA* data);
 // using compression data
 void PeeledCompressedUnproject(MATRIX_COMPRESSION_DATA* U_data, const VectorXd& q, 
     VECTOR3_FIELD_3D* V);
+
+// unproject the reduced coordinate into the peeled cells in this field 
+// using compression data. stays in the frequency domain until the end
+void PeeledCompressedUnprojectTransform(MATRIX_COMPRESSION_DATA* U_data, const VectorXd& q, 
+    VECTOR3_FIELD_3D* V);
+
+// scale a vector<VectorXd> each by the same scalar
+void ScaleVectorEigen(double alpha, vector<VectorXd>* V);
+
+// increment each element of a vector<VectorXd> correspondingly
+// by another vector<VectorXd>
+void AddVectorEigen(const vector<VectorXd> V, vector<VectorXd>* W);
 
 // given a row number and the dimensions, computes
 // which block number we need for the decoder. populates
@@ -295,7 +318,12 @@ void DecodeFromRowCol(int row, int col, MATRIX_COMPRESSION_DATA* data, Vector3d*
 // given a start row, computes the 3 x numCols submatrix
 // given the compression data. assumes start row is 
 // divisible by 3!
-void GetSubmatrix(int startRow, MATRIX_COMPRESSION_DATA* data, MatrixXd* submatrix); 
+void GetSubmatrix(int startRow, MATRIX_COMPRESSION_DATA* data, MatrixXd* submatrix);
+
+// given a start row, computes the 3 x numCols submatrix
+// given the compression data. assumes start row is 
+// divisible by 3! assumes no SVD!
+void GetSubmatrixNoSVD(int startRow, MATRIX_COMPRESSION_DATA* data, MatrixXd* submatrix);
 
 
 #endif

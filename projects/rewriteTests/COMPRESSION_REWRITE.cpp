@@ -1842,6 +1842,7 @@ void GetSubmatrix(int startRow, MATRIX_COMPRESSION_DATA* data, MatrixXd* submatr
 
     // initialize useful data
     int numBlocks = compression_dataX->get_numBlocks();
+    cout << "numBlocks: " << numBlocks << endl;
     const INTEGER_FIELD_3D& zigzagArray = compression_dataX->get_zigzagArray();
     
     int* allDataX = data->get_dataX();
@@ -1863,7 +1864,6 @@ void GetSubmatrix(int startRow, MATRIX_COMPRESSION_DATA* data, MatrixXd* submatr
     const fftw_plan& plan = data->get_plan();
     double* in = data->get_dct_in();
     int direction = -1;
-
      
     // pointers to the cache 
     vector<FIELD_3D>* cachedBlocksX = data->get_cachedBlocksX();
@@ -2711,8 +2711,10 @@ void PeeledCompressedProjectTransform(const VECTOR3_FIELD_3D& V,
 {
   TIMER functionTimer(__FUNCTION__);
 
+  cout << __FILE__ << " " << __FUNCTION__ << " " << __LINE__ << " : " << endl;
   // fetch the compression data and the full data buffer for each component
   COMPRESSION_DATA* dataX = U_data->get_compression_dataX();
+  cout << __FILE__ << " " << __FUNCTION__ << " " << __LINE__ << " : " << endl;
   int* allDataX = U_data->get_dataX();
   COMPRESSION_DATA* dataY = U_data->get_compression_dataY();
   int* allDataY = U_data->get_dataY();
@@ -2721,6 +2723,7 @@ void PeeledCompressedProjectTransform(const VECTOR3_FIELD_3D& V,
 
   // preallocate the resulting vector
   int totalColumns = dataX->get_numCols();
+  cout << "numCols: " << totalColumns << endl;
   q->resize(totalColumns);
 
   vector<VectorXd> Xpart, Ypart, Zpart;

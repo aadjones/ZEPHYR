@@ -65,6 +65,7 @@ class MATRIX_COMPRESSION_DATA {
     // don't call this until _numCols has been set!
     void init_cache()
     {
+      cout << "Calling init_cache()! " << endl;
 
       // initialize cached block number to nonsense
       _cachedBlockNumber = -1;
@@ -96,6 +97,8 @@ class MATRIX_COMPRESSION_DATA {
 
     void dct_setup(int direction)
     {
+      cout << "Calling dct_setup(direction)! " << endl;
+
       const int xRes = BLOCK_SIZE;
       const int yRes = BLOCK_SIZE;
       const int zRes = BLOCK_SIZE;

@@ -99,6 +99,8 @@ int main(int argc, char* argv[]) {
   cout << " percent: " << percent << endl;
   int maxIterations = parser.getInt("maxIterations", 32);
   cout << " maxIterations: " << maxIterations << endl;
+  int debug = parser.getBool("debug", false);
+  cout << "debug: " << debug << endl;
 
   string preAdvectPath = reducedPath + string("U.preadvect.matrix");
   string finalPath = reducedPath + string("U.final.matrix");
@@ -139,11 +141,22 @@ int main(int argc, char* argv[]) {
   // string preprojectFilename = reducedPath + string("U.preproject.component");
 
   // write out the compressed matrix files
-  CompressAndWriteMatrixComponents(preadvectFilename.c_str(), U_preadvect, &preadvect_compression_data0,
+
+  if (debug) {
+    CompressAndWriteMatrixComponentsDebug(preadvectFilename.c_str(), U_preadvect, &preadvect_compression_data0,
+      &preadvect_compression_data1, &preadvect_compression_data2);
+
+    CompressAndWriteMatrixComponentsDebug(finalFilename.c_str(), U_final, &final_compression_data0, 
+      &final_compression_data1, &final_compression_data2);
+  }
+
+  else {
+    CompressAndWriteMatrixComponents(preadvectFilename.c_str(), U_preadvect, &preadvect_compression_data0,
       &preadvect_compression_data1, &preadvect_compression_data2);
   
-  CompressAndWriteMatrixComponents(finalFilename.c_str(), U_final, &final_compression_data0, 
+    CompressAndWriteMatrixComponents(finalFilename.c_str(), U_final, &final_compression_data0, 
       &final_compression_data1, &final_compression_data2);
+  }
   
   if (usingIOP) {
     // for (int component = 0; component < 3; component++) {
