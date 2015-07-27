@@ -187,7 +187,7 @@ int main(int argc, char* argv[])
 
   // PeeledCompressedUnprojectTest();
 
-  PeeledCompressedUnprojectTransformTest();
+  // PeeledCompressedUnprojectTransformTest();
 
   // DecodeVectorFieldTest(col);
 
@@ -198,6 +198,8 @@ int main(int argc, char* argv[])
   // DecodeMatrixTest();
  
   // PeeledCompressedProjectTest();
+
+  GammaSearchTest();
   
  
 
@@ -226,9 +228,9 @@ void InitGlobals()
 
   EIGEN::read(path.c_str(), U); 
 
-  // V = VECTOR3_FIELD_3D(U.col(0), xRes, yRes, zRes);
+  V = VECTOR3_FIELD_3D(U.col(0), xRes, yRes, zRes);
   // TransformVectorFieldSVDCompression(&V, &compression_data1);
-  // F = V.scalarField(0);
+  F = V.scalarField(0);
   // GetBlocks(F, &g_blocks);
   // UnitaryBlockDCT(1, &g_blocks);
 }
@@ -394,7 +396,9 @@ void GammaSearchTest()
   const FIELD_3D& dampingArray = compression_data0.get_dampingArray();
   FIELD_3D damp = dampingArray;
 
-  TuneGamma(block, blockNumber, col, &compression_data0, &damp);
+  // TuneGamma(block, blockNumber, col, &compression_data0, &damp);
+  TuneGammaVerbose(block, blockNumber, col, &compression_data0, &damp);
+
 }
 
 ////////////////////////////////////////////////////////

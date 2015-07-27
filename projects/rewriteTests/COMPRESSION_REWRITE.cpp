@@ -747,8 +747,13 @@ void TuneGammaVerbose(const FIELD_3D& F, int blockNumber, int col,
   
   cout << "F: " << endl;
   cout << F.flattened() << endl;
-  // the total amount of energy in the Fourier space
-  double totalEnergy = F.sumSq();
+  
+  // make a copy because of const poisoning
+  FIELD_3D F_copy = F;
+  F_copy.roundInt();
+  // the maximum amount of energy in the Fourier space (i.e., gamma = 0)
+  double maxEnergy = F_copy.sumSq();
+  cout << "Max energy: " << maxEnergy << endl;
   FIELD_3D damped = ( F / (*damp) );
   damped.roundInt();
   cout << "Damped block: " << endl;
@@ -757,9 +762,9 @@ void TuneGammaVerbose(const FIELD_3D& F, int blockNumber, int col,
   cout << "Undamped block: " << endl;
   cout << ((*damp) * damped).flattened() << endl;
 
-  double energyDiff = abs(totalEnergy - ( (*damp) * damped ).sumSq());
-  cout << "Absolute energy difference: " << energyDiff << endl;
-  double percentEnergy = 1.0 - (energyDiff / totalEnergy);
+  double dampedEnergy = ( (*damp) * damped).sumSq(); 
+  cout << "Damped energy: " << dampedEnergy << endl;
+  double percentEnergy = dampedEnergy / maxEnergy;
   cout << "Initial percent: " << percentEnergy << endl;
   int iterations = 0;
    
@@ -792,8 +797,8 @@ void TuneGammaVerbose(const FIELD_3D& F, int blockNumber, int col,
     cout << damped.flattened() << endl;
     cout << "New undamped block: " << endl;
     cout << ((*damp) * damped).flattened() << endl;
-    energyDiff = abs(totalEnergy - ( (*damp) * damped ).sumSq());
-    percentEnergy =  1.0 - (energyDiff / totalEnergy);
+    dampedEnergy = ( (*damp) * damped).sumSq(); 
+    percentEnergy = dampedEnergy / maxEnergy;
     cout << "New percent energy: " << percentEnergy << endl;
     cout << "New gamma: " << gamma << endl;
     iterations++;
@@ -835,18 +840,21 @@ void TuneGamma(const FIELD_3D& F, int blockNumber, int col,
   double lower = 0.0;
   // QUESTION: how should we define upper?
   double upper = nBits;
-  // arbitrarily set epsilon to be 0.5%
-  double epsilon = 0.005;
+  // arbitrarily set epsilon to be 0.1%
+  double epsilon = 0.001;
   double gamma = 0.5 * (upper + lower);
   damp->toPower(gamma);
-  
-  // the total amount of energy in the Fourier space
-  double totalEnergy = F.sumSq();
+ 
+  // make a copy of F due to const poisoning 
+  FIELD_3D F_copy = F;
+  F_copy.roundInt();
+  // the maximum amount of energy in the Fourier space quantization could ever achieve (gamma = 0)
+  double maxEnergy = F_copy.sumSq();
   FIELD_3D damped = ( F / (*damp) );
   damped.roundInt();
 
-  double energyDiff = abs(totalEnergy - ( (*damp) * damped ).sumSq());
-  double percentEnergy = 1.0 - (energyDiff / totalEnergy);
+  double dampedEnergy = ( (*damp) * damped ).sumSq();
+  double percentEnergy = dampedEnergy / maxEnergy;
   int iterations = 0;
    
   while ( abs( percent - percentEnergy ) > epsilon && iterations < maxIterations) {
@@ -872,8 +880,8 @@ void TuneGamma(const FIELD_3D& F, int blockNumber, int col,
     // update percentEnergy
     damped = ( F / (*damp) );
     damped.roundInt();
-    energyDiff = abs(totalEnergy - ( (*damp) * damped ).sumSq());
-    percentEnergy =  1.0 - (energyDiff / totalEnergy);
+    dampedEnergy = ( (*damp) * damped ).sumSq();
+    percentEnergy = dampedEnergy / maxEnergy;
     iterations++;
   }
   
@@ -1050,6 +1058,7 @@ void DecodeBlockWithCompressionData(const INTEGER_FIELD_3D& intBlock,
   const int vRes = intBlock.yRes();
   const int wRes = intBlock.zRes();
   // size the decoded block appropriately and fill it with the block data
+  // **potential time issue with lots of resizing!** 
   decoded->resizeAndWipe(uRes, vRes, wRes);
   CastIntFieldToDouble(intBlock, decoded);
 
@@ -1064,6 +1073,7 @@ void DecodeBlockWithCompressionData(const INTEGER_FIELD_3D& intBlock,
   // appropriate gamma-modulated damping array
   const FIELD_3D& dampingArray = data->get_dampingArray();
   FIELD_3D damp = dampingArray;
+  // **potential time issue with many calls to pow()**
   damp.toPower(gamma);
 
   // undo the dampings and preprocess

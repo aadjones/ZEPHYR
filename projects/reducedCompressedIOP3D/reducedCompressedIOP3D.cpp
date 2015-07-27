@@ -419,7 +419,7 @@ void runEverytime()
     }
 
     // check if we're done
-    if (steps == simulationSnapshots + 1)
+    if (steps == simulationSnapshots + 2)
       exit(0);
   }
 }
