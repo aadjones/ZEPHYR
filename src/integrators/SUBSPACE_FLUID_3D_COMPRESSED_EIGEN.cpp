@@ -317,73 +317,79 @@ void SUBSPACE_FLUID_3D_COMPRESSED_EIGEN::stepReorderedCubatureStam()
 // with cubature enabled
 //////////////////////////////////////////////////////////////////////
 void SUBSPACE_FLUID_3D_COMPRESSED_EIGEN::stepWithObstacle()
-  {
-    TIMER functionTimer(__FUNCTION__);
-    Real goalTime = 0.1;
-    Real currentTime = 0;
+{
+  TIMER functionTimer(__FUNCTION__);
+  Real goalTime = 0.1;
+  Real currentTime = 0;
 
-    // compute the CFL condition
-    _dt = goalTime;
+  // compute the CFL condition
+  _dt = goalTime;
 
-    // wipe forces
-    _force.clear();
+  // wipe forces
+  _force.clear();
 
-    // wipe boundaries
-    _velocity.setZeroBorder();
+  // wipe boundaries
+  _velocity.setZeroBorder();
 
-    // compute the forces
-    addBuoyancy(_heat.data());
-    _velocity.axpy(_dt, _force);
+  // compute the forces
+  addBuoyancy(_heat.data());
+  _velocity.axpy(_dt, _force);
 
-    _force.clear();
-    addVorticity();
-    _velocity.axpy(_dt, _force);
+  _force.clear();
+  addVorticity();
+  _velocity.axpy(_dt, _force);
 
-    TIMER projectionTimer("Velocity projection");
+  TIMER projectionTimer("Velocity projection");
 
-    // project into the subspace
-    
-    PeeledCompressedProjectTransformNoSVD(_velocity, &_U_preadvect_data, &_qDot);
-    cout << "finished projection! " << endl;
-    projectionTimer.stop();
+  // project into the subspace
+  
+  PeeledCompressedProjectTransformNoSVD(_velocity, &_U_preadvect_data, &_qDot);
+  cout << "finished projection! " << endl;
+  projectionTimer.stop();
 
-    // then advect
+  // then advect
 
-    // full-space advect heat and density
-    advectHeatAndDensityStam();
-    cout << "finished advect heat and density!" << endl;
+  // full-space advect heat and density
+  advectHeatAndDensityStam();
+  cout << "finished advect heat and density!" << endl;
 
-    // reduced advect velocity
-    reducedAdvectStagedStamFast();
-    cout << "finished reduced advection!" << endl;
+  // reduced advect velocity
+  //reducedAdvectStagedStamFast();
+  //cout << "finished reduced advection!" << endl;
 
-    // then diffuse 
-    TIMER diffusionProjectionTimer("Reduced diffusion");
-    reducedPeeledDiffusion();
-    diffusionProjectionTimer.stop();
+  reducedAdvectCompressionFriendly();
+  cout << "finished compression-friendly advection!" << endl;
+  
+  //cout << " post advection qDot: " << _qDot << endl;
+  //exit(0);
 
-    // do IOP
-    reducedSetZeroSphere();
+  // then diffuse 
+  TIMER diffusionProjectionTimer("Reduced diffusion");
+  reducedPeeledDiffusion();
+  diffusionProjectionTimer.stop();
 
-    // then pressure project
-    reducedStagedProject();
+  // do IOP
+  reducedSetZeroSphere();
+
+  // then pressure project
+  reducedStagedProject();
 
 
-    // come back to full space
-    TIMER unprojectionTimer("Velocity unprojection");
-    PeeledCompressedUnprojectTransform(&_U_final_data, _qDot, &_velocity);
-    unprojectionTimer.stop();
+  // come back to full space
+  TIMER unprojectionTimer("Velocity unprojection");
+  PeeledCompressedUnprojectTransform(&_U_final_data, _qDot, &_velocity);
+  unprojectionTimer.stop();
 
-    currentTime += _dt;
+  currentTime += _dt;
 
-    cout << " Simulation step " << _totalSteps << " done. " << endl;
+  cout << " Simulation step " << _totalSteps << " done. " << endl;
 
-    _totalTime += goalTime;
-    _totalSteps++;
+  _totalTime += goalTime;
+  _totalSteps++;
 
-    // diff the current sim results against ground truth
-    diffGroundTruth();
-  }
+  // diff the current sim results against ground truth
+  diffGroundTruth();
+}
 
 //////////////////////////////////////////////////////////////////////
 // do a full-rank advection of heat and density
@@ -392,30 +398,30 @@ void SUBSPACE_FLUID_3D_COMPRESSED_EIGEN::advectHeatAndDensityStam()
 {
   TIMER functionTimer(__FUNCTION__);
 
-	if(_domainBcLeft == 0) 
+  if(_domainBcLeft == 0) 
     _velocity.copyBorderX();
-	else 
+  else 
     _velocity.setZeroX();
 
-	if(_domainBcTop == 0) 
+  if(_domainBcTop == 0) 
     _velocity.copyBorderY();
-	else 
+  else 
     _velocity.setZeroY();
 
-	if(_domainBcFront == 0) 
+  if(_domainBcFront == 0) 
     _velocity.copyBorderZ();
-	else 
+  else 
     _velocity.setZeroZ();
 
-	_density.swapPointers(_densityOld);
-	_heat.swapPointers(_heatOld);
+  _density.swapPointers(_densityOld);
+  _heat.swapPointers(_heatOld);
 
-	const Real dt0 = _dt / _dx;
+  const Real dt0 = _dt / _dx;
   VECTOR3_FIELD_3D::advect(dt0, _velocity, _densityOld, _density);
   VECTOR3_FIELD_3D::advect(dt0, _velocity, _heatOld, _heat);
-	
+  
   _density.setZeroBorder();
-	_heat.setZeroBorder();
+  _heat.setZeroBorder();
 }
 
 //////////////////////////////////////////////////////////////////////
@@ -473,12 +479,12 @@ void SUBSPACE_FLUID_3D_COMPRESSED_EIGEN::computePressureToVelocity()
   int totalCells = 3 * peeledDims;
   _pressureToVelocity.resize(totalCells, peeledDims);
 
-	Real invDx = 1.0f / _dx;
-	Real halfInvDx = 0.5f / _dx;
-	int index = _slabSize + _xRes + 1;
-	for (int z = 1; z < _zRes - 1; z++, index += 2 * _xRes)
-		for (int y = 1; y < _yRes - 1; y++, index += 2)
-			for (int x = 1; x < _xRes - 1; x++, index++)
+  Real invDx = 1.0f / _dx;
+  Real halfInvDx = 0.5f / _dx;
+  int index = _slabSize + _xRes + 1;
+  for (int z = 1; z < _zRes - 1; z++, index += 2 * _xRes)
+    for (int y = 1; y < _yRes - 1; y++, index += 2)
+      for (int x = 1; x < _xRes - 1; x++, index++)
       {
         int peeledIndex = (x - 1) + (y - 1) * xPeeled + (z - 1) * slabPeeled;
         int peeledIndex3 = 3 * peeledIndex;
@@ -530,7 +536,7 @@ void SUBSPACE_FLUID_3D_COMPRESSED_EIGEN::computePressureToVelocity()
           _pressureToVelocity(peeledIndex3 + 2, peeledIndex + slabPeeled) -=  halfInvDx;
           _pressureToVelocity(peeledIndex3 + 2, peeledIndex - slabPeeled) -= -halfInvDx;
         }
-			}
+      }
 }
 
 //////////////////////////////////////////////////////////////////////
@@ -929,11 +935,11 @@ void SUBSPACE_FLUID_3D_COMPRESSED_EIGEN::reducedAdvectStagedStamFast()
   TIMER functionTimer(__FUNCTION__);
   VectorXd final(_advectionCubatureAfter[0].rows());
   final.setZero();
-	const Real dt0 = _dt / _dx;
+  const Real dt0 = _dt / _dx;
 
   vector<VectorXd> finals(_keyAdvectionCells.size());
   int totalPoints = _keyAdvectionCells.size();
-
+  
   assert(_advectionCubatureAfter.size() > 0);
   assert(_advectionCubatureBefore.size() > 0);
 
@@ -1477,7 +1483,7 @@ void SUBSPACE_FLUID_3D_COMPRESSED_EIGEN::buildPeeledDampingMatrixFlat(SPARSE_MAT
 {
   TIMER functionTimer(__FUNCTION__);
   cout << " Building flat peeled damping matrix ... ";flush(cout);
-	const Real w = 0.9;
+  const Real w = 0.9;
   int xPeeled = _xRes - 2;
   int yPeeled = _yRes - 2;
   int zPeeled = _zRes - 2;
@@ -1540,25 +1546,25 @@ void SUBSPACE_FLUID_3D_COMPRESSED_EIGEN::buildFlatA(SPARSE_MATRIX_ARRAY& sparseA
   int slabPeeled = xPeeled * yPeeled;
   //int peeledDims = xPeeled * yPeeled * zPeeled;
 
-	int x, y, z, index;
-	Real Aoff = 1.0;
-	index = _slabSize + _xRes + 1;
-	for (z = 1; z < _zRes - 1; z++, index += 2 * _xRes)
-		for (y = 1; y < _yRes - 1; y++, index += 2)
-			for (x = 1; x < _xRes - 1; x++, index++)
+  int x, y, z, index;
+  Real Aoff = 1.0;
+  index = _slabSize + _xRes + 1;
+  for (z = 1; z < _zRes - 1; z++, index += 2 * _xRes)
+    for (y = 1; y < _yRes - 1; y++, index += 2)
+      for (x = 1; x < _xRes - 1; x++, index++)
       {
-				// if the cell is a variable
-				if (!skip[index])
-				{
+        // if the cell is a variable
+        if (!skip[index])
+        {
           int peeledIndex = (x - 1) + (y - 1) * xPeeled + (z - 1) * slabPeeled;
 
-					// set the matrix to the Poisson stencil in order
-					if (!skip[index + _xs]) sparseA(peeledIndex, peeledIndex) += Aoff;
-					if (!skip[index - _xs]) sparseA(peeledIndex, peeledIndex) += Aoff;
-					if (!skip[index + _ys]) sparseA(peeledIndex, peeledIndex) += Aoff;
-					if (!skip[index - _ys]) sparseA(peeledIndex, peeledIndex) += Aoff;
-					if (!skip[index + _zs]) sparseA(peeledIndex, peeledIndex) += Aoff;
-					if (!skip[index - _zs]) sparseA(peeledIndex, peeledIndex) += Aoff;
+          // set the matrix to the Poisson stencil in order
+          if (!skip[index + _xs]) sparseA(peeledIndex, peeledIndex) += Aoff;
+          if (!skip[index - _xs]) sparseA(peeledIndex, peeledIndex) += Aoff;
+          if (!skip[index + _ys]) sparseA(peeledIndex, peeledIndex) += Aoff;
+          if (!skip[index - _ys]) sparseA(peeledIndex, peeledIndex) += Aoff;
+          if (!skip[index + _zs]) sparseA(peeledIndex, peeledIndex) += Aoff;
+          if (!skip[index - _zs]) sparseA(peeledIndex, peeledIndex) += Aoff;
 
           if (!skip[index - 1] && x != 1)
             sparseA(peeledIndex, peeledIndex - 1) = -Aoff;
@@ -1572,7 +1578,222 @@ void SUBSPACE_FLUID_3D_COMPRESSED_EIGEN::buildFlatA(SPARSE_MATRIX_ARRAY& sparseA
             sparseA(peeledIndex, peeledIndex - slabPeeled) = -Aoff;
           if (!skip[index + _slabSize] && z != _zRes - 2)
             sparseA(peeledIndex, peeledIndex + slabPeeled) = -Aoff;
-				}
-			}
+        }
+      }
 }
 
+//////////////////////////////////////////////////////////////////////
+// do Stam-style advection using cubautre
+//////////////////////////////////////////////////////////////////////
+void SUBSPACE_FLUID_3D_COMPRESSED_EIGEN::reducedAdvectCompressionFriendly()
+{
+  TIMER functionTimer(__FUNCTION__);
+  VectorXd final(_advectionCubatureAfter[0].rows());
+  final.setZero();
+  const Real dt0 = _dt / _dx;
+
+  vector<VectorXd> finals(_keyAdvectionCells.size());
+  int totalPoints = _keyAdvectionCells.size();
+
+  assert(_advectionCubatureAfter.size() > 0);
+  assert(_advectionCubatureBefore.size() > 0);
+
+  MATRIX_COMPRESSION_DATA& data = (*this).U_final_data();
+  COMPRESSION_DATA* dataX = data.get_compression_dataX();
+  const int numCols = dataX->get_numCols();
+  const VEC3I& dims = dataX->get_dims();
+
+  // the blocks that are needed
+  //
+  // the first int is the block number
+  // the second is all the data you need once you have the block decoded
+  multimap<int, CUBATURE_DATA> requestedBlocks;
+
+  // accumulate the blocks you need
+  for (int x = 0; x < totalPoints; x++)
+  {
+    const int index = _keyAdvectionCells[x];
+    accumAdvectRequests(_advectionCubatureBefore[x], dt0, _qDot, x, index, dims, requestedBlocks);
+  }
+
+  // prepare an array for the results of the advection
+  vector<VectorXd> advected(totalPoints);
+  for (unsigned int x = 0; x < totalPoints; x++)
+  {
+    advected[x].resize(3);
+    advected[x].setZero();
+  }
+
+  // decompress each block in turn
+  for (auto iter = requestedBlocks.begin(); iter != requestedBlocks.end(); iter++)
+  {
+    // unpack the block data
+    //int currentBlock = (*iter).first;
+    CUBATURE_DATA cubatureData = (*iter).second;
+    int cubaturePoint = cubatureData.index;
+    int ixxx= cubatureData.ixxx;
+    Real wxxx= cubatureData.wxxx;
+
+    // get the block index for the block we're looking at
+    int blockNumber, blockIndex;
+    ComputeBlockNumber(ixxx, dims, &blockNumber, &blockIndex);
+
+    // caching should work ideally now. Since the multimap sorts by the block number,
+    // you will only get a miss when you're done using the block for the whole timestep
+    MatrixXd submatrix(3, numCols);
+    GetSubmatrixNoSVD(ixxx, &_U_preadvect_data, &submatrix);
+    
+    // compute the Uq product
+    const VectorXd vxxx = submatrix * _qDot;
+    
+    // add it to the current VEC3 for the cubature point
+    advected[cubaturePoint] += wxxx * vxxx;
+  }
+
+  for (int x = 0; x < totalPoints; x++)
+    finals[x] = _advectionCubatureAfter[x] * advected[x];
+
+  for (int x = 0; x < totalPoints; x++)
+    final += finals[x];
+  
+  _qDot = final;
+}
+
+//////////////////////////////////////////////////////////////////////
+// accumulate decoder requests for a single cell
+//////////////////////////////////////////////////////////////////////
+void SUBSPACE_FLUID_3D_COMPRESSED_EIGEN::accumAdvectRequests(const MatrixXd& cellU, 
+      const Real dt, const VectorXd& qDot, const int cubatureIndex, const int index, 
+      const VEC3I& dims, multimap<int, CUBATURE_DATA>& requestedBlocks)
+{
+  TIMER functionTimer(__FUNCTION__);
+  // peeled coordinates were passed in -- need to promote to full grid
+  const int decompose = index;
+  const int z = decompose / _slabPeeled + 1;
+  const int y = (decompose % _slabPeeled) / _xPeeled + 1;
+  const int x = (decompose % _slabPeeled) % _xPeeled + 1;
+
+  // get the velocity to backtrace
+  VectorXd v = cellU * qDot;
+
+  // backtrace
+  const VEC3F velocity(v[0], v[1], v[2]);
+  Real xTrace = x - dt * velocity[0];
+  Real yTrace = y - dt * velocity[1];
+  Real zTrace = z - dt * velocity[2];
+
+  // clamp backtrace to grid boundaries
+  
+  // keeping this comment block here for reference
+  xTrace = (xTrace < 1.5) ? 1.5 : xTrace;
+  xTrace = (xTrace > _xRes - 2.5) ? _xRes - 2.5 : xTrace;
+  yTrace = (yTrace < 1.5) ? 1.5 : yTrace;
+  yTrace = (yTrace > _yRes - 2.5) ? _yRes - 2.5 : yTrace;
+  zTrace = (zTrace < 1.5) ? 1.5 : zTrace;
+  zTrace = (zTrace > _zRes - 2.5) ? _zRes - 2.5 : zTrace;
+
+  // locate neighbors to interpolate --
+  // since we're in peeled coordinates, the lookup needs to be modified slightly
+  
+  // keeping this comment block here for reference
+  const int x0 = (int)xTrace - 1;
+  const int x1 = x0 + 1;
+  const int y0 = (int)yTrace - 1;
+  const int y1 = y0 + 1;
+  const int z0 = (int)zTrace - 1;
+  const int z1 = z0 + 1;
+
+  // get interpolation weights
+  const Real s1 = (xTrace - 1) - x0;
+  const Real s0 = 1.0f - s1;
+  const Real t1 = (yTrace - 1) - y0;
+  const Real t0 = 1.0f - t1;
+  const Real u1 = (zTrace - 1) - z0;
+  const Real u0 = 1.0f - u1;
+
+  const int z0Scaled = z0 * _slabPeeled;
+  const int z1Scaled = z1 * _slabPeeled;
+  const int y0Scaled = y0 * _xPeeled;
+  const int y1Scaled = y1 * _xPeeled;
+
+  const int i000 = 3 * (x0 + y0Scaled + z0Scaled);
+  const int i010 = 3 * (x0 + y1Scaled + z0Scaled);
+  const int i100 = 3 * (x1 + y0Scaled + z0Scaled);
+  const int i110 = 3 * (x1 + y1Scaled + z0Scaled);
+  const int i001 = 3 * (x0 + y0Scaled + z1Scaled);
+  const int i011 = 3 * (x0 + y1Scaled + z1Scaled);
+  const int i101 = 3 * (x1 + y0Scaled + z1Scaled);
+  const int i111 = 3 * (x1 + y1Scaled + z1Scaled);
+
+  //cout << __FILE__ << " " << __FUNCTION__ << " " << __LINE__ << " : " << endl;
+  //cout << " i000: " << i000 << endl;
+
+  const Real w000 = u0 * s0 * t0;
+  const Real w010 = u0 * s0 * t1;
+  const Real w100 = u0 * s1 * t0;
+  const Real w110 = u0 * s1 * t1;
+  const Real w001 = u1 * s0 * t0;
+  const Real w011 = u1 * s0 * t1;
+  const Real w101 = u1 * s1 * t0;
+  const Real w111 = u1 * s1 * t1;
+
+  CUBATURE_DATA cubatureData;
+  pair<int, CUBATURE_DATA> requestPair;
+  int blockNumber, blockIndex;
+
+  ComputeBlockNumber(i000, dims, &blockNumber, &blockIndex);
+  cubatureData.index = cubatureIndex;
+  cubatureData.ixxx = i000;
+  cubatureData.wxxx = w000;
+  requestPair = pair<int, CUBATURE_DATA>(blockNumber, cubatureData);
+  requestedBlocks.insert(requestPair);
+
+  ComputeBlockNumber(i010, dims, &blockNumber, &blockIndex);
+  cubatureData.index = cubatureIndex;
+  cubatureData.ixxx = i010;
+  cubatureData.wxxx = w010;
+  requestPair = pair<int, CUBATURE_DATA>(blockNumber, cubatureData);
+  requestedBlocks.insert(requestPair);
+
+  ComputeBlockNumber(i100, dims, &blockNumber, &blockIndex);
+  cubatureData.index = cubatureIndex;
+  cubatureData.ixxx = i100;
+  cubatureData.wxxx = w100;
+  requestPair = pair<int, CUBATURE_DATA>(blockNumber, cubatureData);
+  requestedBlocks.insert(requestPair);
+
+  ComputeBlockNumber(i110, dims, &blockNumber, &blockIndex);
+  cubatureData.index = cubatureIndex;
+  cubatureData.ixxx = i110;
+  cubatureData.wxxx = w110;
+  requestPair = pair<int, CUBATURE_DATA>(blockNumber, cubatureData);
+  requestedBlocks.insert(requestPair);
+
+  ComputeBlockNumber(i001, dims, &blockNumber, &blockIndex);
+  cubatureData.index = cubatureIndex;
+  cubatureData.ixxx = i001;
+  cubatureData.wxxx = w001;
+  requestPair = pair<int, CUBATURE_DATA>(blockNumber, cubatureData);
+  requestedBlocks.insert(requestPair);
+
+  ComputeBlockNumber(i011, dims, &blockNumber, &blockIndex);
+  cubatureData.index = cubatureIndex;
+  cubatureData.ixxx = i011;
+  cubatureData.wxxx = w011;
+  requestPair = pair<int, CUBATURE_DATA>(blockNumber, cubatureData);
+  requestedBlocks.insert(requestPair);
+
+  ComputeBlockNumber(i101, dims, &blockNumber, &blockIndex);
+  cubatureData.index = cubatureIndex;
+  cubatureData.ixxx = i101;
+  cubatureData.wxxx = w101;
+  requestPair = pair<int, CUBATURE_DATA>(blockNumber, cubatureData);
+  requestedBlocks.insert(requestPair);
+
+  ComputeBlockNumber(i111, dims, &blockNumber, &blockIndex);
+  cubatureData.index = cubatureIndex;
+  cubatureData.ixxx = i111;
+  cubatureData.wxxx = w111;
+  requestPair = pair<int, CUBATURE_DATA>(blockNumber, cubatureData);
+  requestedBlocks.insert(requestPair);
+}

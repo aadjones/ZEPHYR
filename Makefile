@@ -21,4 +21,4 @@ objclean:
 	-for d in $(SRCS); do (echo -e "\n==== Cleaning $$d ====\n";cd ./src/$$d; rm -f *.o; cd ../..); done
 
 ctags:
-	ctags -R *
+	ctags --exclude=projects/rewriteTests -R *

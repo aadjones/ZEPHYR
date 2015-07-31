@@ -17,7 +17,10 @@
 void RoundFieldToInt(const FIELD_3D& F, INTEGER_FIELD_3D* castedField); 
 
 // cast an INTEGER_FIELD_3D to a FIELD_3D
-void CastIntFieldToDouble(const INTEGER_FIELD_3D& F, FIELD_3D* castedField); 
+void CastIntFieldToDouble(const INTEGER_FIELD_3D& F, FIELD_3D* castedField);
+
+// TK: Adding a version that does it on the raw pointer
+void CastIntFieldToDouble(const INTEGER_FIELD_3D& F, const int totalCells, double* castedField); 
 
 // form the cumulative sum starting at zero of a passed in integer vector
 void ModifiedCumSum(const VectorXi& V, VectorXi* sum);
@@ -158,8 +161,13 @@ void DecodeBlock(const INTEGER_FIELD_3D& intBlock, int blockNumber, int col,
 // performs the same operations as DecodeBlock, but with passed in compression data
 // rather than passed in decompression data. due to const poisoning, compression
 // data cannot be marked const, but is treated as such.
+//void DecodeBlockWithCompressionData(const INTEGER_FIELD_3D& intBlock, 
+//  int blockNumber, int col, COMPRESSION_DATA* data, FIELD_3D* decoded); 
+
+// TK: This actually only needs the raw pointer for "decoded", and then we avoid an
+// expensive copy at the end.
 void DecodeBlockWithCompressionData(const INTEGER_FIELD_3D& intBlock, 
-  int blockNumber, int col, COMPRESSION_DATA* data, FIELD_3D* decoded); 
+  int blockNumber, int col, COMPRESSION_DATA* data, Real* decoded); 
 
 // flattens an INTEGER_FIELD_3D through a zig-zag scan
 // into a VectorXi. Since the scan always follows the same order,
@@ -185,6 +193,12 @@ void RunLengthEncodeBinary(const char* filename, int blockNumber, int col,
 // a VectorXi with the contents.
 void RunLengthDecodeBinary(int* allData, int blockNumber, int col, 
     COMPRESSION_DATA* compression_data, VectorXi* parsedData);
+
+// TK: do a version that does the zigzag unflatten at the same time
+void RunLengthDecodeBinaryInPlace(int* allData, int blockNumber, int col,
+    const INTEGER_FIELD_3D& reverseZigzag, 
+    COMPRESSION_DATA* compression_data,
+    INTEGER_FIELD_3D& parsedDataField);
 
 // takes an input FIELD_3D which is the result of
 // an SVD coordinate transform, compresses it according

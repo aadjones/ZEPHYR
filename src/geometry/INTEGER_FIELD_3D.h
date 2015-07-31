@@ -32,6 +32,7 @@ class INTEGER_FIELD_3D {
     const int yRes() const { return _yRes; }
     const int zRes() const { return _zRes; }
     const int totalCells() const { return _totalCells; }
+    int* data() { return _data; };
     
     // Return a flattened VECTOR of the array contents
     VECTOR flattened() const;

@@ -116,8 +116,10 @@ VECTOR INTEGER_FIELD_3D::flattenedRow() const {
 
 void INTEGER_FIELD_3D::clear()
 {
-  for (int x = 0; x < _totalCells; x++)
-    _data[x] = 0;
+  //for (int x = 0; x < _totalCells; x++)
+  //  _data[x] = 0;
+
+  memset(_data, 0, sizeof(int) * _totalCells);
 }
 
 void INTEGER_FIELD_3D::resizeAndWipe(int xRes, int yRes, int zRes)

@@ -2395,15 +2395,33 @@ void FIELD_3D::setToRandom()
   }
 }
 
+///////////////////////////////////////////////////////////////////////
+// from here: 
+//
+// http://martin.ankerl.com/2012/01/25/optimized-approximative-pow-in-c-and-cpp/
+///////////////////////////////////////////////////////////////////////
+inline double fastPow(double a, double b) 
+{
+  union {
+    double d;
+    int x[2];
+  } u = { a };
+  u.x[1] = (int)(b * (u.x[1] - 1072632447) + 1072632447);
+  u.x[0] = 0;
+  return u.d;
+}
 
 ///////////////////////////////////////////////////////////////////////
 // set each element to the specified power
 ///////////////////////////////////////////////////////////////////////
-
 void FIELD_3D::toPower(double power) 
 {
+  TIMER functionTimer(__FUNCTION__);
   for (int index = 0; index < _totalCells; index++) {
     _data[index] = pow(_data[index], power);
+    
+    // this breaks everything
+    //_data[index] = fastPow(_data[index], power);
   }
 }
 ///////////////////////////////////////////////////////////////////////

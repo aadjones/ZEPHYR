@@ -83,6 +83,18 @@ public:
   VectorXd advectCellStamPeeled(MATRIX_COMPRESSION_DATA& U_data, const MatrixXd& cellU, 
       Real dt, const VectorXd& qDot, int index, MatrixXd* submatrix);
 
+private:
+  struct CUBATURE_DATA {
+    int index;
+    int ixxx;
+    Real wxxx;
+  };
+
+public:
+  void accumAdvectRequests(const MatrixXd& cellU, 
+      const Real dt, const VectorXd& qDot, const int cubatureIndex, const int index, 
+      const VEC3I& dims, multimap<int, CUBATURE_DATA>& requestedBlocks);
+
   VectorXd advectCellStamNoProject(const Real& dt, const int index);
 
   // stomp the other matrices and load the ones needed for cubature training
@@ -288,6 +300,9 @@ protected:
   
   // do Stam-style adveiction using cubautre
   void reducedAdvectStagedStamFast();
+
+  // do Stam-style adveiction using cubautre
+  void reducedAdvectCompressionFriendly();
 
   // check of a file exists
   bool fileExists(const string& filename);

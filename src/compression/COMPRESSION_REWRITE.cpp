@@ -33,6 +33,21 @@ void RoundFieldToInt(const FIELD_3D& F, INTEGER_FIELD_3D* castedField) {
 ////////////////////////////////////////////////////////
 // cast an INTEGER_FIELD_3D to a FIELD_3D
 ////////////////////////////////////////////////////////
+void CastIntFieldToDouble(const INTEGER_FIELD_3D& F, const int totalCells, double* castedField) {
+  TIMER functionTimer(__FUNCTION__);
+  
+  for (int i = 0; i < totalCells; i++) {
+    //castedField[i] = (double)F[i];
+
+    // TK: faster? only a little bit ...
+    const int entry = F[i];
+    castedField[i] = entry ? static_cast<double>(entry) : 0.0;
+  }
+}
+
+////////////////////////////////////////////////////////
+// cast an INTEGER_FIELD_3D to a FIELD_3D
+////////////////////////////////////////////////////////
 void CastIntFieldToDouble(const INTEGER_FIELD_3D& F, FIELD_3D* castedField) {
   TIMER functionTimer(__FUNCTION__);
   
@@ -1035,9 +1050,11 @@ void DecodeBlock(const INTEGER_FIELD_3D& intBlock, int blockNumber, int col,
 // due to const poisoning, compression data cannot be marked const,
 // but nonetheless it is not modified.
 ////////////////////////////////////////////////////////
-
 void DecodeBlockWithCompressionData(const INTEGER_FIELD_3D& intBlock, 
-  int blockNumber, int col, COMPRESSION_DATA* data, FIELD_3D* decoded) 
+  int blockNumber, int col, COMPRESSION_DATA* data, Real* decoded) 
+  // TK: This actually only needs the raw pointer for "decoded", and then we avoid an
+  // expensive copy at the end.
+  //int blockNumber, int col, COMPRESSION_DATA* data, FIELD_3D* decoded) 
 { 
   TIMER functionTimer(__FUNCTION__);
 
@@ -1045,13 +1062,18 @@ void DecodeBlockWithCompressionData(const INTEGER_FIELD_3D& intBlock,
   // make sure we are not accessing an invalid block
   assert( (blockNumber >= 0) && (blockNumber < numBlocks) );
 
+  TIMER castTimer("Decode Cast");
+  // TK: decoded is always the same size, so have the caller size it
+  /*
   // we use u, v, w rather than x, y , z to indicate the spatial frequency domain
   const int uRes = intBlock.xRes();
   const int vRes = intBlock.yRes();
   const int wRes = intBlock.zRes();
   // size the decoded block appropriately and fill it with the block data
   decoded->resizeAndWipe(uRes, vRes, wRes);
-  CastIntFieldToDouble(intBlock, decoded);
+  */
+  //CastIntFieldToDouble(intBlock, decoded);
+  CastIntFieldToDouble(intBlock, intBlock.totalCells(), decoded);
 
   // use the appropriate scale factor to decode
   MatrixXd* sList = data->get_sListMatrix();
@@ -1062,14 +1084,29 @@ void DecodeBlockWithCompressionData(const INTEGER_FIELD_3D& intBlock,
     
   // dequantize by inverting the scaling by s and contracting by the 
   // appropriate gamma-modulated damping array
+  TIMER dampingTimer("Decode Damping Copy");
   const FIELD_3D& dampingArray = data->get_dampingArray();
-  FIELD_3D damp = dampingArray;
+  // TK: Skip the allocation every time, just do a memcpy. Using a static
+  // will probably cause OpenMP to misbehave later.
+  //FIELD_3D damp = dampingArray;
+  static FIELD_3D damp(BLOCK_SIZE, BLOCK_SIZE, BLOCK_SIZE);
+  memcpy(damp.data(), dampingArray.dataConst(), damp.totalCells() * sizeof(Real));
   damp.toPower(gamma);
 
   // undo the dampings and preprocess
-  (*decoded) *= damp;
-  (*decoded) *= sInv;
-
+  TIMER applyPowerTimer("Decode Apply Power");
+  //(*decoded) *= damp;
+  //(*decoded) *= sInv;
+  
+  // TK: loop through the data just once
+  /*
+  Real* decodedData = decoded->data();
+  for (int x = 0; x < decoded->totalCells(); x++)
+    decodedData[x] *= damp[x] * sInv;
+  */
+  // TK: do it on the raw pointer instead
+  for (int x = 0; x < intBlock.totalCells(); x++)
+    decoded[x] *= damp[x] * sInv;
 }
 
 ////////////////////////////////////////////////////////
@@ -1162,7 +1199,6 @@ void RunLengthEncodeBinary(const char* filename, int blockNumber, int col,
 // decode a run-length encoded binary file and fill 
 // a VectorXi with the contents.
 ////////////////////////////////////////////////////////
-
 void RunLengthDecodeBinary(int* allData, int blockNumber, int col, 
     COMPRESSION_DATA* compression_data, VectorXi* parsedData)
 {
@@ -1198,10 +1234,14 @@ void RunLengthDecodeBinary(int* allData, int blockNumber, int col,
 
   int i = 0;
   int runLength = 1;
- 
-  parsedData->resize(BLOCK_SIZE * BLOCK_SIZE * BLOCK_SIZE);
+
+  // TK: This is always the same size, so caller should set 
+  //parsedData->resize(BLOCK_SIZE * BLOCK_SIZE * BLOCK_SIZE);
+  parsedData->setZero();
   int* data = parsedData->data();
   int j = 0;
+
+  TIMER whileTimer("Run length while timer");
   while (i < compressedBlockSize) {
     
     // write the value once
@@ -1230,17 +1270,73 @@ void RunLengthDecodeBinary(int* allData, int blockNumber, int col,
 
       assert(runLength > 1 && runLength <= BLOCK_SIZE * BLOCK_SIZE * BLOCK_SIZE);
 
-      std::fill(data + j + 1, data + j + 1 + runLength - 1, allData[blockIndex + i - 2]);
+      // TK: skip it if it's zero
+      if (allData[blockIndex + i - 2] != 0)
+      {
+        // TK: cache this? doesn't seem to make a big difference
+        //int* start = data + j + 1;
+        //std::fill(start, start + runLength - 1, allData[blockIndex + i - 2]);
+        std::fill(data + j + 1, data + j + 1 + runLength - 1, allData[blockIndex + i - 2]);
+      }
       j += (runLength - 1);
-
     }
 
     i++;
     j++;
   }
-} 
+}
 
 
+////////////////////////////////////////////////////////
+// decode a run-length encoded binary file and fill 
+// a VectorXi with the contents.
+////////////////////////////////////////////////////////
+void RunLengthDecodeBinaryInPlace(int* allData, int blockNumber, int col, 
+    const INTEGER_FIELD_3D& reverseZigzag, 
+    COMPRESSION_DATA* compression_data,
+    INTEGER_FIELD_3D& parsedDataField)
+{
+  TIMER functionTimer(__FUNCTION__);
+  //MatrixXi* blockLengthsMatrix = compression_data->get_blockLengthsMatrix(); 
+  const int compressedBlockSize = (*compression_data->get_blockLengthsMatrix())(blockNumber, col);
+  //assert(compressedBlockSize >= 0 && compressedBlockSize <= 2 * BLOCK_SIZE * BLOCK_SIZE * BLOCK_SIZE);
+
+  //MatrixXi* blockIndicesMatrix = compression_data->get_blockIndicesMatrix();
+  const int blockIndex = (*compression_data->get_blockIndicesMatrix())(blockNumber, col);
+
+  int i = 0;
+  //int runLength = 1;
+  int j = 0;
+
+  //TIMER whileTimer("Run length in-place while timer");
+  while (i < compressedBlockSize) 
+  {
+    const int index = blockIndex + i;
+    const int value = allData[index];
+    const int next = allData[index + 1];
+    const int runLength = allData[index + 2];
+
+    if (value == 0 && next == 0)
+    {
+      i += 3;
+      j += runLength;
+    }
+    else
+    {
+      parsedDataField[reverseZigzag[j]] = value;
+      if ((i + 1 < compressedBlockSize) && value == next) 
+      {
+        for (int x = 0; x < runLength - 1; x++)
+          parsedDataField[reverseZigzag[j + 1 + x]] = value;
+        
+        i += 2;
+        j += (runLength - 1);
+      }
+      i++;
+      j++;
+    }
+  }
+}
 
 ////////////////////////////////////////////////////////
 // Flattends an INTEGER_FIELD_3D through a zig-zag scan
@@ -1276,17 +1372,19 @@ void ZigzagFlatten(const INTEGER_FIELD_3D& F, const INTEGER_FIELD_3D& zigzagArra
 void ZigzagUnflatten(const VectorXi& V, const INTEGER_FIELD_3D& zigzagArray, 
     INTEGER_FIELD_3D* unflattened) 
 {
-
   TIMER functionTimer(__FUNCTION__);
 
   assert(V.size() == BLOCK_SIZE * BLOCK_SIZE * BLOCK_SIZE);
 
-  unflattened->resizeAndWipe(BLOCK_SIZE, BLOCK_SIZE, BLOCK_SIZE);
+  // TK: unflattened is always the same size, so have caller size it
+  //unflattened->resizeAndWipe(BLOCK_SIZE, BLOCK_SIZE, BLOCK_SIZE);
   
-  int totalCells = BLOCK_SIZE * BLOCK_SIZE * BLOCK_SIZE;
+  const int totalCells = BLOCK_SIZE * BLOCK_SIZE * BLOCK_SIZE;
   for (int i = 0; i < totalCells; i++) {
-    int index = zigzagArray[i];
-    (*unflattened)[i] = V[index];
+    //int index = zigzagArray[i];
+    //(*unflattened)[i] = V[index];
+    // TK: Single-liner gives the compiler a hint?
+    (*unflattened)[i] = V[zigzagArray[i]];
   }
 
 }
@@ -1697,7 +1795,8 @@ void DecodeFromRowCol(int row, int col, MATRIX_COMPRESSION_DATA* data, Vector3d*
   vector<FIELD_3D> blocks(numBlocks);
 
   // variable to store decoded run-length blocks
-  VectorXi runLengthDecoded;
+  // TK: this is always the same size, so set it once
+  VectorXi runLengthDecoded(BLOCK_SIZE * BLOCK_SIZE * BLOCK_SIZE);
 
   // vector prior to undoing the svd
   Vector3d preSVD;
@@ -1712,12 +1811,14 @@ void DecodeFromRowCol(int row, int col, MATRIX_COMPRESSION_DATA* data, Vector3d*
   RunLengthDecodeBinary(allDataX, blockNumber, col, dataX, &runLengthDecoded); 
 
   // undo the zigzag scan
-  INTEGER_FIELD_3D unflattened;
+  INTEGER_FIELD_3D unflattened(BLOCK_SIZE, BLOCK_SIZE, BLOCK_SIZE);
   ZigzagUnflatten(runLengthDecoded, zigzagArray, &unflattened);
 
   // undo the scaling from the quantizer
-  FIELD_3D decodedBlock;
-  DecodeBlockWithCompressionData(unflattened, blockNumber, col, dataX, &decodedBlock); 
+  FIELD_3D decodedBlock(BLOCK_SIZE, BLOCK_SIZE, BLOCK_SIZE);
+  //DecodeBlockWithCompressionData(unflattened, blockNumber, col, dataX, &decodedBlock); 
+  // TK: Do it on the raw pointer instead
+  DecodeBlockWithCompressionData(unflattened, blockNumber, col, dataX, decodedBlock.data()); 
 
   // inverse DCT
   const fftw_plan& plan = data->get_plan();
@@ -1739,7 +1840,9 @@ void DecodeFromRowCol(int row, int col, MATRIX_COMPRESSION_DATA* data, Vector3d*
   ZigzagUnflatten(runLengthDecoded, zigzagArray, &unflattened);
 
   // undo the scaling from the quantizer
-  DecodeBlockWithCompressionData(unflattened, blockNumber, col, dataY, &decodedBlock); 
+  // TK: Do it on the raw pointer instead
+  //DecodeBlockWithCompressionData(unflattened, blockNumber, col, dataY, &decodedBlock); 
+  DecodeBlockWithCompressionData(unflattened, blockNumber, col, dataY, decodedBlock.data()); 
 
   // inverse DCT
   DCT_Smart_Unitary(plan, direction, in, &decodedBlock);
@@ -1759,7 +1862,9 @@ void DecodeFromRowCol(int row, int col, MATRIX_COMPRESSION_DATA* data, Vector3d*
   ZigzagUnflatten(runLengthDecoded, zigzagArray, &unflattened);
 
   // undo the scaling from the quantizer
-  DecodeBlockWithCompressionData(unflattened, blockNumber, col, dataZ, &decodedBlock); 
+  // TK: Do it on the raw pointer instead
+  //DecodeBlockWithCompressionData(unflattened, blockNumber, col, dataZ, &decodedBlock); 
+  DecodeBlockWithCompressionData(unflattened, blockNumber, col, dataZ, decodedBlock.data()); 
 
   // inverse DCT
   DCT_Smart_Unitary(plan, direction, in, &decodedBlock);
@@ -1854,7 +1959,8 @@ void GetSubmatrix(int startRow, MATRIX_COMPRESSION_DATA* data, MatrixXd* submatr
     vector<FIELD_3D> blocks(numBlocks);
 
     // variable to store decoded run-length blocks
-    VectorXi runLengthDecoded;
+    // TK: this is always the same size, so set it once
+    VectorXi runLengthDecoded(BLOCK_SIZE * BLOCK_SIZE * BLOCK_SIZE);
 
     // vector prior to undoing the svd
     Vector3d preSVD;
@@ -1884,12 +1990,14 @@ void GetSubmatrix(int startRow, MATRIX_COMPRESSION_DATA* data, MatrixXd* submatr
       RunLengthDecodeBinary(allDataX, blockNumber, i, compression_dataX, &runLengthDecoded); 
 
       // undo the zigzag scan
-      INTEGER_FIELD_3D unflattened;
+      INTEGER_FIELD_3D unflattened(BLOCK_SIZE, BLOCK_SIZE, BLOCK_SIZE);
       ZigzagUnflatten(runLengthDecoded, zigzagArray, &unflattened);
 
       // undo the scaling from the quantizer
-      FIELD_3D decodedBlock;
-      DecodeBlockWithCompressionData(unflattened, blockNumber, i, compression_dataX, &decodedBlock); 
+      FIELD_3D decodedBlock(BLOCK_SIZE, BLOCK_SIZE, BLOCK_SIZE);
+      // TK: Do it on the raw pointer instead
+      //DecodeBlockWithCompressionData(unflattened, blockNumber, i, compression_dataX, &decodedBlock); 
+      DecodeBlockWithCompressionData(unflattened, blockNumber, i, compression_dataX, decodedBlock.data()); 
 
       // inverse DCT
       DCT_Smart_Unitary(plan, direction, in, &decodedBlock);
@@ -1912,7 +2020,9 @@ void GetSubmatrix(int startRow, MATRIX_COMPRESSION_DATA* data, MatrixXd* submatr
       ZigzagUnflatten(runLengthDecoded, zigzagArray, &unflattened);
 
       // undo the scaling from the quantizer
-      DecodeBlockWithCompressionData(unflattened, blockNumber, i, compression_dataY, &decodedBlock); 
+      // TK: Do it on the raw pointer instead
+      //DecodeBlockWithCompressionData(unflattened, blockNumber, i, compression_dataY, &decodedBlock); 
+      DecodeBlockWithCompressionData(unflattened, blockNumber, i, compression_dataY, decodedBlock.data()); 
 
       // inverse DCT
       DCT_Smart_Unitary(plan, direction, in, &decodedBlock);
@@ -1935,7 +2045,9 @@ void GetSubmatrix(int startRow, MATRIX_COMPRESSION_DATA* data, MatrixXd* submatr
       ZigzagUnflatten(runLengthDecoded, zigzagArray, &unflattened);
 
       // undo the scaling from the quantizer
-      DecodeBlockWithCompressionData(unflattened, blockNumber, i, compression_dataZ, &decodedBlock); 
+      // TK: Do it on the raw pointer instead
+      //DecodeBlockWithCompressionData(unflattened, blockNumber, i, compression_dataZ, &decodedBlock); 
+      DecodeBlockWithCompressionData(unflattened, blockNumber, i, compression_dataZ, decodedBlock.data()); 
 
       // inverse DCT
       DCT_Smart_Unitary(plan, direction, in, &decodedBlock);
@@ -2032,7 +2144,8 @@ void GetSubmatrixNoSVD(int startRow, MATRIX_COMPRESSION_DATA* data, MatrixXd* su
     vector<FIELD_3D> blocks(numBlocks);
 
     // variable to store decoded run-length blocks
-    VectorXi runLengthDecoded;
+    // TK: this is always the same size, so set it once
+    VectorXi runLengthDecoded(BLOCK_SIZE * BLOCK_SIZE * BLOCK_SIZE);
 
     // vector prior to undoing the svd
     Vector3d preSVD;
@@ -2062,12 +2175,14 @@ void GetSubmatrixNoSVD(int startRow, MATRIX_COMPRESSION_DATA* data, MatrixXd* su
       RunLengthDecodeBinary(allDataX, blockNumber, i, compression_dataX, &runLengthDecoded); 
 
       // undo the zigzag scan
-      INTEGER_FIELD_3D unflattened;
+      INTEGER_FIELD_3D unflattened(BLOCK_SIZE, BLOCK_SIZE, BLOCK_SIZE);
       ZigzagUnflatten(runLengthDecoded, zigzagArray, &unflattened);
 
       // undo the scaling from the quantizer
-      FIELD_3D decodedBlock;
-      DecodeBlockWithCompressionData(unflattened, blockNumber, i, compression_dataX, &decodedBlock); 
+      FIELD_3D decodedBlock(BLOCK_SIZE, BLOCK_SIZE, BLOCK_SIZE);
+      // TK: Do it on the raw pointer instead
+      //DecodeBlockWithCompressionData(unflattened, blockNumber, i, compression_dataX, &decodedBlock); 
+      DecodeBlockWithCompressionData(unflattened, blockNumber, i, compression_dataX, decodedBlock.data()); 
 
       // inverse DCT
       DCT_Smart_Unitary(plan, direction, in, &decodedBlock);
@@ -2090,7 +2205,9 @@ void GetSubmatrixNoSVD(int startRow, MATRIX_COMPRESSION_DATA* data, MatrixXd* su
       ZigzagUnflatten(runLengthDecoded, zigzagArray, &unflattened);
 
       // undo the scaling from the quantizer
-      DecodeBlockWithCompressionData(unflattened, blockNumber, i, compression_dataY, &decodedBlock); 
+      // TK: Do it on the raw pointer instead
+      //DecodeBlockWithCompressionData(unflattened, blockNumber, i, compression_dataY, &decodedBlock); 
+      DecodeBlockWithCompressionData(unflattened, blockNumber, i, compression_dataY, decodedBlock.data()); 
 
       // inverse DCT
       DCT_Smart_Unitary(plan, direction, in, &decodedBlock);
@@ -2113,7 +2230,9 @@ void GetSubmatrixNoSVD(int startRow, MATRIX_COMPRESSION_DATA* data, MatrixXd* su
       ZigzagUnflatten(runLengthDecoded, zigzagArray, &unflattened);
 
       // undo the scaling from the quantizer
-      DecodeBlockWithCompressionData(unflattened, blockNumber, i, compression_dataZ, &decodedBlock); 
+      // TK: Do it on the raw pointer instead
+      //DecodeBlockWithCompressionData(unflattened, blockNumber, i, compression_dataZ, &decodedBlock); 
+      DecodeBlockWithCompressionData(unflattened, blockNumber, i, compression_dataZ, decodedBlock.data()); 
 
       // inverse DCT
       DCT_Smart_Unitary(plan, direction, in, &decodedBlock);
@@ -2481,8 +2600,11 @@ void DecodeScalarField(COMPRESSION_DATA* compression_data, int* allData,
   vector<FIELD_3D> blocks(numBlocks);
 
   // variable to store decoded run-length blocks
-  VectorXi runLengthDecoded;
+  // TK: This is always the same size, so set it once
+  VectorXi runLengthDecoded(BLOCK_SIZE * BLOCK_SIZE * BLOCK_SIZE);
 
+  FIELD_3D decodedBlock(BLOCK_SIZE, BLOCK_SIZE, BLOCK_SIZE);
+  INTEGER_FIELD_3D unflattened(BLOCK_SIZE, BLOCK_SIZE, BLOCK_SIZE);
   for (int blockNumber = 0; blockNumber < numBlocks; blockNumber++) {
 
     // decode the run-length scheme
@@ -2490,13 +2612,13 @@ void DecodeScalarField(COMPRESSION_DATA* compression_data, int* allData,
         compression_data, &runLengthDecoded);
 
     // undo the zigzag scan
-    INTEGER_FIELD_3D unflattened;
     ZigzagUnflatten(runLengthDecoded, zigzagArray, &unflattened);
 
     // undo the scaling from the quantizer and push to the block container
-    FIELD_3D decodedBlock;
-    DecodeBlockWithCompressionData(unflattened, blockNumber, col,
-        compression_data, &decodedBlock);
+    // TK: Do it on the raw pointer instead
+    //DecodeBlockWithCompressionData(unflattened, blockNumber, col, compression_data, &decodedBlock);
+    DecodeBlockWithCompressionData(unflattened, blockNumber, col, compression_data, decodedBlock.data());
+
     blocks[blockNumber] = decodedBlock; 
   }
   
@@ -2537,27 +2659,58 @@ void DecodeScalarFieldEigen(COMPRESSION_DATA* compression_data, int* allData,
   int numBlocks = compression_data->get_numBlocks();
   const INTEGER_FIELD_3D& zigzagArray = compression_data->get_zigzagArray();
 
+  INTEGER_FIELD_3D reverseZigzag(zigzagArray);
+  for (int x = 0; x < zigzagArray.totalCells(); x++)
+    reverseZigzag[zigzagArray[x]] = x;
+
   // resize the container we will return
   decoded->resize(numBlocks);
 
   // variable to store decoded run-length blocks
-  VectorXi runLengthDecoded;
+  // TK: This is always the same size, so set it once
+  VectorXi runLengthDecoded(BLOCK_SIZE * BLOCK_SIZE * BLOCK_SIZE);
 
-  for (int blockNumber = 0; blockNumber < numBlocks; blockNumber++) {
+  TIMER loopTimer("DecodeScalar loop timer");
+
+  // TK: Trying making these static so it doesn't allocate and deallocate every
+  // time. Might cause problems with OpenMP later.
+  static FIELD_3D decodedBlock(BLOCK_SIZE, BLOCK_SIZE, BLOCK_SIZE);
+  static INTEGER_FIELD_3D unflattened(BLOCK_SIZE, BLOCK_SIZE, BLOCK_SIZE);
+  for (int blockNumber = 0; blockNumber < numBlocks; blockNumber++) 
+  {
+    unflattened.clear();
 
     // decode the run length scheme
-    RunLengthDecodeBinary(allData, blockNumber, col, 
-        compression_data, &runLengthDecoded);
+    //RunLengthDecodeBinary(allData, blockNumber, col, 
+    //    compression_data, &runLengthDecoded);
+    RunLengthDecodeBinaryInPlace(allData, blockNumber, col, 
+        reverseZigzag, compression_data, unflattened);
 
     // undo the zigzag scan
-    INTEGER_FIELD_3D unflattened;
-    ZigzagUnflatten(runLengthDecoded, zigzagArray, &unflattened);
+    // TK: folded this into the in-place decode above
+    //ZigzagUnflatten(runLengthDecoded, zigzagArray, &unflattened);
 
+    /*
     // undo the scaling from the quantizer and push to the block container
-    FIELD_3D decodedBlock;
     DecodeBlockWithCompressionData(unflattened, blockNumber, col,
         compression_data, &decodedBlock);
-    (*decoded)[blockNumber] = decodedBlock.flattenedEigen(); 
+
+    TIMER copyTimer("DecodeScalar copy timer");
+    // TK: this is a pretty expensive copy, try it the memcpy way
+    //(*decoded)[blockNumber] = decodedBlock.flattenedEigen(); 
+    VectorXd& final = (*decoded)[blockNumber];
+    final.resize(decodedBlock.totalCells());
+    Real* blockData = decodedBlock.data();
+    double* finalData = final.data();
+    memcpy(finalData, blockData, sizeof(double) * decodedBlock.totalCells());
+    */
+
+    // TK: Do the decode in a way that avoids the need to copy into an Eigen
+    // VectorXd at the end
+    VectorXd& final = (*decoded)[blockNumber];
+    final.resize(decodedBlock.totalCells());
+    DecodeBlockWithCompressionData(unflattened, blockNumber, col,
+        compression_data, final.data());
   }
 }
 
@@ -2730,25 +2883,46 @@ void PeeledCompressedUnprojectTransform(MATRIX_COMPRESSION_DATA* U_data, const V
     resultZ[i].setZero(BLOCK_SIZE * BLOCK_SIZE * BLOCK_SIZE);
   }
 
+  TIMER axpyTimer("Unproject axpy ops");
   // loop through the columns and interpret the matrix-vector multiply as
   // a linear combination of the columns
   for (int col = 0; col < totalColumns; col++) {
 
     // decode the data but stay in the freq domain
     DecodeScalarFieldEigen(dataX, allDataX, col, &blocks);
+    
+    /*
     // multiply by the corresponding entry in q
     ScaleVectorEigen(q[col], &blocks);
     // and store the growing linear combination in each of the x, y, z components
     AddVectorEigen(blocks, &resultX);
+    */
+    // TK: give Eigen the chance to fuse the axpy
+    // Most architectures have a special instruction that does a single multiply and add
+    // in a single clock cycle, so you should try to apply them simultaneously whenever
+    // you can so that the compiler can try to fuse the two ops
+    for (int x = 0; x < numBlocks; x++)
+      resultX[x] += q[col] * blocks[x];
  
     DecodeScalarFieldEigen(dataY, allDataY, col, &blocks);
-    ScaleVectorEigen(q[col], &blocks);
-    AddVectorEigen(blocks, &resultY);
+    //ScaleVectorEigen(q[col], &blocks);
+    //AddVectorEigen(blocks, &resultY);
+    
+    // TK:  give Eigen the chance to fuse the axpy
+    for (int x = 0; x < numBlocks; x++)
+      resultY[x] += q[col] * blocks[x];
    
     DecodeScalarFieldEigen(dataZ, allDataZ, col, &blocks);
-    ScaleVectorEigen(q[col], &blocks);
-    AddVectorEigen(blocks, &resultZ); 
+    //ScaleVectorEigen(q[col], &blocks);
+    //AddVectorEigen(blocks, &resultZ); 
+    
+    // give Eigen the chance to fuse the axpy
+    for (int x = 0; x < numBlocks; x++)
+      resultZ[x] += q[col] * blocks[x];
   }
+
+  // TK: lump the rest of the timing into the function's timer
+  TIMER functionTimer2(__FUNCTION__);
 
   // now go back to the spatial domain
   int direction = -1;

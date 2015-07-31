@@ -371,8 +371,8 @@ int main(int argc, char *argv[])
 //////////////////////////////////////////////////////////////////////////////
 
 void runOnce()
-  {
-  }
+{
+}
 
 void runEverytime()
 {
@@ -394,21 +394,22 @@ void runEverytime()
 
     steps++;
 
-    if (steps == simulationSnapshots + 1) {    
-    // if we were already capturing a movie
-        if (captureMovie)
-        {
-         // write out the movie
-         movie.writeMovie("reducedIOPmovie.mov");
+    if (steps == simulationSnapshots + 1) 
+    {
+      // if we were already capturing a movie
+      if (captureMovie)
+      {
+        // write out the movie
+        movie.writeMovie("reducedIOPmovie.mov");
 
         // reset the movie object
         movie = QUICKTIME_MOVIE();
 
-       // stop capturing frames
-       captureMovie = false;
-        }
+        // stop capturing frames
+        captureMovie = false;
+      }
     }
-    if (steps % 10 == 0)
+    //if (steps % 10 == 0)
     {
       VECTOR::printVertical = false;
       TIMER::printTimingsPerFrame(steps);
