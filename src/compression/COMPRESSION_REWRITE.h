@@ -353,6 +353,7 @@ void GetSubmatrix(int startRow, MATRIX_COMPRESSION_DATA* data, MatrixXd* submatr
 // given the compression data. assumes start row is 
 // divisible by 3! assumes no SVD!
 void GetSubmatrixNoSVD(int startRow, MATRIX_COMPRESSION_DATA* data, MatrixXd* submatrix);
+void GetSubmatrixNoSVDSparse(int startRow, MATRIX_COMPRESSION_DATA* data, MatrixXd* submatrix);
 
 
 #endif

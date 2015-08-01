@@ -2491,6 +2491,222 @@ void GetSubmatrixNoSVD(int startRow, MATRIX_COMPRESSION_DATA* data, MatrixXd* su
 }
 
 ////////////////////////////////////////////////////////
+// given a start row, computes the 3 x numCols submatrix
+// given the compression data. assumes start row is 
+// divisible by 3! assumes no SVD!
+////////////////////////////////////////////////////////
+void GetSubmatrixNoSVDSparse(int startRow, MATRIX_COMPRESSION_DATA* data, MatrixXd* submatrix) 
+{
+  TIMER functionTimer(__FUNCTION__);
+
+  assert ( startRow % 3 == 0 );
+  
+  // start fetching useful parameters
+  COMPRESSION_DATA* compression_dataX = data->get_compression_dataX();
+  const VEC3I& dims = compression_dataX->get_dims();
+  int numCols = compression_dataX->get_numCols();   
+ 
+  // resize if necessary
+  submatrix->resize(3, numCols);
+
+  // compute the block number and index
+  int blockNumber, blockIndex;
+  ComputeBlockNumber(startRow, dims, &blockNumber, &blockIndex);
+
+  // compare the cache to the current
+  int cachedBlockNumber = data->get_cachedBlockNumber();
+  if (blockNumber == cachedBlockNumber) { // if we've already decoded this block
+    TIMER cacheTimer("cached block");
+
+    // cout << "Used cache!" << endl;
+    
+    // load the previously decoded data
+    vector<FIELD_3D>* cachedBlocksX = data->get_cachedBlocksX();
+    vector<FIELD_3D>* cachedBlocksY = data->get_cachedBlocksY();
+    vector<FIELD_3D>* cachedBlocksZ = data->get_cachedBlocksZ();
+
+    // SVD transformation matrix container
+    Matrix3d V_i;
+
+    for (int i = 0; i < numCols; i++) {
+
+      // a dummy container for each column of the matrix
+      Vector3d col_i;
+      col_i[0] = (*cachedBlocksX)[i][blockIndex];
+      col_i[1] = (*cachedBlocksY)[i][blockIndex];
+      col_i[2] = (*cachedBlocksZ)[i][blockIndex];
+
+      // set the column
+      submatrix->col(i) = col_i;
+    }
+  return;
+  }
+
+  else { // no cache; have to compute it from scratch
+    // cout << "Didn't use cache!" << endl;  
+    TIMER uncachedTimer("uncached block");
+
+    // initialize useful data
+    int numBlocks = compression_dataX->get_numBlocks();
+    const INTEGER_FIELD_3D& zigzagArray = compression_dataX->get_zigzagArray();
+    const INTEGER_FIELD_3D& reverseZigzag = compression_dataX->get_reverseZigzag();
+    
+    int* allDataX = data->get_dataX();
+    int* allDataY = data->get_dataY();
+    int* allDataZ = data->get_dataZ();
+    COMPRESSION_DATA* compression_dataY = data->get_compression_dataY();
+    COMPRESSION_DATA* compression_dataZ = data->get_compression_dataZ();
+    
+    // container for the encoded blocks
+    vector<FIELD_3D> blocks(numBlocks);
+
+    // variable to store decoded run-length blocks
+    // TK: this is always the same size, so set it once
+    VectorXi runLengthDecoded(BLOCK_SIZE * BLOCK_SIZE * BLOCK_SIZE);
+
+    // vector prior to undoing the svd
+    Vector3d preSVD;
+
+    // data for doing the inverse DCT
+    const fftw_plan& plan = data->get_plan();
+    double* in = data->get_dct_in();
+    int direction = -1;
+
+     
+    // pointers to the cache 
+    vector<FIELD_3D>* cachedBlocksX = data->get_cachedBlocksX();
+    vector<FIELD_3D>* cachedBlocksY = data->get_cachedBlocksY();
+    vector<FIELD_3D>* cachedBlocksZ = data->get_cachedBlocksZ();
+
+    INTEGER_FIELD_3D unflattened(BLOCK_SIZE, BLOCK_SIZE, BLOCK_SIZE);
+    FIELD_3D decodedBlock(BLOCK_SIZE, BLOCK_SIZE, BLOCK_SIZE);
+    for (int i = 0; i < numCols; i++) 
+    {
+
+      
+      // a container for column i
+      Vector3d preSVD_i;
+      /*
+       *****************************************************************
+       * X coordinate
+       *****************************************************************
+      */
+
+      // DEBUG: while the end of the iteration doesn't clear it entirely
+      unflattened.clear();
+      decodedBlock.clear();
+
+      vector<int> nonZeros;
+      nonZeros.reserve(BLOCK_SIZE * BLOCK_SIZE * BLOCK_SIZE);
+
+      // decode the run-length scheme
+      RunLengthDecodeBinaryInPlaceSparse(allDataX, blockNumber, i, 
+          reverseZigzag, compression_dataX, unflattened, nonZeros);
+
+      // undo the scaling from the quantizer
+      DecodeBlockWithCompressionDataSparse(unflattened, blockNumber, i, compression_dataX, decodedBlock.data(), nonZeros);
+
+      // inverse DCT
+      DCT_Smart_Unitary(plan, direction, in, &decodedBlock);
+
+      preSVD_i[0] = decodedBlock[blockIndex];
+
+      // update the cache
+      (*cachedBlocksX)[i] = decodedBlock;
+      
+      // clear things out for the next coordinate
+      unflattened.clear(nonZeros);
+
+      // TK: Why doesn't this clear do what it's supposed to?
+      //decodedBlock.clear(nonZeros);
+      //unflattened.clear();
+      decodedBlock.clear();
+      nonZeros.clear();
+      nonZeros.reserve(BLOCK_SIZE * BLOCK_SIZE * BLOCK_SIZE);
+
+      /*
+       *****************************************************************
+       * Y coordinate
+       *****************************************************************
+      */  
+
+      // decode the run-length scheme
+      //RunLengthDecodeBinary(allDataY, blockNumber, i, compression_dataY, &runLengthDecoded); 
+      //ZigzagUnflatten(runLengthDecoded, zigzagArray, &unflattened);
+      RunLengthDecodeBinaryInPlaceSparse(allDataY, blockNumber, i, 
+          reverseZigzag, compression_dataY, unflattened, nonZeros);
+
+      // undo the scaling from the quantizer
+      // TK: Do it on the raw pointer instead
+      //DecodeBlockWithCompressionData(unflattened, blockNumber, i, compression_dataY, decodedBlock.data()); 
+      DecodeBlockWithCompressionDataSparse(unflattened, blockNumber, i, compression_dataY, decodedBlock.data(), nonZeros);
+
+      // inverse DCT
+      DCT_Smart_Unitary(plan, direction, in, &decodedBlock);
+
+      preSVD_i[1] = decodedBlock[blockIndex];
+
+      // update the cache
+      (*cachedBlocksY)[i] = decodedBlock;
+
+      // clear things out for the next coordinate
+      unflattened.clear(nonZeros);
+      
+      // TK: Why doesn't this clear do what it's supposed to?
+      //decodedBlock.clear(nonZeros);
+      //unflattened.clear();
+      decodedBlock.clear();
+      nonZeros.clear();
+      nonZeros.reserve(BLOCK_SIZE * BLOCK_SIZE * BLOCK_SIZE);
+
+      /*
+       *****************************************************************
+       * Z coordinate
+       *****************************************************************
+      */  
+
+      // decode the run-length scheme
+      //RunLengthDecodeBinary(allDataZ, blockNumber, i, compression_dataZ, &runLengthDecoded); 
+      //ZigzagUnflatten(runLengthDecoded, zigzagArray, &unflattened);
+      RunLengthDecodeBinaryInPlaceSparse(allDataZ, blockNumber, i, 
+          reverseZigzag, compression_dataZ, unflattened, nonZeros);
+
+      // undo the scaling from the quantizer
+      // TK: Do it on the raw pointer instead
+      //DecodeBlockWithCompressionData(unflattened, blockNumber, i, compression_dataZ, &decodedBlock); 
+      //DecodeBlockWithCompressionData(unflattened, blockNumber, i, compression_dataZ, decodedBlock.data()); 
+      DecodeBlockWithCompressionDataSparse(unflattened, blockNumber, i, compression_dataZ, decodedBlock.data(), nonZeros);
+
+      // inverse DCT
+      DCT_Smart_Unitary(plan, direction, in, &decodedBlock);
+
+      preSVD_i[2] = decodedBlock[blockIndex];
+
+      // update the cache
+      (*cachedBlocksZ)[i] = decodedBlock;
+
+
+      // clear things out for the next coordinate
+      unflattened.clear(nonZeros);
+      
+      // TK: Why doesn't this clear do what it's supposed to?
+      //decodedBlock.clear(nonZeros);
+      //unflattened.clear();
+      decodedBlock.clear();
+      nonZeros.clear();
+      nonZeros.reserve(BLOCK_SIZE * BLOCK_SIZE * BLOCK_SIZE);
+
+      // set the column
+      submatrix->col(i) = preSVD_i;
+    }
+
+    // now that the cache has been filled, set the block number
+    data->set_cachedBlockNumber(blockNumber);
+
+  }
+}
+
+////////////////////////////////////////////////////////
 // generates the header information in the binary file
 // need to include:
 //
@@ -3192,7 +3408,8 @@ void PeeledCompressedUnprojectTransform(MATRIX_COMPRESSION_DATA* U_data, const V
   for (int col = 0; col < totalColumns; col++) {
 
     // decode the data but stay in the freq domain
-    DecodeScalarFieldEigen(dataX, allDataX, col, &blocks);
+    //DecodeScalarFieldEigen(dataX, allDataX, col, &blocks);
+    DecodeScalarFieldEigenSparse(dataX, allDataX, col, &blocks);
     
     /*
     // multiply by the corresponding entry in q
@@ -3207,7 +3424,8 @@ void PeeledCompressedUnprojectTransform(MATRIX_COMPRESSION_DATA* U_data, const V
     for (int x = 0; x < numBlocks; x++)
       resultX[x] += q[col] * blocks[x];
  
-    DecodeScalarFieldEigen(dataY, allDataY, col, &blocks);
+    //DecodeScalarFieldEigen(dataY, allDataY, col, &blocks);
+    DecodeScalarFieldEigenSparse(dataY, allDataY, col, &blocks);
     //ScaleVectorEigen(q[col], &blocks);
     //AddVectorEigen(blocks, &resultY);
     
@@ -3215,7 +3433,8 @@ void PeeledCompressedUnprojectTransform(MATRIX_COMPRESSION_DATA* U_data, const V
     for (int x = 0; x < numBlocks; x++)
       resultY[x] += q[col] * blocks[x];
    
-    DecodeScalarFieldEigen(dataZ, allDataZ, col, &blocks);
+    //DecodeScalarFieldEigen(dataZ, allDataZ, col, &blocks);
+    DecodeScalarFieldEigenSparse(dataZ, allDataZ, col, &blocks);
     //ScaleVectorEigen(q[col], &blocks);
     //AddVectorEigen(blocks, &resultZ); 
     

@@ -100,6 +100,7 @@ public:
   Real cubicNewtonLookup(const VEC3F& position) const;
 
   void clear();
+  void clear(const vector<int>& nonZeros);
   
   // real-valued cell center coordinates
   VEC3F cellCenter(int x, int y, int z) const;

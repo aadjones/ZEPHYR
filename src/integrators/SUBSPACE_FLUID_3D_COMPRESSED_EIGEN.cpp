@@ -341,12 +341,10 @@ void SUBSPACE_FLUID_3D_COMPRESSED_EIGEN::stepWithObstacle()
 
   TIMER projectionTimer("Velocity projection");
 
-  cout << __FILE__ << " " << __FUNCTION__ << " " << __LINE__ << " : " << endl;
   // project into the subspace
   PeeledCompressedProjectTransformNoSVD(_velocity, &_U_preadvect_data, &_qDot);
   cout << "finished projection! " << endl;
   projectionTimer.stop();
-  cout << __FILE__ << " " << __FUNCTION__ << " " << __LINE__ << " : " << endl;
 
   // then advect
 
@@ -358,10 +356,8 @@ void SUBSPACE_FLUID_3D_COMPRESSED_EIGEN::stepWithObstacle()
   //reducedAdvectStagedStamFast();
   //cout << "finished reduced advection!" << endl;
 
-  cout << __FILE__ << " " << __FUNCTION__ << " " << __LINE__ << " : " << endl;
   reducedAdvectCompressionFriendly();
   cout << "finished compression-friendly advection!" << endl;
-  cout << __FILE__ << " " << __FUNCTION__ << " " << __LINE__ << " : " << endl;
   
   //cout << " post advection qDot: " << _qDot << endl;
   //exit(0);
@@ -1644,7 +1640,8 @@ void SUBSPACE_FLUID_3D_COMPRESSED_EIGEN::reducedAdvectCompressionFriendly()
     // caching should work ideally now. Since the multimap sorts by the block number,
     // you will only get a miss when you're done using the block for the whole timestep
     MatrixXd submatrix(3, numCols);
-    GetSubmatrixNoSVD(ixxx, &_U_preadvect_data, &submatrix);
+    //GetSubmatrixNoSVD(ixxx, &_U_preadvect_data, &submatrix);
+    GetSubmatrixNoSVDSparse(ixxx, &_U_preadvect_data, &submatrix);
     
     // compute the Uq product
     const VectorXd vxxx = submatrix * _qDot;
