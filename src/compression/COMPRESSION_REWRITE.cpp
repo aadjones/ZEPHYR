@@ -33,16 +33,44 @@ void RoundFieldToInt(const FIELD_3D& F, INTEGER_FIELD_3D* castedField) {
 ////////////////////////////////////////////////////////
 // cast an INTEGER_FIELD_3D to a FIELD_3D
 ////////////////////////////////////////////////////////
+void CastIntFieldToDouble(const INTEGER_FIELD_3D& F, const int totalCells, double* castedField, const vector<int>& nonZeros) 
+{
+  TIMER functionTimer(__FUNCTION__);
+ 
+  for (int x = 0; x < nonZeros.size(); x++) 
+  {
+    const int i = nonZeros[x];
+    assert(i < F.totalCells());
+    assert(i >= 0);
+    castedField[i] = F[i];
+  }
+}
+
+
+////////////////////////////////////////////////////////
+// cast an INTEGER_FIELD_3D to a FIELD_3D
+////////////////////////////////////////////////////////
 void CastIntFieldToDouble(const INTEGER_FIELD_3D& F, const int totalCells, double* castedField) {
   TIMER functionTimer(__FUNCTION__);
-  
+ 
+  // DEBUG
+  //static int zeros = 0;
+  //static int total = 0;
+  //total += totalCells;
+
   for (int i = 0; i < totalCells; i++) {
     //castedField[i] = (double)F[i];
 
     // TK: faster? only a little bit ...
     const int entry = F[i];
     castedField[i] = entry ? static_cast<double>(entry) : 0.0;
+
+    //if (entry == 0) zeros++;
   }
+
+  // DEBUG
+  //cout << __FILE__ << " " << __FUNCTION__ << " " << __LINE__ << " : " << endl;
+  //cout << zeros << " zeros of " << total << " entries (" << 100.0 * (float)zeros / total << "%)" << endl;
 }
 
 ////////////////////////////////////////////////////////
@@ -908,6 +936,87 @@ void TuneGamma(const FIELD_3D& F, int blockNumber, int col,
 }
 
 ////////////////////////////////////////////////////////
+// Binary search to find the appropriate gamma given
+// desired percent threshold within maxIterations. 
+///////////////////////////////////////////////////////
+void TuneGammaFastPow(const FIELD_3D& F, int blockNumber, int col, 
+    COMPRESSION_DATA* data, FIELD_3D* damp)
+{
+  TIMER functionTimer(__FUNCTION__);
+
+  // fetch parameters from data
+  int nBits = data->get_nBits();
+  int maxIterations = data->get_maxIterations();
+  double percent = data->get_percent();
+
+  // cache the original damping matrix
+  FIELD_3D vanilla(*damp);
+
+  double lower = 0.0;
+  // QUESTION: how should we define upper?
+  double upper = nBits;
+  // arbitrarily set epsilon to be 0.5%
+  double epsilon = 0.005;
+  double gamma = 0.5 * (upper + lower);
+  damp->toFastPower(gamma);
+  
+  // the total amount of energy in the Fourier space
+  double totalEnergy = F.sumSq();
+  FIELD_3D damped = ( F / (*damp) );
+  damped.roundInt();
+
+  double energyDiff = abs(totalEnergy - ( (*damp) * damped ).sumSq());
+  double percentEnergy = 1.0 - (energyDiff / totalEnergy);
+  int iterations = 0;
+   
+  while ( abs( percent - percentEnergy ) > epsilon && iterations < maxIterations) {
+
+    if (percentEnergy < percent) { // too much damping; need to lower gamma
+      upper = gamma;
+      gamma = 0.5 * (upper + lower);
+
+      // to the power of 1 / upper brings it back to the vanilla state, 
+      // from which we raise it to the new gamma
+      //damp->toPower(gamma / upper);
+      (*damp) = vanilla;
+      damp->toFastPower(gamma);
+    }
+
+    else { // not enough damping; need to increase gamma
+      lower = gamma;
+      gamma = 0.5 * (upper + lower);
+
+      // to the power of 1 / lower brings it back to the vanilla state, 
+      // from which we raise it to the new gamma
+      //damp->toPower(gamma / lower);
+      (*damp) = vanilla;
+      damp->toFastPower(gamma);
+    }
+
+    // update percentEnergy
+    damped = ( F / (*damp) );
+    damped.roundInt();
+    energyDiff = abs(totalEnergy - ( (*damp) * damped ).sumSq());
+    percentEnergy =  1.0 - (energyDiff / totalEnergy);
+    iterations++;
+  }
+  
+
+  // fetch data to update gammaList
+  MatrixXd* gammaListMatrix = data->get_gammaListMatrix();
+  int numBlocks = data->get_numBlocks();
+  int numCols = data->get_numCols();
+
+  // if it's the first time TuneGamma is called in a chain, resize
+  if (gammaListMatrix->cols() <= 0) { 
+    gammaListMatrix->setZero(numBlocks, numCols);
+  }
+
+  (*gammaListMatrix)(blockNumber, col) = gamma;
+
+}
+
+////////////////////////////////////////////////////////
 // simply sets gamma equal to zero for no damping. for
 // debug purposes only.
 ///////////////////////////////////////////////////////
@@ -941,7 +1050,6 @@ void TuneGammaDebug(const FIELD_3D& F, int blockNumber, int col,
 // quantizes the result to an integer. stores the 
 // value of gamma for the damping.
 ////////////////////////////////////////////////////////
-
 void EncodeBlock(const FIELD_3D& F, int blockNumber, int col, COMPRESSION_DATA* data, 
     INTEGER_FIELD_3D* quantized) 
 {
@@ -961,8 +1069,11 @@ void EncodeBlock(const FIELD_3D& F, int blockNumber, int col, COMPRESSION_DATA* 
   assert(blockNumber >= 0 && blockNumber < numBlocks);
  
   // finds best gamma given the percent. updates gammaList
-  // and updates damp 
-  TuneGamma(F, blockNumber, col, data, &damp);
+  // and updates damp
+  if (FIELD_3D::usingFastPow())
+    TuneGammaFastPow(F, blockNumber, col, data, &damp);
+  else
+    TuneGamma(F, blockNumber, col, data, &damp);
 
   // fill the return value with rounded damped entries
   RoundFieldToInt( (F / damp), quantized );
@@ -1043,7 +1154,6 @@ void DecodeBlock(const INTEGER_FIELD_3D& intBlock, int blockNumber, int col,
  
 }
 
-
 ////////////////////////////////////////////////////////
 // does the same operations as DecodeBlock, but with a passed
 // in compression data parameter rather than decompression data 
@@ -1107,6 +1217,76 @@ void DecodeBlockWithCompressionData(const INTEGER_FIELD_3D& intBlock,
   // TK: do it on the raw pointer instead
   for (int x = 0; x < intBlock.totalCells(); x++)
     decoded[x] *= damp[x] * sInv;
+}
+
+////////////////////////////////////////////////////////
+// does the same operations as DecodeBlock, but with a passed
+// in compression data parameter rather than decompression data 
+// due to const poisoning, compression data cannot be marked const,
+// but nonetheless it is not modified.
+////////////////////////////////////////////////////////
+void DecodeBlockWithCompressionDataSparse(const INTEGER_FIELD_3D& intBlock, 
+  int blockNumber, int col, COMPRESSION_DATA* data, Real* decoded, vector<int>& nonZeros) 
+{ 
+  TIMER functionTimer(__FUNCTION__);
+
+  int numBlocks = data->get_numBlocks();
+  // make sure we are not accessing an invalid block
+  assert( (blockNumber >= 0) && (blockNumber < numBlocks) );
+
+  TIMER castTimer("Decode Cast");
+  //CastIntFieldToDouble(intBlock, intBlock.totalCells(), decoded);
+  //FIELD_3D dummy(BLOCK_SIZE, BLOCK_SIZE, BLOCK_SIZE);
+  //CastIntFieldToDouble(intBlock, intBlock.totalCells(), dummy.data(), nonZeros);
+  CastIntFieldToDouble(intBlock, intBlock.totalCells(), decoded, nonZeros);
+
+  /*
+  Real diff = 0;
+  int nons = 0;
+  for (int x = 0; x < intBlock.totalCells(); x++)
+  {
+    diff += fabs(dummy[x] - decoded[x]);
+
+    if (fabs(decoded[x]) > 1e-5)
+    {
+      nons++;
+    }
+  }
+
+  cout << __FILE__ << " " << __FUNCTION__ << " " << __LINE__ << " : " << endl;
+  cout << " Diff: " << diff << endl;
+  cout << " Non-zeros seen: " << nons << endl;
+  cout << " Non-zeros predicted: " << nonZeros.size() << endl;
+  */
+
+  // use the appropriate scale factor to decode
+  MatrixXd* sList = data->get_sListMatrix();
+  double s = (*sList)(blockNumber, col);
+  double sInv = 1.0 / s;
+  MatrixXd* gammaList = data->get_gammaListMatrix();
+  double gamma = (*gammaList)(blockNumber, col);
+    
+  // dequantize by inverting the scaling by s and contracting by the 
+  // appropriate gamma-modulated damping array
+  TIMER dampingTimer("Decode Damping Copy");
+  const FIELD_3D& dampingArray = data->get_dampingArray();
+  static FIELD_3D damp(BLOCK_SIZE, BLOCK_SIZE, BLOCK_SIZE);
+  memcpy(damp.data(), dampingArray.dataConst(), damp.totalCells() * sizeof(Real));
+  //damp.toPower(gamma);
+  damp.toPower(gamma, nonZeros);
+
+  // undo the dampings and preprocess
+  TIMER applyPowerTimer("Decode Apply Power");
+#if 0
+  for (int x = 0; x < intBlock.totalCells(); x++)
+    decoded[x] *= damp[x] * sInv;
+#else
+  for (unsigned int x = 0; x < nonZeros.size(); x++)
+  {
+    const int i = nonZeros[x];
+    decoded[i] *= damp[i] * sInv;
+  }
+#endif
 }
 
 ////////////////////////////////////////////////////////
@@ -1286,7 +1466,6 @@ void RunLengthDecodeBinary(int* allData, int blockNumber, int col,
   }
 }
 
-
 ////////////////////////////////////////////////////////
 // decode a run-length encoded binary file and fill 
 // a VectorXi with the contents.
@@ -1328,6 +1507,65 @@ void RunLengthDecodeBinaryInPlace(int* allData, int blockNumber, int col,
       {
         for (int x = 0; x < runLength - 1; x++)
           parsedDataField[reverseZigzag[j + 1 + x]] = value;
+        
+        i += 2;
+        j += (runLength - 1);
+      }
+      i++;
+      j++;
+    }
+  }
+}
+
+////////////////////////////////////////////////////////
+// decode a run-length encoded binary file and fill 
+// a VectorXi with the contents.
+////////////////////////////////////////////////////////
+void RunLengthDecodeBinaryInPlaceSparse(int* allData, int blockNumber, int col, 
+    const INTEGER_FIELD_3D& reverseZigzag, 
+    COMPRESSION_DATA* compression_data,
+    INTEGER_FIELD_3D& parsedDataField,
+    vector<int>& nonZeros)
+{
+  TIMER functionTimer(__FUNCTION__);
+  //MatrixXi* blockLengthsMatrix = compression_data->get_blockLengthsMatrix(); 
+  const int compressedBlockSize = (*compression_data->get_blockLengthsMatrix())(blockNumber, col);
+  //assert(compressedBlockSize >= 0 && compressedBlockSize <= 2 * BLOCK_SIZE * BLOCK_SIZE * BLOCK_SIZE);
+
+  //MatrixXi* blockIndicesMatrix = compression_data->get_blockIndicesMatrix();
+  const int blockIndex = (*compression_data->get_blockIndicesMatrix())(blockNumber, col);
+
+  int i = 0;
+  //int runLength = 1;
+  int j = 0;
+
+  //TIMER whileTimer("Run length in-place while timer");
+  while (i < compressedBlockSize) 
+  {
+    const int index = blockIndex + i;
+    const int value = allData[index];
+    const int next = allData[index + 1];
+    const int runLength = allData[index + 2];
+
+    if (value == 0 && next == 0)
+    {
+      i += 3;
+      j += runLength;
+    }
+    else
+    {
+      parsedDataField[reverseZigzag[j]] = value;
+      if (value != 0)
+        nonZeros.push_back(reverseZigzag[j]);
+      if ((i + 1 < compressedBlockSize) && value == next) 
+      {
+        for (int x = 0; x < runLength - 1; x++)
+        {
+          parsedDataField[reverseZigzag[j + 1 + x]] = value;
+
+          if (value != 0)
+            nonZeros.push_back(reverseZigzag[j + 1 + x]);
+        }
         
         i += 2;
         j += (runLength - 1);
@@ -2657,20 +2895,23 @@ void DecodeScalarFieldEigen(COMPRESSION_DATA* compression_data, int* allData,
 
   // fetch numBlocks and precomputed zigzag table
   int numBlocks = compression_data->get_numBlocks();
-  const INTEGER_FIELD_3D& zigzagArray = compression_data->get_zigzagArray();
+  //const INTEGER_FIELD_3D& zigzagArray = compression_data->get_zigzagArray();
+  const INTEGER_FIELD_3D& reverseZigzag = compression_data->get_reverseZigzag();
 
-  INTEGER_FIELD_3D reverseZigzag(zigzagArray);
-  for (int x = 0; x < zigzagArray.totalCells(); x++)
-    reverseZigzag[zigzagArray[x]] = x;
+  //INTEGER_FIELD_3D reverseZigzag(zigzagArray);
+  //for (int x = 0; x < zigzagArray.totalCells(); x++)
+  //  reverseZigzag[zigzagArray[x]] = x;
 
   // resize the container we will return
   decoded->resize(numBlocks);
+  for (int x = 0; x < numBlocks; x++)
+    (*decoded)[x].resize(BLOCK_SIZE * BLOCK_SIZE * BLOCK_SIZE);
 
   // variable to store decoded run-length blocks
   // TK: This is always the same size, so set it once
   VectorXi runLengthDecoded(BLOCK_SIZE * BLOCK_SIZE * BLOCK_SIZE);
 
-  TIMER loopTimer("DecodeScalar loop timer");
+  //TIMER loopTimer("DecodeScalar loop timer");
 
   // TK: Trying making these static so it doesn't allocate and deallocate every
   // time. Might cause problems with OpenMP later.
@@ -2708,9 +2949,71 @@ void DecodeScalarFieldEigen(COMPRESSION_DATA* compression_data, int* allData,
     // TK: Do the decode in a way that avoids the need to copy into an Eigen
     // VectorXd at the end
     VectorXd& final = (*decoded)[blockNumber];
-    final.resize(decodedBlock.totalCells());
+    //final.resize(decodedBlock.totalCells());
     DecodeBlockWithCompressionData(unflattened, blockNumber, col,
         compression_data, final.data());
+  }
+}
+
+////////////////////////////////////////////////////////
+// decode an entire scalar field of a particular column from matrix compression data
+// *without* going back to the spatial domain (or the SVD transform). leave them
+// in a list of blocks as well.
+////////////////////////////////////////////////////////
+void DecodeScalarFieldEigenSparse(COMPRESSION_DATA* compression_data, int* allData, 
+    int col, vector<VectorXd>* decoded)
+{
+  TIMER functionTimer(__FUNCTION__);
+
+  // get the dims from data and construct a field of the appropriate size
+  const VEC3I& dims = compression_data->get_dims();
+
+  // fill in the paddings
+  VEC3I newDims;
+  GetPaddings(dims, &newDims);
+
+  // update the resolutions
+  newDims += dims;
+
+  // fetch numBlocks and precomputed zigzag table
+  int numBlocks = compression_data->get_numBlocks();
+  const INTEGER_FIELD_3D& reverseZigzag = compression_data->get_reverseZigzag();
+
+  // resize the container we will return
+  decoded->resize(numBlocks);
+  for (int x = 0; x < numBlocks; x++)
+  {
+    (*decoded)[x].resize(BLOCK_SIZE * BLOCK_SIZE * BLOCK_SIZE);
+    (*decoded)[x].setZero();
+  }
+
+  // variable to store decoded run-length blocks
+  // TK: This is always the same size, so set it once
+  VectorXi runLengthDecoded(BLOCK_SIZE * BLOCK_SIZE * BLOCK_SIZE);
+
+  // TK: Trying making these static so it doesn't allocate and deallocate every
+  // time. Might cause problems with OpenMP later.
+  static FIELD_3D decodedBlock(BLOCK_SIZE, BLOCK_SIZE, BLOCK_SIZE);
+  static INTEGER_FIELD_3D unflattened(BLOCK_SIZE, BLOCK_SIZE, BLOCK_SIZE);
+
+  for (int blockNumber = 0; blockNumber < numBlocks; blockNumber++) 
+  {
+    //decodedBlock.clear();
+    vector<int> nonZeros;
+    nonZeros.reserve(BLOCK_SIZE * BLOCK_SIZE * BLOCK_SIZE);
+
+    // decode the run length scheme
+    RunLengthDecodeBinaryInPlaceSparse(allData, blockNumber, col, 
+        reverseZigzag, compression_data, unflattened, nonZeros);
+
+    // TK: Do the decode in a way that avoids the need to copy into an Eigen
+    // VectorXd at the end
+    VectorXd& final = (*decoded)[blockNumber];
+    DecodeBlockWithCompressionDataSparse(unflattened, blockNumber, col,
+        compression_data, final.data(), nonZeros);
+    //DecodeBlockWithCompressionData(unflattened, blockNumber, col,
+    //    compression_data, final.data());
+    unflattened.clear(nonZeros);
   }
 }
 
@@ -3121,18 +3424,22 @@ void PeeledCompressedProjectTransformNoSVD(const VECTOR3_FIELD_3D& V,
 
   for (int col = 0; col < totalColumns; col++) {
     double totalSum = 0.0;
-    DecodeScalarFieldEigen(dataX, allDataX, col, &blocks);
+    //DecodeScalarFieldEigen(dataX, allDataX, col, &blocks);
+    DecodeScalarFieldEigenSparse(dataX, allDataX, col, &blocks);
     totalSum += GetDotProductSum(blocks, Xpart);
 
-    DecodeScalarFieldEigen(dataY, allDataY, col, &blocks);
+    //DecodeScalarFieldEigen(dataY, allDataY, col, &blocks);
+    DecodeScalarFieldEigenSparse(dataY, allDataY, col, &blocks);
     totalSum += GetDotProductSum(blocks, Ypart);
 
-    DecodeScalarFieldEigen(dataZ, allDataZ, col, &blocks);
+    //DecodeScalarFieldEigen(dataZ, allDataZ, col, &blocks);
+    DecodeScalarFieldEigenSparse(dataZ, allDataZ, col, &blocks);
     totalSum += GetDotProductSum(blocks, Zpart);
 
     (*q)[col] = totalSum;
   }
 }
+
 //////////////////////////////////////////////////////////////////////
 // set zeros at the places where we have artificially padded
 //////////////////////////////////////////////////////////////////////

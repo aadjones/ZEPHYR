@@ -122,6 +122,12 @@ void INTEGER_FIELD_3D::clear()
   memset(_data, 0, sizeof(int) * _totalCells);
 }
 
+void INTEGER_FIELD_3D::clear(const vector<int>& nonZeros)
+{
+  for (unsigned int x = 0; x < nonZeros.size(); x++)
+    _data[nonZeros[x]] = 0;
+}
+
 void INTEGER_FIELD_3D::resizeAndWipe(int xRes, int yRes, int zRes)
 {
   if (_xRes == xRes && _yRes == yRes && _zRes == zRes)

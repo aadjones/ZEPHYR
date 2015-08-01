@@ -102,6 +102,10 @@ int main(int argc, char* argv[]) {
   int debug = parser.getBool("debug", false);
   cout << "debug: " << debug << endl;
 
+  bool usingFastPow = parser.getBool("fast pow", false);
+  cout << " fast pow: " << usingFastPow << endl;
+  FIELD_3D::usingFastPow() = usingFastPow;
+
   string preAdvectPath = reducedPath + string("U.preadvect.matrix");
   string finalPath = reducedPath + string("U.final.matrix");
   // string preprojectPath = reducedPath + string("U.preproject.matrix");

@@ -21,6 +21,7 @@ void CastIntFieldToDouble(const INTEGER_FIELD_3D& F, FIELD_3D* castedField);
 
 // TK: Adding a version that does it on the raw pointer
 void CastIntFieldToDouble(const INTEGER_FIELD_3D& F, const int totalCells, double* castedField); 
+void CastIntFieldToDouble(const INTEGER_FIELD_3D& F, const int totalCells, double* castedField, const vector<int>& nonZeros); 
 
 // form the cumulative sum starting at zero of a passed in integer vector
 void ModifiedCumSum(const VectorXi& V, VectorXi* sum);
@@ -134,6 +135,10 @@ void TuneGammaVerbose(const FIELD_3D& F, int blockNumber, int col,
 void TuneGamma(const FIELD_3D& F, int blockNumber, int col, COMPRESSION_DATA* data, 
     FIELD_3D* damp);
 
+// version that uses fastPow instead of the slower pow
+void TuneGammaFastPow(const FIELD_3D& F, int blockNumber, int col, COMPRESSION_DATA* data, 
+    FIELD_3D* damp);
+
 // simply sets gamma equal to zero for no damping. for
 // debug purposes only.
 void TuneGammaDebug(const FIELD_3D& F, int blockNumber, int col, 
@@ -168,6 +173,8 @@ void DecodeBlock(const INTEGER_FIELD_3D& intBlock, int blockNumber, int col,
 // expensive copy at the end.
 void DecodeBlockWithCompressionData(const INTEGER_FIELD_3D& intBlock, 
   int blockNumber, int col, COMPRESSION_DATA* data, Real* decoded); 
+void DecodeBlockWithCompressionDataSparse(const INTEGER_FIELD_3D& intBlock, 
+  int blockNumber, int col, COMPRESSION_DATA* data, Real* decoded, vector<int>& nonZeros); 
 
 // flattens an INTEGER_FIELD_3D through a zig-zag scan
 // into a VectorXi. Since the scan always follows the same order,
@@ -199,6 +206,10 @@ void RunLengthDecodeBinaryInPlace(int* allData, int blockNumber, int col,
     const INTEGER_FIELD_3D& reverseZigzag, 
     COMPRESSION_DATA* compression_data,
     INTEGER_FIELD_3D& parsedDataField);
+void RunLengthDecodeBinaryInPlaceSparse(int* allData, int blockNumber, int col,
+    const INTEGER_FIELD_3D& reverseZigzag, 
+    COMPRESSION_DATA* compression_data,
+    INTEGER_FIELD_3D& parsedDataField, vector<int>& nonZeros);
 
 // takes an input FIELD_3D which is the result of
 // an SVD coordinate transform, compresses it according
@@ -257,6 +268,10 @@ void DecodeScalarField(COMPRESSION_DATA* compression_data, int* allData,
 // *without* going back to the spatial domain (or the SVD transform). leave them
 // in a list of blocks as well
 void DecodeScalarFieldEigen(COMPRESSION_DATA* compression_data, int* allData, 
+    int col, vector<VectorXd>* decoded);
+
+// try doing it all sparsely, i.e. skipping all the zeros
+void DecodeScalarFieldEigenSparse(COMPRESSION_DATA* compression_data, int* allData, 
     int col, vector<VectorXd>* decoded);
 
 // uses DecodeScalarField three times to form a vector field, and then undoes

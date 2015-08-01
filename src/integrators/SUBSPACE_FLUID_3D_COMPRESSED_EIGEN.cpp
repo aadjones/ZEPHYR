@@ -341,11 +341,12 @@ void SUBSPACE_FLUID_3D_COMPRESSED_EIGEN::stepWithObstacle()
 
   TIMER projectionTimer("Velocity projection");
 
+  cout << __FILE__ << " " << __FUNCTION__ << " " << __LINE__ << " : " << endl;
   // project into the subspace
-  
   PeeledCompressedProjectTransformNoSVD(_velocity, &_U_preadvect_data, &_qDot);
   cout << "finished projection! " << endl;
   projectionTimer.stop();
+  cout << __FILE__ << " " << __FUNCTION__ << " " << __LINE__ << " : " << endl;
 
   // then advect
 
@@ -357,8 +358,10 @@ void SUBSPACE_FLUID_3D_COMPRESSED_EIGEN::stepWithObstacle()
   //reducedAdvectStagedStamFast();
   //cout << "finished reduced advection!" << endl;
 
+  cout << __FILE__ << " " << __FUNCTION__ << " " << __LINE__ << " : " << endl;
   reducedAdvectCompressionFriendly();
   cout << "finished compression-friendly advection!" << endl;
+  cout << __FILE__ << " " << __FUNCTION__ << " " << __LINE__ << " : " << endl;
   
   //cout << " post advection qDot: " << _qDot << endl;
   //exit(0);

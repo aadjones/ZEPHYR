@@ -192,10 +192,10 @@ void TIMER::printTimingsPerFrame(const int frames)
     string name = (*backwardIter).second;
     double time = (*backwardIter).first;
 
-    string padding("                                   ");
+    string padding("                                               ");
 
     name = name + padding;
-    name = name.substr(0,30);
+    name = name.substr(0,40);
 
     sprintf(buffer, "%f", time / totalTime * 100.0);
     timeString = string(buffer);

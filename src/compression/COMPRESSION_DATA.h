@@ -48,6 +48,7 @@ class COMPRESSION_DATA {
     
     const FIELD_3D& get_dampingArray() const { return _dampingArray; }
     const INTEGER_FIELD_3D& get_zigzagArray() const { return _zigzagArray; }
+    const INTEGER_FIELD_3D& get_reverseZigzag() const { return _reverseZigzag; }
     double* get_dct_in() const { return _dct_in; }
     double* get_dct_out() const { return _dct_out; }
     fftw_plan get_dct_plan() const { return _dct_plan; }
@@ -128,6 +129,11 @@ class COMPRESSION_DATA {
       }
     }
     _zigzagArray = zigzagArray;
+
+    // cache the reverse too
+    _reverseZigzag = _zigzagArray;
+    for (int x = 0; x < zigzagArray.totalCells(); x++)
+      _reverseZigzag[zigzagArray[x]] = x;
   }
 
 
@@ -182,6 +188,7 @@ class COMPRESSION_DATA {
 
     FIELD_3D _dampingArray;
     INTEGER_FIELD_3D _zigzagArray;
+    INTEGER_FIELD_3D _reverseZigzag;
 
     double* _dct_in;
     double* _dct_out;

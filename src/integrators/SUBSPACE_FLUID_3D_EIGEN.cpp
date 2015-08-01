@@ -600,9 +600,9 @@ void SUBSPACE_FLUID_3D_EIGEN::stepObstacleSameOrder()
   ////////////////////////////////////////////////////////////////////
   // full advection---modifies _velocity and _density and _heat
 
-  advectStam();
-  velocityTrue = _velocity;
-  densityTrue = _density;
+  //advectStam();
+  //velocityTrue = _velocity;
+  //densityTrue = _density;
   ////////////////////////////////////////////////////////////////////
 
   ////////////////////////////////////////////////////////////////////
@@ -628,19 +628,19 @@ void SUBSPACE_FLUID_3D_EIGEN::stepObstacleSameOrder()
 
   ////////////////////////////////////////////////////////////////////
   // comparing the reduced advection to full advection
-  _velocity.peeledUnproject(_prediffuseU, _qDot);
-  cout << "Advection projection. \n";
-  diffTruth(velocityTrue, densityTrue);
+  //_velocity.peeledUnproject(_prediffuseU, _qDot);
+  //cout << "Advection projection. \n";
+  //diffTruth(velocityTrue, densityTrue);
   ///////////////////////////////////////////////////////////////////
   
   ////////////////////////////////////////////////////////////////////
   // Full-space diffusion
-  if (_peeledDampingFull.rows() <= 0) {
-    buildPeeledDampingMatrixFull();
-  }
-  VectorXd after = _peeledDampingFull * _velocity.peelBoundary().flattenedEigen();
-  _velocity.setWithPeeled(after);
-  velocityTrue = _velocity;
+  //if (_peeledDampingFull.rows() <= 0) {
+  //  buildPeeledDampingMatrixFull();
+  //}
+  //VectorXd after = _peeledDampingFull * _velocity.peelBoundary().flattenedEigen();
+  //_velocity.setWithPeeled(after);
+  //velocityTrue = _velocity;
   ////////////////////////////////////////////////////////////////////
   
   // subspace diffusion 
@@ -650,20 +650,22 @@ void SUBSPACE_FLUID_3D_EIGEN::stepObstacleSameOrder()
 
   ////////////////////////////////////////////////////////////////////
   // full space comparison of diffusion
-  _velocity.peeledUnproject(_preprojectU, _qDot);
-  cout << "Diffusion projection.\n";
-  diffTruth(velocityTrue, densityTrue);
+  //_velocity.peeledUnproject(_preprojectU, _qDot);
+  //cout << "Diffusion projection.\n";
+  //diffTruth(velocityTrue, densityTrue);
   ////////////////////////////////////////////////////////////////////
  
   ////////////////////////////////////////////////////////////////////
   // full space boundary stomping
 
   // if it's not build, construct the full IOP matrix (for debugging)
+  /*
   if (_peeledIOP.cols() <= 0) {
     buildPeeledSparseIOP(_peeledIOP, center, radius);
   }
   VectorXd afterIOP = _peeledIOP * velocityTrue.peelBoundary().flattenedEigen();
   velocityTrue.setWithPeeled(afterIOP); 
+  */
 
   // reduced IOP
   TIMER iopTiming("IOP timing");
@@ -671,20 +673,20 @@ void SUBSPACE_FLUID_3D_EIGEN::stepObstacleSameOrder()
 
   ////////////////////////////////////////////////////////////////////
   // obstacle stomping comparison
-  _velocity.peeledUnproject(_iopU, _qDot);
-  cout << "Stomping boundaries test. \n";
-  diffTruth(velocityTrue, densityTrue);
+  //_velocity.peeledUnproject(_iopU, _qDot);
+  //cout << "Stomping boundaries test. \n";
+  //diffTruth(velocityTrue, densityTrue);
 
   ////////////////////////////////////////////////////////////////////
   // this will modify _velocity using a full space projection
-  project();
-  velocityTrue = _velocity;
+  //project();
+  //velocityTrue = _velocity;
   
   // reduced pressure project
   reducedStagedProject();
-  _velocity.peeledUnproject(_U, _qDot);
-  cout << "Pressure projection. \n";
-  diffTruth(velocityTrue, densityTrue);
+  //_velocity.peeledUnproject(_U, _qDot);
+  //cout << "Pressure projection. \n";
+  //diffTruth(velocityTrue, densityTrue);
   iopTiming.stop();
   ////////////////////////////////////////////////////////////////////
   
@@ -1872,7 +1874,7 @@ void SUBSPACE_FLUID_3D_EIGEN::loadReducedIOP(string path)
 //////////////////////////////////////////////////////////////////////
 void SUBSPACE_FLUID_3D_EIGEN::loadReducedIOPAll(string path)
 {
-  TIMER functionTimer(__FUNCTION__);
+  //TIMER functionTimer(__FUNCTION__);
   if (path.length() == 0)
     path = _reducedPath;
 

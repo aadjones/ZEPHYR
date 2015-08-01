@@ -84,6 +84,7 @@ public:
   const int outside() const { return _outside; };
   const int& quinticClamps() const { return _quinticClamps; };
   const bool initialized() const;
+  static bool& usingFastPow() { return _usingFastPow; };
 
   const int maxRes() const { return (_xRes > _yRes) ? ((_zRes > _xRes) ? _zRes : _xRes) : ((_zRes > _yRes) ? _zRes : _yRes); };
 
@@ -221,6 +222,9 @@ public:
 
   // take each element to the specified power
   void toPower(double power);
+  void toFastPower(double power);
+
+  void toPower(double power, const vector<int>& nonZeros);
 
   // set to a checkerboard solid texture
   void setToSolidCheckboard(int xChecks = 10, int yChecks = 10, int zChecks = 10);
@@ -504,6 +508,8 @@ private:
 
   // has this field been initialized?
   //bool _initialized;
+
+  static bool _usingFastPow;
 
   // do fast marching in one direction
   void marchOneway(bool forward, MIN_HEAP& minHeap);

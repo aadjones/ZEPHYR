@@ -350,12 +350,18 @@ int main(int argc, char *argv[])
   bool usingIOP = parser.getBool("iop", 0);
   cout << "Using IOP: " << usingIOP << endl;
 
+  bool fastPow = parser.getBool("fast pow", false);
+  cout << " fast pow: " << fastPow << endl;
+
 	fluid = new SUBSPACE_FLUID_3D_COMPRESSED_EIGEN(xRes, yRes, zRes, reducedPath, &boundaries[0], usingIOP);
   fluid->loadReducedIOP();
   fluid->initCompressionData();
 
   fluid->fullRankPath() = snapshotPath;
   fluid->vorticityEps() = vorticity;
+
+  // set the FIELD_3D static
+  FIELD_3D::usingFastPow() = fastPow;
   
   // ground = new FLUID_3D_MIC(xRes, yRes, zRes, 0);
  

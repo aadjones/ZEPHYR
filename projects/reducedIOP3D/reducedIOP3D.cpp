@@ -410,7 +410,7 @@ void runEverytime()
        captureMovie = false;
         }
     }
-    if (steps % 10 == 0)
+    //if (steps % 10 == 0)
     {
       VECTOR::printVertical = false;
       TIMER::printTimingsPerFrame(steps);

@@ -16,6 +16,7 @@
 #endif
 
 int FIELD_3D::_quinticClamps = 0;
+bool FIELD_3D::_usingFastPow = false;
 
 ///////////////////////////////////////////////////////////////////////
 ///////////////////////////////////////////////////////////////////////
@@ -2414,15 +2415,55 @@ inline double fastPow(double a, double b)
 ///////////////////////////////////////////////////////////////////////
 // set each element to the specified power
 ///////////////////////////////////////////////////////////////////////
-void FIELD_3D::toPower(double power) 
+void FIELD_3D::toFastPower(double power) 
 {
   TIMER functionTimer(__FUNCTION__);
   for (int index = 0; index < _totalCells; index++) {
-    _data[index] = pow(_data[index], power);
-    
-    // this breaks everything
-    //_data[index] = fastPow(_data[index], power);
+    _data[index] = fastPow(_data[index], power);
   }
+}
+
+///////////////////////////////////////////////////////////////////////
+// set each element to the specified power
+///////////////////////////////////////////////////////////////////////
+void FIELD_3D::toPower(double power) 
+{
+  TIMER functionTimer(__FUNCTION__);
+
+  if (FIELD_3D::_usingFastPow)
+  {
+    toFastPower(power);
+    return;
+  }
+
+  for (int index = 0; index < _totalCells; index++)
+    _data[index] = pow(_data[index], power);
+}
+
+///////////////////////////////////////////////////////////////////////
+// set each element to the specified power
+///////////////////////////////////////////////////////////////////////
+void FIELD_3D::toPower(double power, const vector<int>& nonZeros) 
+{
+  TIMER functionTimer("toPower, sparse");
+
+  if (FIELD_3D::_usingFastPow)
+  {
+    for (int index = 0; index < nonZeros.size(); index++)
+    {
+      const int i = nonZeros[index];
+      _data[i] = fastPow(_data[i], power);
+    }
+  }
+  else
+  {
+    for (int index = 0; index < nonZeros.size(); index++)
+    {
+      const int i = nonZeros[index];
+      _data[i] = pow(_data[i], power);
+    }
+  }
+
 }
 ///////////////////////////////////////////////////////////////////////
 // set to a checkerboard solid texture
