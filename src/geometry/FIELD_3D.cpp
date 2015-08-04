@@ -279,6 +279,14 @@ void FIELD_3D::clear(const vector<int>& nonZeros)
 
 ///////////////////////////////////////////////////////////////////////
 ///////////////////////////////////////////////////////////////////////
+void FIELD_3D::clear(const vector<int>& nonZeros, const int size)
+{
+  for (int x = 0; x < size; x++)
+    _data[nonZeros[x]] = 0.0;
+}
+
+///////////////////////////////////////////////////////////////////////
+///////////////////////////////////////////////////////////////////////
 void FIELD_3D::write(string filename) const
 {
   FILE* file;
@@ -2405,22 +2413,6 @@ void FIELD_3D::setToRandom()
 }
 
 ///////////////////////////////////////////////////////////////////////
-// from here: 
-//
-// http://martin.ankerl.com/2012/01/25/optimized-approximative-pow-in-c-and-cpp/
-///////////////////////////////////////////////////////////////////////
-inline double fastPow(double a, double b) 
-{
-  union {
-    double d;
-    int x[2];
-  } u = { a };
-  u.x[1] = (int)(b * (u.x[1] - 1072632447) + 1072632447);
-  u.x[0] = 0;
-  return u.d;
-}
-
-///////////////////////////////////////////////////////////////////////
 // set each element to the specified power
 ///////////////////////////////////////////////////////////////////////
 void FIELD_3D::toFastPower(double power) 
@@ -2453,7 +2445,7 @@ void FIELD_3D::toPower(double power)
 ///////////////////////////////////////////////////////////////////////
 void FIELD_3D::toPower(double power, const vector<int>& nonZeros) 
 {
-  TIMER functionTimer("toPower, sparse");
+  //TIMER functionTimer("toPower, sparse");
 
   if (FIELD_3D::_usingFastPow)
   {
@@ -2466,6 +2458,32 @@ void FIELD_3D::toPower(double power, const vector<int>& nonZeros)
   else
   {
     for (int index = 0; index < nonZeros.size(); index++)
+    {
+      const int i = nonZeros[index];
+      _data[i] = pow(_data[i], power);
+    }
+  }
+
+}
+
+///////////////////////////////////////////////////////////////////////
+// set each element to the specified power
+///////////////////////////////////////////////////////////////////////
+void FIELD_3D::toPower(double power, const vector<int>& nonZeros, const int size) 
+{
+  //TIMER functionTimer("toPower, sparse");
+
+  if (FIELD_3D::_usingFastPow)
+  {
+    for (int index = 0; index < size; index++)
+    {
+      const int i = nonZeros[index];
+      _data[i] = fastPow(_data[i], power);
+    }
+  }
+  else
+  {
+    for (int index = 0; index < size; index++)
     {
       const int i = nonZeros[index];
       _data[i] = pow(_data[i], power);

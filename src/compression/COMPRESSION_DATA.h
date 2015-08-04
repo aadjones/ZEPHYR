@@ -7,7 +7,9 @@
 #include "FIELD_3D.h"
 #include "INTEGER_FIELD_3D.h"
 
-#define BLOCK_SIZE 8
+// pushed to SETTINGS.h
+//#define BLOCK_SIZE 8
+//#define BLOCK_SIZE 16
 
 using std::cout;
 using std::endl;

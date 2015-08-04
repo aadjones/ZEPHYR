@@ -356,8 +356,10 @@ void SUBSPACE_FLUID_3D_COMPRESSED_EIGEN::stepWithObstacle()
   //reducedAdvectStagedStamFast();
   //cout << "finished reduced advection!" << endl;
 
+  cout << __FILE__ << " " << __FUNCTION__ << " " << __LINE__ << " : " << endl;
   reducedAdvectCompressionFriendly();
   cout << "finished compression-friendly advection!" << endl;
+  cout << __FILE__ << " " << __FUNCTION__ << " " << __LINE__ << " : " << endl;
   
   //cout << " post advection qDot: " << _qDot << endl;
   //exit(0);
@@ -1666,7 +1668,7 @@ void SUBSPACE_FLUID_3D_COMPRESSED_EIGEN::accumAdvectRequests(const MatrixXd& cel
       const Real dt, const VectorXd& qDot, const int cubatureIndex, const int index, 
       const VEC3I& dims, multimap<int, CUBATURE_DATA>& requestedBlocks)
 {
-  TIMER functionTimer(__FUNCTION__);
+  //TIMER functionTimer(__FUNCTION__);
   // peeled coordinates were passed in -- need to promote to full grid
   const int decompose = index;
   const int z = decompose / _slabPeeled + 1;

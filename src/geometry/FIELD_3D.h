@@ -101,6 +101,7 @@ public:
 
   void clear();
   void clear(const vector<int>& nonZeros);
+  void clear(const vector<int>& nonZeros, int size);
   
   // real-valued cell center coordinates
   VEC3F cellCenter(int x, int y, int z) const;
@@ -226,6 +227,7 @@ public:
   void toFastPower(double power);
 
   void toPower(double power, const vector<int>& nonZeros);
+  void toPower(double power, const vector<int>& nonZeros, const int size);
 
   // set to a checkerboard solid texture
   void setToSolidCheckboard(int xChecks = 10, int yChecks = 10, int zChecks = 10);
@@ -470,6 +472,20 @@ public:
   static FIELD_3D turbulence(const int xRes, const int yRes, const int zRes, const int seed);
   //static FIELD_3D turbulentPlume(const int xRes, const int yRes, const int zRes, const int seed);
   static FIELD_3D yRampField(const FIELD_3D& example, const Real plumeBase = 0.0);
+
+  // from here: 
+  // http://martin.ankerl.com/2012/01/25/optimized-approximative-pow-in-c-and-cpp/
+  static inline double fastPow(double a, double b) 
+  {
+    union {
+      double d;
+      int x[2];
+    } u = { a };
+    u.x[1] = (int)(b * (u.x[1] - 1072632447) + 1072632447);
+    u.x[0] = 0;
+    return u.d;
+  }
+
 
 private:
   int _xRes;

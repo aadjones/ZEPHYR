@@ -41,6 +41,7 @@ class INTEGER_FIELD_3D {
     // set all entries to zero
     void clear();
     void clear(const vector<int>& nonZeros);
+    void clear(const vector<int>& nonZeros, const int size);
     
     // sum of the squares of the entries
     int energySum();

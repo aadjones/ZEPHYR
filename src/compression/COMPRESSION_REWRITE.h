@@ -10,6 +10,50 @@
 #include "MATRIX_COMPRESSION_DATA.h"
 
 //////////////////////////////////////////////////////// 
+// A custom class that tracks non-zero matrix entries
+// but avoids resizing
+////////////////////////////////////////////////////////
+class NONZERO_ENTRIES {
+  public:
+    NONZERO_ENTRIES() : 
+      _data(BLOCK_SIZE * BLOCK_SIZE * BLOCK_SIZE),
+      _currentEntry(-1),
+      _maxEntries(BLOCK_SIZE * BLOCK_SIZE * BLOCK_SIZE) {};
+    ~NONZERO_ENTRIES() {};
+    void clear() { 
+      //TIMER functionTimer("NONZERO_ENTRIES clear");
+      _currentEntry = -1; 
+    };
+    void clearAll() {
+      _currentEntry = -1;
+      for (unsigned int x = 0; x < _data.size(); x++)
+        _data[x] = 0;
+    };
+    const int size() const { return _currentEntry + 1; };
+    const vector<int>& data() const { return _data; };
+    inline int& operator[](int index) { 
+      assert(index >= 0);
+      assert(index < _currentEntry + 1);
+      return _data[index];
+    };
+    inline const int operator[](int index) const { 
+      assert(index >= 0);
+      assert(index < _currentEntry + 1);
+      return _data[index];
+    }
+    void push_back(const int entry) {
+      _currentEntry++;
+      _data[_currentEntry] = entry;
+      assert(_currentEntry < _maxEntries);
+    };
+
+  private:
+    vector<int> _data;
+    int _currentEntry;
+    int _maxEntries;
+}; 
+
+//////////////////////////////////////////////////////// 
 // Function signatures
 ////////////////////////////////////////////////////////
 
@@ -22,6 +66,7 @@ void CastIntFieldToDouble(const INTEGER_FIELD_3D& F, FIELD_3D* castedField);
 // TK: Adding a version that does it on the raw pointer
 void CastIntFieldToDouble(const INTEGER_FIELD_3D& F, const int totalCells, double* castedField); 
 void CastIntFieldToDouble(const INTEGER_FIELD_3D& F, const int totalCells, double* castedField, const vector<int>& nonZeros); 
+void CastIntFieldToDouble(const INTEGER_FIELD_3D& F, const int totalCells, double* castedField, const NONZERO_ENTRIES& nonZeros); 
 
 // form the cumulative sum starting at zero of a passed in integer vector
 void ModifiedCumSum(const VectorXi& V, VectorXi* sum);
@@ -174,7 +219,8 @@ void DecodeBlock(const INTEGER_FIELD_3D& intBlock, int blockNumber, int col,
 void DecodeBlockWithCompressionData(const INTEGER_FIELD_3D& intBlock, 
   int blockNumber, int col, COMPRESSION_DATA* data, Real* decoded); 
 void DecodeBlockWithCompressionDataSparse(const INTEGER_FIELD_3D& intBlock, 
-  int blockNumber, int col, COMPRESSION_DATA* data, Real* decoded, vector<int>& nonZeros); 
+  int blockNumber, int col, COMPRESSION_DATA* data, Real* decoded, const NONZERO_ENTRIES& nonZeros); 
+void DecodeBlockWithCompressionDataSparseStackless();
 
 // flattens an INTEGER_FIELD_3D through a zig-zag scan
 // into a VectorXi. Since the scan always follows the same order,
@@ -209,7 +255,8 @@ void RunLengthDecodeBinaryInPlace(int* allData, int blockNumber, int col,
 void RunLengthDecodeBinaryInPlaceSparse(int* allData, int blockNumber, int col,
     const INTEGER_FIELD_3D& reverseZigzag, 
     COMPRESSION_DATA* compression_data,
-    INTEGER_FIELD_3D& parsedDataField, vector<int>& nonZeros);
+    INTEGER_FIELD_3D& parsedDataField, NONZERO_ENTRIES& nonZeros);
+void RunLengthDecodeBinaryInPlaceSparseStackless();
 
 // takes an input FIELD_3D which is the result of
 // an SVD coordinate transform, compresses it according
@@ -273,6 +320,10 @@ void DecodeScalarFieldEigen(COMPRESSION_DATA* compression_data, int* allData,
 // try doing it all sparsely, i.e. skipping all the zeros
 void DecodeScalarFieldEigenSparse(COMPRESSION_DATA* compression_data, int* allData, 
     int col, vector<VectorXd>* decoded);
+void DecodeScalarFieldEigenSparse(COMPRESSION_DATA* compression_data, int* allData, 
+    int col, vector<VectorXd>* decoded, vector<NONZERO_ENTRIES>& nonZeros);
+void DecodeScalarFieldEigenSparseStackless(COMPRESSION_DATA* compression_data, int* allData, 
+    int col, vector<VectorXd>* decoded, vector<NONZERO_ENTRIES>& nonZeros);
 
 // uses DecodeScalarField three times to form a vector field, and then undoes
 // the SVD transform to recover the original vector field corresponding to col
@@ -355,6 +406,8 @@ void GetSubmatrix(int startRow, MATRIX_COMPRESSION_DATA* data, MatrixXd* submatr
 void GetSubmatrixNoSVD(int startRow, MATRIX_COMPRESSION_DATA* data, MatrixXd* submatrix);
 void GetSubmatrixNoSVDSparse(int startRow, MATRIX_COMPRESSION_DATA* data, MatrixXd* submatrix);
 
+// clear out all the non-zeros from the passed in blocks
+void clearNonZeros(vector<VectorXd>& blocks, const vector<NONZERO_ENTRIES>& allNonZeros);
 
 #endif
 

@@ -11,7 +11,10 @@ using std::endl;
 // DCT_NORMALIZE is 1 / sqrt( 8 * xRes * yRes * zRes) in general!
 const double DCT_NORMALIZE = 1.0/64.0;
 const double SQRT_ONEHALF = 1.0/sqrt(2.0);
-const int BLOCK_SIZE = 8;
+
+// pushed to SETTINGS.h
+//const int BLOCK_SIZE = 8;
+//const int BLOCK_SIZE = 16;
 
 ////////////////////////////////////////////////////////
 // Function Implementations

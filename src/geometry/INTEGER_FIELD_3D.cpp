@@ -128,6 +128,13 @@ void INTEGER_FIELD_3D::clear(const vector<int>& nonZeros)
     _data[nonZeros[x]] = 0;
 }
 
+void INTEGER_FIELD_3D::clear(const vector<int>& nonZeros, const int size)
+{
+  //TIMER functionTimer("INTEGER_FIELD_3D clear");
+  for (unsigned int x = 0; x < size; x++)
+    _data[nonZeros[x]] = 0;
+}
+
 void INTEGER_FIELD_3D::resizeAndWipe(int xRes, int yRes, int zRes)
 {
   if (_xRes == xRes && _yRes == yRes && _zRes == zRes)

@@ -11,9 +11,21 @@ const double SQRT_ONEHALF = 1.0/sqrt(2.0);
 const double SQRT_TWO = sqrt(2.0);
 
 ////////////////////////////////////////////////////////
+// global vars, just to see if pushing args onto
+// the stack is getting expensive
+////////////////////////////////////////////////////////
+COMPRESSION_DATA* _compression_data = NULL;
+int* _allData;
+int _blockNumber;
+int _col;
+//INTEGER_FIELD_3D* _reverseZigzag = NULL;
+INTEGER_FIELD_3D* _unflattened = NULL;
+vector<NONZERO_ENTRIES>* _allNonZeros = NULL;
+vector<VectorXd>* _decoded = NULL;
+
+////////////////////////////////////////////////////////
 // Function Implementations
 ////////////////////////////////////////////////////////
-
 
 ////////////////////////////////////////////////////////
 // cast a FIELD_3D to an INTEGER_FIELD_3D by rounding 
@@ -27,6 +39,22 @@ void RoundFieldToInt(const FIELD_3D& F, INTEGER_FIELD_3D* castedField) {
 
   for (int i = 0; i < F.totalCells(); i++) {
     (*castedField)[i] = rint(F[i]);
+  }
+}
+
+////////////////////////////////////////////////////////
+// cast an INTEGER_FIELD_3D to a FIELD_3D
+////////////////////////////////////////////////////////
+void CastIntFieldToDouble(const INTEGER_FIELD_3D& F, const int totalCells, double* castedField, const NONZERO_ENTRIES& nonZeros) 
+{
+  TIMER functionTimer(__FUNCTION__);
+ 
+  for (int x = 0; x < nonZeros.size(); x++) 
+  {
+    const int i = nonZeros[x];
+    //assert(i < F.totalCells());
+    //assert(i >= 0);
+    castedField[i] = F[i];
   }
 }
 
@@ -52,7 +80,6 @@ void CastIntFieldToDouble(const INTEGER_FIELD_3D& F, const int totalCells, doubl
 ////////////////////////////////////////////////////////
 void CastIntFieldToDouble(const INTEGER_FIELD_3D& F, const int totalCells, double* castedField) {
   TIMER functionTimer(__FUNCTION__);
- 
   // DEBUG
   //static int zeros = 0;
   //static int total = 0;
@@ -116,7 +143,7 @@ void ModifiedCumSum(const VectorXi& V, VectorXi* sum)
 // from a passed in vector field 
 ////////////////////////////////////////////////////////
 void GetScalarFields(const VECTOR3_FIELD_3D& V, FIELD_3D* X, FIELD_3D* Y, FIELD_3D* Z) {
-  TIMER functionTimer(__FUNCTION__);
+  //TIMER functionTimer(__FUNCTION__);
   *X = V.scalarField(0);
   *Y = V.scalarField(1);
   *Z = V.scalarField(2);
@@ -263,7 +290,7 @@ void UndoNormalizeEigen(VectorXd* F)
 ////////////////////////////////////////////////////////
 void DCT_Smart_Unitary(const fftw_plan& plan, int direction, double* in, FIELD_3D* F)
 {
-  TIMER functionTimer(__FUNCTION__);
+  //TIMER functionTimer(__FUNCTION__);
 
   int xRes = F->xRes();
   int yRes = F->yRes();
@@ -280,9 +307,9 @@ void DCT_Smart_Unitary(const fftw_plan& plan, int direction, double* in, FIELD_3
   memcpy(in, F->data(), totalCells * sizeof(double));
  
   
-  TIMER fftTimer("fftw execute");
+  //TIMER fftTimer("fftw execute");
   fftw_execute(plan);
-  fftTimer.stop();
+  //fftTimer.stop();
   
   // 'in' is now overwritten to the result of the transform
 
@@ -314,9 +341,9 @@ void DCT_Smart_Unitary_Eigen(const fftw_plan& plan, int direction, double* in, V
   // fill the 'in' buffer
   memcpy(in, F->data(), totalCells * sizeof(double));
  
-  TIMER fftTimer("fftw execute");
+  //TIMER fftTimer("fftw execute");
   fftw_execute(plan);
-  fftTimer.stop();
+  //fftTimer.stop();
   // 'in' is now overwritten to the result of the transform
 
   if (direction == 1) { // forward transform; need to post-normalize!
@@ -337,7 +364,7 @@ void DCT_Smart_Unitary_Eigen(const fftw_plan& plan, int direction, double* in, V
 
 void GetPaddings(const VEC3I& v, VEC3I* paddings)
 { 
-  TIMER functionTimer(__FUNCTION__);
+  //TIMER functionTimer(__FUNCTION__);
   int xRes = v[0];
   int yRes = v[1];
   int zRes = v[2];
@@ -1225,8 +1252,48 @@ void DecodeBlockWithCompressionData(const INTEGER_FIELD_3D& intBlock,
 // due to const poisoning, compression data cannot be marked const,
 // but nonetheless it is not modified.
 ////////////////////////////////////////////////////////
+void DecodeBlockWithCompressionDataSparseStackless()
+{ 
+  TIMER functionTimer(__FUNCTION__);
+
+  const int numBlocks = _compression_data->get_numBlocks();
+  // make sure we are not accessing an invalid block
+  assert( (_blockNumber >= 0) && (_blockNumber < numBlocks) );
+
+  double* decoded = (*_decoded)[_blockNumber].data();
+  NONZERO_ENTRIES& nonZeros = (*_allNonZeros)[_blockNumber];
+  CastIntFieldToDouble((*_unflattened), (*_unflattened).totalCells(), decoded, nonZeros);
+
+  // use the appropriate scale factor to decode
+  MatrixXd* sList = _compression_data->get_sListMatrix();
+  //double s = (*sList)(_blockNumber, _col);
+  //double sInv = 1.0 / s;
+  const double sInv = 1.0 / (*sList)(_blockNumber, _col);
+  MatrixXd* gammaList = _compression_data->get_gammaListMatrix();
+  const double gamma = (*gammaList)(_blockNumber, _col);
+    
+  // dequantize by inverting the scaling by s and contracting by the 
+  // appropriate gamma-modulated damping array
+  //
+  // TK: Lots of time can be spent here, but it appears to be because of
+  // the pow call, not because the sparsity is not fully exploited
+  TIMER dampingTimer("Decode Damping Copy");
+  const FIELD_3D& dampingArray = _compression_data->get_dampingArray();
+  for (unsigned int x = 0; x < nonZeros.size(); x++)
+  {
+    const int i = nonZeros[x];
+    decoded[i] *= FIELD_3D::fastPow(dampingArray[i],gamma) * sInv;
+  }
+}
+
+////////////////////////////////////////////////////////
+// does the same operations as DecodeBlock, but with a passed
+// in compression data parameter rather than decompression data 
+// due to const poisoning, compression data cannot be marked const,
+// but nonetheless it is not modified.
+////////////////////////////////////////////////////////
 void DecodeBlockWithCompressionDataSparse(const INTEGER_FIELD_3D& intBlock, 
-  int blockNumber, int col, COMPRESSION_DATA* data, Real* decoded, vector<int>& nonZeros) 
+  int blockNumber, int col, COMPRESSION_DATA* data, Real* decoded, const NONZERO_ENTRIES& nonZeros) 
 { 
   TIMER functionTimer(__FUNCTION__);
 
@@ -1234,59 +1301,26 @@ void DecodeBlockWithCompressionDataSparse(const INTEGER_FIELD_3D& intBlock,
   // make sure we are not accessing an invalid block
   assert( (blockNumber >= 0) && (blockNumber < numBlocks) );
 
-  TIMER castTimer("Decode Cast");
+  //TIMER castTimer("Decode Cast");
   //CastIntFieldToDouble(intBlock, intBlock.totalCells(), decoded);
   //FIELD_3D dummy(BLOCK_SIZE, BLOCK_SIZE, BLOCK_SIZE);
   //CastIntFieldToDouble(intBlock, intBlock.totalCells(), dummy.data(), nonZeros);
   CastIntFieldToDouble(intBlock, intBlock.totalCells(), decoded, nonZeros);
 
-  /*
-  Real diff = 0;
-  int nons = 0;
-  for (int x = 0; x < intBlock.totalCells(); x++)
-  {
-    diff += fabs(dummy[x] - decoded[x]);
-
-    if (fabs(decoded[x]) > 1e-5)
-    {
-      nons++;
-    }
-  }
-
-  cout << __FILE__ << " " << __FUNCTION__ << " " << __LINE__ << " : " << endl;
-  cout << " Diff: " << diff << endl;
-  cout << " Non-zeros seen: " << nons << endl;
-  cout << " Non-zeros predicted: " << nonZeros.size() << endl;
-  */
-
   // use the appropriate scale factor to decode
   MatrixXd* sList = data->get_sListMatrix();
-  double s = (*sList)(blockNumber, col);
-  double sInv = 1.0 / s;
+  const double sInv = 1.0 / (*sList)(blockNumber, col);
   MatrixXd* gammaList = data->get_gammaListMatrix();
-  double gamma = (*gammaList)(blockNumber, col);
+  const double gamma = (*gammaList)(blockNumber, col);
     
   // dequantize by inverting the scaling by s and contracting by the 
   // appropriate gamma-modulated damping array
-  TIMER dampingTimer("Decode Damping Copy");
   const FIELD_3D& dampingArray = data->get_dampingArray();
-  static FIELD_3D damp(BLOCK_SIZE, BLOCK_SIZE, BLOCK_SIZE);
-  memcpy(damp.data(), dampingArray.dataConst(), damp.totalCells() * sizeof(Real));
-  //damp.toPower(gamma);
-  damp.toPower(gamma, nonZeros);
-
-  // undo the dampings and preprocess
-  TIMER applyPowerTimer("Decode Apply Power");
-#if 0
-  for (int x = 0; x < intBlock.totalCells(); x++)
-    decoded[x] *= damp[x] * sInv;
-#else
   for (unsigned int x = 0; x < nonZeros.size(); x++)
   {
     const int i = nonZeros[x];
-    decoded[i] *= damp[i] * sInv;
+    decoded[i] *= FIELD_3D::fastPow(dampingArray[i],gamma) * sInv;
   }
-#endif
 }
 
 ////////////////////////////////////////////////////////
@@ -1525,7 +1559,8 @@ void RunLengthDecodeBinaryInPlaceSparse(int* allData, int blockNumber, int col,
     const INTEGER_FIELD_3D& reverseZigzag, 
     COMPRESSION_DATA* compression_data,
     INTEGER_FIELD_3D& parsedDataField,
-    vector<int>& nonZeros)
+    NONZERO_ENTRIES& nonZeros)
+    //vector<int>& nonZeros)
 {
   TIMER functionTimer(__FUNCTION__);
   //MatrixXi* blockLengthsMatrix = compression_data->get_blockLengthsMatrix(); 
@@ -1562,6 +1597,64 @@ void RunLengthDecodeBinaryInPlaceSparse(int* allData, int blockNumber, int col,
         for (int x = 0; x < runLength - 1; x++)
         {
           parsedDataField[reverseZigzag[j + 1 + x]] = value;
+
+          if (value != 0)
+            nonZeros.push_back(reverseZigzag[j + 1 + x]);
+        }
+        
+        i += 2;
+        j += (runLength - 1);
+      }
+      i++;
+      j++;
+    }
+  }
+}
+
+////////////////////////////////////////////////////////
+// decode a run-length encoded binary file and fill 
+// a VectorXi with the contents.
+////////////////////////////////////////////////////////
+void RunLengthDecodeBinaryInPlaceSparseStackless()
+{
+  TIMER functionTimer(__FUNCTION__);
+  //MatrixXi* blockLengthsMatrix = compression_data->get_blockLengthsMatrix(); 
+  const int compressedBlockSize = (*_compression_data->get_blockLengthsMatrix())(_blockNumber, _col);
+  //assert(compressedBlockSize >= 0 && compressedBlockSize <= 2 * BLOCK_SIZE * BLOCK_SIZE * BLOCK_SIZE);
+
+  //MatrixXi* blockIndicesMatrix = compression_data->get_blockIndicesMatrix();
+  const int blockIndex = (*_compression_data->get_blockIndicesMatrix())(_blockNumber, _col);
+
+  const INTEGER_FIELD_3D& reverseZigzag = _compression_data->get_reverseZigzag();
+  NONZERO_ENTRIES& nonZeros = (*_allNonZeros)[_blockNumber];
+
+  int i = 0;
+  //int runLength = 1;
+  int j = 0;
+
+  //TIMER whileTimer("Run length in-place while timer");
+  while (i < compressedBlockSize) 
+  {
+    const int index = blockIndex + i;
+    const int value = _allData[index];
+    const int next = _allData[index + 1];
+    const int runLength = _allData[index + 2];
+
+    if (value == 0 && next == 0)
+    {
+      i += 3;
+      j += runLength;
+    }
+    else
+    {
+      (*_unflattened)[reverseZigzag[j]] = value;
+      if (value != 0)
+        nonZeros.push_back(reverseZigzag[j]);
+      if ((i + 1 < compressedBlockSize) && value == next) 
+      {
+        for (int x = 0; x < runLength - 1; x++)
+        {
+          (*_unflattened)[reverseZigzag[j + 1 + x]] = value;
 
           if (value != 0)
             nonZeros.push_back(reverseZigzag[j + 1 + x]);
@@ -2149,7 +2242,7 @@ void GetSubmatrix(int startRow, MATRIX_COMPRESSION_DATA* data, MatrixXd* submatr
   int cachedBlockNumber = data->get_cachedBlockNumber();
   cout << "cachedBlockNumber: " << cachedBlockNumber << endl;
   if (blockNumber == cachedBlockNumber) { // if we've already decoded this block
-    TIMER cacheTimer("cached block");
+    //TIMER cacheTimer("cached block");
 
     cout << "Used cache!" << endl;
     
@@ -2338,7 +2431,7 @@ void GetSubmatrixNoSVD(int startRow, MATRIX_COMPRESSION_DATA* data, MatrixXd* su
   // compare the cache to the current
   int cachedBlockNumber = data->get_cachedBlockNumber();
   if (blockNumber == cachedBlockNumber) { // if we've already decoded this block
-    TIMER cacheTimer("cached block");
+    //TIMER cacheTimer("cached block");
 
     // cout << "Used cache!" << endl;
     
@@ -2366,7 +2459,7 @@ void GetSubmatrixNoSVD(int startRow, MATRIX_COMPRESSION_DATA* data, MatrixXd* su
 
   else { // no cache; have to compute it from scratch
     // cout << "Didn't use cache!" << endl;  
-    TIMER uncachedTimer("uncached block");
+    //TIMER uncachedTimer("uncached block");
 
     // initialize useful data
     int numBlocks = compression_dataX->get_numBlocks();
@@ -2498,7 +2591,6 @@ void GetSubmatrixNoSVD(int startRow, MATRIX_COMPRESSION_DATA* data, MatrixXd* su
 void GetSubmatrixNoSVDSparse(int startRow, MATRIX_COMPRESSION_DATA* data, MatrixXd* submatrix) 
 {
   TIMER functionTimer(__FUNCTION__);
-
   assert ( startRow % 3 == 0 );
   
   // start fetching useful parameters
@@ -2516,7 +2608,7 @@ void GetSubmatrixNoSVDSparse(int startRow, MATRIX_COMPRESSION_DATA* data, Matrix
   // compare the cache to the current
   int cachedBlockNumber = data->get_cachedBlockNumber();
   if (blockNumber == cachedBlockNumber) { // if we've already decoded this block
-    TIMER cacheTimer("cached block");
+    //TIMER cacheTimer("cached block");
 
     // cout << "Used cache!" << endl;
     
@@ -2544,11 +2636,11 @@ void GetSubmatrixNoSVDSparse(int startRow, MATRIX_COMPRESSION_DATA* data, Matrix
 
   else { // no cache; have to compute it from scratch
     // cout << "Didn't use cache!" << endl;  
-    TIMER uncachedTimer("uncached block");
+    //TIMER uncachedTimer("uncached block");
 
     // initialize useful data
     int numBlocks = compression_dataX->get_numBlocks();
-    const INTEGER_FIELD_3D& zigzagArray = compression_dataX->get_zigzagArray();
+    //const INTEGER_FIELD_3D& zigzagArray = compression_dataX->get_zigzagArray();
     const INTEGER_FIELD_3D& reverseZigzag = compression_dataX->get_reverseZigzag();
     
     int* allDataX = data->get_dataX();
@@ -2572,7 +2664,6 @@ void GetSubmatrixNoSVDSparse(int startRow, MATRIX_COMPRESSION_DATA* data, Matrix
     double* in = data->get_dct_in();
     int direction = -1;
 
-     
     // pointers to the cache 
     vector<FIELD_3D>* cachedBlocksX = data->get_cachedBlocksX();
     vector<FIELD_3D>* cachedBlocksY = data->get_cachedBlocksY();
@@ -2580,10 +2671,9 @@ void GetSubmatrixNoSVDSparse(int startRow, MATRIX_COMPRESSION_DATA* data, Matrix
 
     INTEGER_FIELD_3D unflattened(BLOCK_SIZE, BLOCK_SIZE, BLOCK_SIZE);
     FIELD_3D decodedBlock(BLOCK_SIZE, BLOCK_SIZE, BLOCK_SIZE);
+    NONZERO_ENTRIES nonZeros;
     for (int i = 0; i < numCols; i++) 
     {
-
-      
       // a container for column i
       Vector3d preSVD_i;
       /*
@@ -2593,15 +2683,15 @@ void GetSubmatrixNoSVDSparse(int startRow, MATRIX_COMPRESSION_DATA* data, Matrix
       */
 
       // DEBUG: while the end of the iteration doesn't clear it entirely
-      unflattened.clear();
+      //unflattened.clear();
       decodedBlock.clear();
 
-      vector<int> nonZeros;
-      nonZeros.reserve(BLOCK_SIZE * BLOCK_SIZE * BLOCK_SIZE);
+      nonZeros.clear();
+      //vector<int> nonZeros;
+      //nonZeros.reserve(BLOCK_SIZE * BLOCK_SIZE * BLOCK_SIZE);
 
       // decode the run-length scheme
-      RunLengthDecodeBinaryInPlaceSparse(allDataX, blockNumber, i, 
-          reverseZigzag, compression_dataX, unflattened, nonZeros);
+      RunLengthDecodeBinaryInPlaceSparse(allDataX, blockNumber, i, reverseZigzag, compression_dataX, unflattened, nonZeros);
 
       // undo the scaling from the quantizer
       DecodeBlockWithCompressionDataSparse(unflattened, blockNumber, i, compression_dataX, decodedBlock.data(), nonZeros);
@@ -2615,14 +2705,14 @@ void GetSubmatrixNoSVDSparse(int startRow, MATRIX_COMPRESSION_DATA* data, Matrix
       (*cachedBlocksX)[i] = decodedBlock;
       
       // clear things out for the next coordinate
-      unflattened.clear(nonZeros);
+      unflattened.clear(nonZeros.data());
 
       // TK: Why doesn't this clear do what it's supposed to?
       //decodedBlock.clear(nonZeros);
       //unflattened.clear();
       decodedBlock.clear();
       nonZeros.clear();
-      nonZeros.reserve(BLOCK_SIZE * BLOCK_SIZE * BLOCK_SIZE);
+      //nonZeros.reserve(BLOCK_SIZE * BLOCK_SIZE * BLOCK_SIZE);
 
       /*
        *****************************************************************
@@ -2650,14 +2740,14 @@ void GetSubmatrixNoSVDSparse(int startRow, MATRIX_COMPRESSION_DATA* data, Matrix
       (*cachedBlocksY)[i] = decodedBlock;
 
       // clear things out for the next coordinate
-      unflattened.clear(nonZeros);
+      unflattened.clear(nonZeros.data());
       
       // TK: Why doesn't this clear do what it's supposed to?
       //decodedBlock.clear(nonZeros);
       //unflattened.clear();
       decodedBlock.clear();
       nonZeros.clear();
-      nonZeros.reserve(BLOCK_SIZE * BLOCK_SIZE * BLOCK_SIZE);
+      //nonZeros.reserve(BLOCK_SIZE * BLOCK_SIZE * BLOCK_SIZE);
 
       /*
        *****************************************************************
@@ -2687,14 +2777,14 @@ void GetSubmatrixNoSVDSparse(int startRow, MATRIX_COMPRESSION_DATA* data, Matrix
 
 
       // clear things out for the next coordinate
-      unflattened.clear(nonZeros);
+      unflattened.clear(nonZeros.data());
       
       // TK: Why doesn't this clear do what it's supposed to?
       //decodedBlock.clear(nonZeros);
       //unflattened.clear();
       decodedBlock.clear();
       nonZeros.clear();
-      nonZeros.reserve(BLOCK_SIZE * BLOCK_SIZE * BLOCK_SIZE);
+      //nonZeros.reserve(BLOCK_SIZE * BLOCK_SIZE * BLOCK_SIZE);
 
       // set the column
       submatrix->col(i) = preSVD_i;
@@ -3176,6 +3266,120 @@ void DecodeScalarFieldEigen(COMPRESSION_DATA* compression_data, int* allData,
 // *without* going back to the spatial domain (or the SVD transform). leave them
 // in a list of blocks as well.
 ////////////////////////////////////////////////////////
+void DecodeScalarFieldEigenSparseStackless(COMPRESSION_DATA* compression_data, int* allData, 
+    int col, vector<VectorXd>* decoded, vector<NONZERO_ENTRIES>& allNonZeros)
+{
+  TIMER functionTimer(__FUNCTION__);
+
+  // get the dims from data and construct a field of the appropriate size
+  const VEC3I& dims = compression_data->get_dims();
+
+  // fill in the paddings
+  VEC3I newDims;
+  GetPaddings(dims, &newDims);
+
+  // update the resolutions
+  newDims += dims;
+
+  // fetch numBlocks and precomputed zigzag table
+  const int numBlocks = compression_data->get_numBlocks();
+  //const INTEGER_FIELD_3D& reverseZigzag = compression_data->get_reverseZigzag();
+
+  // TK: Trying making these static so it doesn't allocate and deallocate every
+  // time. Might cause problems with OpenMP later.
+  static INTEGER_FIELD_3D unflattened(BLOCK_SIZE, BLOCK_SIZE, BLOCK_SIZE);
+
+  // store globally once
+  _compression_data = compression_data;
+  _allData = allData;
+  _col = col;
+  _unflattened = &unflattened;
+  _allNonZeros = &allNonZeros;
+  _decoded = decoded;
+
+  NONZERO_ENTRIES* nonZeros = &(allNonZeros[0]);
+  for (int blockNumber = 0; blockNumber < numBlocks; blockNumber++) 
+  {
+    _blockNumber = blockNumber;
+
+    //NONZERO_ENTRIES* nonZeros = allNonZeros[blockNumber];
+    nonZeros = &(allNonZeros[blockNumber]);
+    //nonZeros.clear();
+    nonZeros->clear();
+
+    // decode the run length scheme
+    //RunLengthDecodeBinaryInPlaceSparse(allData, blockNumber, col, 
+    //    reverseZigzag, compression_data, unflattened, nonZeros);
+    RunLengthDecodeBinaryInPlaceSparseStackless();
+
+    // TK: Do the decode in a way that avoids the need to copy into an Eigen
+    // VectorXd at the end
+    //VectorXd& final = (*decoded)[blockNumber];
+    //DecodeBlockWithCompressionDataSparse(unflattened, blockNumber, col,
+    //    compression_data, final.data(), nonZeros);
+    DecodeBlockWithCompressionDataSparseStackless();
+
+    //unflattened.clear(nonZeros.data(), nonZeros.size());
+    unflattened.clear(nonZeros->data(), nonZeros->size());
+  }
+}
+
+////////////////////////////////////////////////////////
+// decode an entire scalar field of a particular column from matrix compression data
+// *without* going back to the spatial domain (or the SVD transform). leave them
+// in a list of blocks as well.
+////////////////////////////////////////////////////////
+void DecodeScalarFieldEigenSparse(COMPRESSION_DATA* compression_data, int* allData, 
+    int col, vector<VectorXd>* decoded, vector<NONZERO_ENTRIES>& allNonZeros)
+{
+  TIMER functionTimer(__FUNCTION__);
+
+  // get the dims from data and construct a field of the appropriate size
+  const VEC3I& dims = compression_data->get_dims();
+
+  // fill in the paddings
+  VEC3I newDims;
+  GetPaddings(dims, &newDims);
+
+  // update the resolutions
+  newDims += dims;
+
+  // fetch numBlocks and precomputed zigzag table
+  const int numBlocks = compression_data->get_numBlocks();
+  const INTEGER_FIELD_3D& reverseZigzag = compression_data->get_reverseZigzag();
+
+  // TK: Trying making these static so it doesn't allocate and deallocate every
+  // time. Might cause problems with OpenMP later.
+  static INTEGER_FIELD_3D unflattened(BLOCK_SIZE, BLOCK_SIZE, BLOCK_SIZE);
+
+  //TIMER functionTimer2("DecodeScalarFieldEigenSparse, block 2");
+  //NONZERO_ENTRIES& nonZeros = allNonZeros[0];
+  //VectorXd& final = (*decoded)[0];
+
+  //for (int blockNumber = 0; blockNumber < numBlocks; blockNumber++) 
+  for (int blockNumber = 0; blockNumber < numBlocks; ++blockNumber) 
+  {
+    NONZERO_ENTRIES& nonZeros = allNonZeros[blockNumber];
+    nonZeros.clear();
+
+    // decode the run length scheme
+    RunLengthDecodeBinaryInPlaceSparse(allData, blockNumber, col, 
+        reverseZigzag, compression_data, unflattened, nonZeros);
+
+    // TK: Do the decode in a way that avoids the need to copy into an Eigen
+    // VectorXd at the end
+    VectorXd& final = (*decoded)[blockNumber];
+    DecodeBlockWithCompressionDataSparse(unflattened, blockNumber, col,
+        compression_data, final.data(), nonZeros);
+    unflattened.clear(nonZeros.data(), nonZeros.size());
+  }
+}
+
+////////////////////////////////////////////////////////
+// decode an entire scalar field of a particular column from matrix compression data
+// *without* going back to the spatial domain (or the SVD transform). leave them
+// in a list of blocks as well.
+////////////////////////////////////////////////////////
 void DecodeScalarFieldEigenSparse(COMPRESSION_DATA* compression_data, int* allData, 
     int col, vector<VectorXd>* decoded)
 {
@@ -3192,31 +3396,27 @@ void DecodeScalarFieldEigenSparse(COMPRESSION_DATA* compression_data, int* allDa
   newDims += dims;
 
   // fetch numBlocks and precomputed zigzag table
-  int numBlocks = compression_data->get_numBlocks();
+  const int numBlocks = compression_data->get_numBlocks();
   const INTEGER_FIELD_3D& reverseZigzag = compression_data->get_reverseZigzag();
 
   // resize the container we will return
-  decoded->resize(numBlocks);
+  //decoded->resize(numBlocks);
   for (int x = 0; x < numBlocks; x++)
   {
-    (*decoded)[x].resize(BLOCK_SIZE * BLOCK_SIZE * BLOCK_SIZE);
+    //(*decoded)[x].resize(BLOCK_SIZE * BLOCK_SIZE * BLOCK_SIZE);
     (*decoded)[x].setZero();
   }
 
-  // variable to store decoded run-length blocks
-  // TK: This is always the same size, so set it once
-  VectorXi runLengthDecoded(BLOCK_SIZE * BLOCK_SIZE * BLOCK_SIZE);
-
   // TK: Trying making these static so it doesn't allocate and deallocate every
   // time. Might cause problems with OpenMP later.
-  static FIELD_3D decodedBlock(BLOCK_SIZE, BLOCK_SIZE, BLOCK_SIZE);
+  //static FIELD_3D decodedBlock(BLOCK_SIZE, BLOCK_SIZE, BLOCK_SIZE);
   static INTEGER_FIELD_3D unflattened(BLOCK_SIZE, BLOCK_SIZE, BLOCK_SIZE);
-
+  static NONZERO_ENTRIES nonZeros;
   for (int blockNumber = 0; blockNumber < numBlocks; blockNumber++) 
   {
-    //decodedBlock.clear();
-    vector<int> nonZeros;
-    nonZeros.reserve(BLOCK_SIZE * BLOCK_SIZE * BLOCK_SIZE);
+    //vector<int> nonZeros;
+    //nonZeros.reserve(BLOCK_SIZE * BLOCK_SIZE * BLOCK_SIZE);
+    nonZeros.clear();
 
     // decode the run length scheme
     RunLengthDecodeBinaryInPlaceSparse(allData, blockNumber, col, 
@@ -3229,7 +3429,7 @@ void DecodeScalarFieldEigenSparse(COMPRESSION_DATA* compression_data, int* allDa
         compression_data, final.data(), nonZeros);
     //DecodeBlockWithCompressionData(unflattened, blockNumber, col,
     //    compression_data, final.data());
-    unflattened.clear(nonZeros);
+    unflattened.clear(nonZeros.data(), nonZeros.size());
   }
 }
 
@@ -3381,15 +3581,29 @@ void PeeledCompressedUnprojectTransform(MATRIX_COMPRESSION_DATA* U_data, const V
   int* allDataZ = U_data->get_dataZ();
 
   // verify that the (peeled) dimensions match
-  void GetPaddings(const VEC3I& v, VEC3I* paddings);
+  //void GetPaddings(const VEC3I& v, VEC3I* paddings);
   VEC3I paddings;
   GetPaddings(dims, &paddings);
   paddings += dims;
-  assert( xRes == paddings[0] && yRes == paddings[1] && zRes == paddings[2] );
+
+  // TK: Trying a different res. This seems quite restrictive?
+  //assert( xRes == paddings[0] && yRes == paddings[1] && zRes == paddings[2] );
   assert ( totalColumns == q.size() );
 
   // a dummy container for each decoded column
   vector<VectorXd> blocks;
+
+  // size it once and for all
+  blocks.resize(numBlocks);
+  for (int x = 0; x < numBlocks; x++)
+  {
+    blocks[x].resize(BLOCK_SIZE * BLOCK_SIZE *BLOCK_SIZE);
+    blocks[x].setZero();
+  }
+
+  // track where all the nonzeros are
+  vector<NONZERO_ENTRIES> allNonZeros(numBlocks);
+
   // three containers for the x, y, and z components
   vector<VectorXd> resultX(numBlocks);
   vector<VectorXd> resultY(numBlocks);
@@ -3402,45 +3616,85 @@ void PeeledCompressedUnprojectTransform(MATRIX_COMPRESSION_DATA* U_data, const V
     resultZ[i].setZero(BLOCK_SIZE * BLOCK_SIZE * BLOCK_SIZE);
   }
 
-  TIMER axpyTimer("Unproject axpy ops");
+  TIMER axpyTimer("Unproject core");
   // loop through the columns and interpret the matrix-vector multiply as
   // a linear combination of the columns
   for (int col = 0; col < totalColumns; col++) {
 
     // decode the data but stay in the freq domain
-    //DecodeScalarFieldEigen(dataX, allDataX, col, &blocks);
-    DecodeScalarFieldEigenSparse(dataX, allDataX, col, &blocks);
+    //DecodeScalarFieldEigenSparse(dataX, allDataX, col, &blocks);
+    DecodeScalarFieldEigenSparse(dataX, allDataX, col, &blocks, allNonZeros);
+    //DecodeScalarFieldEigenSparseStackless(dataX, allDataX, col, &blocks, allNonZeros);
     
-    /*
-    // multiply by the corresponding entry in q
-    ScaleVectorEigen(q[col], &blocks);
-    // and store the growing linear combination in each of the x, y, z components
-    AddVectorEigen(blocks, &resultX);
-    */
     // TK: give Eigen the chance to fuse the axpy
     // Most architectures have a special instruction that does a single multiply and add
     // in a single clock cycle, so you should try to apply them simultaneously whenever
     // you can so that the compiler can try to fuse the two ops
+#define SPARSE_AXPY 1
+#if !SPARSE_AXPY
     for (int x = 0; x < numBlocks; x++)
       resultX[x] += q[col] * blocks[x];
+#else
+    const Real qCurrent = q[col];
+    for (int x = 0; x < numBlocks; x++)
+    {
+      const NONZERO_ENTRIES& nonZeros = allNonZeros[x];
+      const VectorXd& block = blocks[x];
+      VectorXd& result = resultX[x];
+      for (int y = 0; y < nonZeros.size(); y++)
+      {
+        const int i = nonZeros[y];
+        result[i] += qCurrent * block[i];
+      }
+    }
+#endif
+    clearNonZeros(blocks, allNonZeros);
  
-    //DecodeScalarFieldEigen(dataY, allDataY, col, &blocks);
-    DecodeScalarFieldEigenSparse(dataY, allDataY, col, &blocks);
-    //ScaleVectorEigen(q[col], &blocks);
-    //AddVectorEigen(blocks, &resultY);
+    //DecodeScalarFieldEigenSparse(dataY, allDataY, col, &blocks);
+    DecodeScalarFieldEigenSparse(dataY, allDataY, col, &blocks, allNonZeros);
+    //DecodeScalarFieldEigenSparseStackless(dataY, allDataY, col, &blocks, allNonZeros);
     
     // TK:  give Eigen the chance to fuse the axpy
+#if !SPARSE_AXPY
     for (int x = 0; x < numBlocks; x++)
       resultY[x] += q[col] * blocks[x];
+#else
+    for (int x = 0; x < numBlocks; x++)
+    {
+      const NONZERO_ENTRIES& nonZeros = allNonZeros[x];
+      const VectorXd& block = blocks[x];
+      VectorXd& result = resultY[x];
+      for (int y = 0; y < nonZeros.size(); y++)
+      {
+        const int i = nonZeros[y];
+        result[i] += qCurrent * block[i];
+      }
+    }
+#endif
+    clearNonZeros(blocks, allNonZeros);
    
-    //DecodeScalarFieldEigen(dataZ, allDataZ, col, &blocks);
-    DecodeScalarFieldEigenSparse(dataZ, allDataZ, col, &blocks);
-    //ScaleVectorEigen(q[col], &blocks);
-    //AddVectorEigen(blocks, &resultZ); 
+    //DecodeScalarFieldEigenSparse(dataZ, allDataZ, col, &blocks);
+    DecodeScalarFieldEigenSparse(dataZ, allDataZ, col, &blocks, allNonZeros);
+    //DecodeScalarFieldEigenSparseStackless(dataZ, allDataZ, col, &blocks, allNonZeros);
     
     // give Eigen the chance to fuse the axpy
+#if !SPARSE_AXPY
     for (int x = 0; x < numBlocks; x++)
       resultZ[x] += q[col] * blocks[x];
+#else
+    for (int x = 0; x < numBlocks; x++)
+    {
+      const NONZERO_ENTRIES& nonZeros = allNonZeros[x];
+      const VectorXd& block = blocks[x];
+      VectorXd& result = resultZ[x];
+      for (int y = 0; y < nonZeros.size(); y++)
+      {
+        const int i = nonZeros[y];
+        result[i] += qCurrent * block[i];
+      }
+    }
+#endif
+    clearNonZeros(blocks, allNonZeros);
   }
 
   // TK: lump the rest of the timing into the function's timer
@@ -3469,6 +3723,37 @@ void PeeledCompressedUnprojectTransform(MATRIX_COMPRESSION_DATA* U_data, const V
   V->setWithPeeled(result.flattenedEigen());
 
 }
+
+//////////////////////////////////////////////////////////////////////
+// compute the block-wise dot product between two lists and sum them into one
+// large dot product
+//////////////////////////////////////////////////////////////////////
+double GetDotProductSumSparse(const vector<VectorXd>& Vlist, const vector<VectorXd>& Wlist, const vector<NONZERO_ENTRIES>& allNonZeros) 
+{
+  assert(Vlist.size() == Wlist.size());
+
+  int size = Vlist.size();
+  double dotProductSum = 0.0;
+
+  for (int i = 0; i < size; i++) 
+  {
+    double dotProduct_i = 0;
+    const VectorXd& V = Vlist[i];
+    const VectorXd& W = Wlist[i];
+    const NONZERO_ENTRIES& nonZeros = allNonZeros[i];
+
+    for (int x = 0; x < nonZeros.size(); x++)
+    {
+      const int y = nonZeros[x];
+      dotProduct_i += V[y] * W[y];
+    }
+    dotProductSum += dotProduct_i;
+  }
+
+  return dotProductSum;
+
+}
+
 
 //////////////////////////////////////////////////////////////////////
 // compute the block-wise dot product between two lists and sum them into one
@@ -3637,23 +3922,48 @@ void PeeledCompressedProjectTransformNoSVD(const VECTOR3_FIELD_3D& V,
   q->resize(totalColumns);
 
   vector<VectorXd> Xpart, Ypart, Zpart;
-  vector<VectorXd> blocks;
+
+  // size the dummy blocks once and for all
+  const int numBlocks = dataX->get_numBlocks();
+  vector<VectorXd> blocks(numBlocks);
+  for (int x = 0; x < numBlocks; x++)
+  {
+    blocks[x].resize(BLOCK_SIZE * BLOCK_SIZE * BLOCK_SIZE);
+    blocks[x].setZero();
+  }
+  
+  // track where all the nonzeros are
+  vector<NONZERO_ENTRIES> allNonZeros(numBlocks);
 
   TransformDCT(V, U_data, &Xpart, &Ypart, &Zpart); 
 
-  for (int col = 0; col < totalColumns; col++) {
+  TIMER functionTimer2("Project core");
+  for (int col = 0; col < totalColumns; col++) 
+  {
     double totalSum = 0.0;
     //DecodeScalarFieldEigen(dataX, allDataX, col, &blocks);
-    DecodeScalarFieldEigenSparse(dataX, allDataX, col, &blocks);
-    totalSum += GetDotProductSum(blocks, Xpart);
+    //DecodeScalarFieldEigenSparse(dataX, allDataX, col, &blocks);
+    DecodeScalarFieldEigenSparse(dataX, allDataX, col, &blocks, allNonZeros);
+    //DecodeScalarFieldEigenSparseStackless(dataX, allDataX, col, &blocks, allNonZeros);
+    //totalSum += GetDotProductSum(blocks, Xpart);
+    totalSum += GetDotProductSumSparse(blocks, Xpart, allNonZeros);
+    clearNonZeros(blocks, allNonZeros);
 
     //DecodeScalarFieldEigen(dataY, allDataY, col, &blocks);
-    DecodeScalarFieldEigenSparse(dataY, allDataY, col, &blocks);
-    totalSum += GetDotProductSum(blocks, Ypart);
+    //DecodeScalarFieldEigenSparse(dataY, allDataY, col, &blocks);
+    DecodeScalarFieldEigenSparse(dataY, allDataY, col, &blocks, allNonZeros);
+    //DecodeScalarFieldEigenSparseStackless(dataY, allDataY, col, &blocks, allNonZeros);
+    //totalSum += GetDotProductSum(blocks, Ypart);
+    totalSum += GetDotProductSumSparse(blocks, Ypart, allNonZeros);
+    clearNonZeros(blocks, allNonZeros);
 
     //DecodeScalarFieldEigen(dataZ, allDataZ, col, &blocks);
-    DecodeScalarFieldEigenSparse(dataZ, allDataZ, col, &blocks);
-    totalSum += GetDotProductSum(blocks, Zpart);
+    //DecodeScalarFieldEigenSparse(dataZ, allDataZ, col, &blocks);
+    DecodeScalarFieldEigenSparse(dataZ, allDataZ, col, &blocks, allNonZeros);
+    //DecodeScalarFieldEigenSparseStackless(dataZ, allDataZ, col, &blocks, allNonZeros);
+    //totalSum += GetDotProductSum(blocks, Zpart);
+    totalSum += GetDotProductSumSparse(blocks, Zpart, allNonZeros);
+    clearNonZeros(blocks, allNonZeros);
 
     (*q)[col] = totalSum;
   }
@@ -3686,3 +3996,26 @@ void SetZeroPadding(vector<VectorXd>* blocks, COMPRESSION_DATA* data)
 
 }
 
+//////////////////////////////////////////////////////////////////////
+// clear out all the non-zeros from the passed in blocks
+//////////////////////////////////////////////////////////////////////
+void clearNonZeros(vector<VectorXd>& blocks, const vector<NONZERO_ENTRIES>& allNonZeros)
+{
+  //TIMER functionTimer(__FUNCTION__);
+  assert(blocks.size() == allNonZeros.size());
+
+  for (unsigned int x = 0; x < blocks.size(); x++)
+  {
+    VectorXd& block = blocks[x];
+    const NONZERO_ENTRIES& nonZeros = allNonZeros[x];
+
+    //block.setZero();
+    //continue;
+
+    for (int i = 0; i < nonZeros.size(); i++)
+    {
+      assert(nonZeros[i] < block.size());
+      block[nonZeros[i]] = 0.0;
+    }
+  }
+}
