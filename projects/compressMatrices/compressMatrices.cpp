@@ -71,7 +71,7 @@ int main(int argc, char* argv[]) {
   int numCols = parser.getInt("reduced snapshots", 47);
   bool usingIOP = parser.getBool("iop", 0);
   cout << " Using IOP: " << usingIOP << endl;
-  
+  cout << " Block size: " << BLOCK_SIZE << endl; 
   // we want the peeled resolutions for the matrices
   xRes -= 2;
   yRes -= 2;

@@ -108,7 +108,7 @@ public:
 
   // load the bases needed for cubature runtime
   void loadReducedRuntimeBases(string path = string(""));
-  void loadReducedIOP(string path = string(""));
+  void loadReducedIOP(string path = string(""), bool debug = 0);
 
 
   // read in a cubature scheme

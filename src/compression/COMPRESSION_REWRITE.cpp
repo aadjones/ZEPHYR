@@ -1044,8 +1044,9 @@ void TuneGammaFastPow(const FIELD_3D& F, int blockNumber, int col,
 }
 
 ////////////////////////////////////////////////////////
-// simply sets gamma equal to zero for no damping. for
-// debug purposes only.
+// simply sets gamma equal to 1.0, so that it is equivalent
+// to doing nothing to the precomputed damping array. for
+// debug/timing purposes only.
 ///////////////////////////////////////////////////////
 void TuneGammaDebug(const FIELD_3D& F, int blockNumber, int col, 
     COMPRESSION_DATA* data, FIELD_3D* damp)
@@ -1053,8 +1054,7 @@ void TuneGammaDebug(const FIELD_3D& F, int blockNumber, int col,
   TIMER functionTimer(__FUNCTION__);
 
   // set gamma to zero always, for debugging
-  double gamma = 0.0; 
-  damp->toPower(gamma);
+  double gamma = 1.0; 
   
   // fetch data to update gammaList
   MatrixXd* gammaListMatrix = data->get_gammaListMatrix();
@@ -1067,7 +1067,6 @@ void TuneGammaDebug(const FIELD_3D& F, int blockNumber, int col,
   }
 
   (*gammaListMatrix)(blockNumber, col) = gamma;
-
 }
 
 ////////////////////////////////////////////////////////
@@ -1129,8 +1128,8 @@ void EncodeBlockDebug(const FIELD_3D& F, int blockNumber, int col, COMPRESSION_D
   int numBlocks = data->get_numBlocks();
   assert(blockNumber >= 0 && blockNumber < numBlocks);
  
-  // sets gamma to zero for debugging purposes.
-  // updates damp to be all 1s
+  // sets gamma to 1.0 for debugging purposes.
+  // does not in fact modify damp at all.
   TuneGammaDebug(F, blockNumber, col, data, &damp);
 
   // fill the return value with rounded damped entries
@@ -1292,7 +1291,100 @@ void DecodeBlockWithCompressionDataSparseStackless()
 // due to const poisoning, compression data cannot be marked const,
 // but nonetheless it is not modified.
 ////////////////////////////////////////////////////////
+void DecodeBlockWithCompressionDataSparseStacklessDebug()
+{ 
+  TIMER functionTimer(__FUNCTION__);
+
+  const int numBlocks = _compression_data->get_numBlocks();
+  // make sure we are not accessing an invalid block
+  assert( (_blockNumber >= 0) && (_blockNumber < numBlocks) );
+
+  double* decoded = (*_decoded)[_blockNumber].data();
+  NONZERO_ENTRIES& nonZeros = (*_allNonZeros)[_blockNumber];
+  CastIntFieldToDouble((*_unflattened), (*_unflattened).totalCells(), decoded, nonZeros);
+
+  // use the appropriate scale factor to decode
+  MatrixXd* sList = _compression_data->get_sListMatrix();
+  //double s = (*sList)(_blockNumber, _col);
+  //double sInv = 1.0 / s;
+  const double sInv = 1.0 / (*sList)(_blockNumber, _col);
+  MatrixXd* gammaList = _compression_data->get_gammaListMatrix();
+  const double gamma = (*gammaList)(_blockNumber, _col);
+    
+  // dequantize by inverting the scaling by s and contracting by the 
+  // appropriate gamma-modulated damping array
+  //
+  // TK: Lots of time can be spent here, but it appears to be because of
+  // the pow call, not because the sparsity is not fully exploited
+  TIMER dampingTimer("Decode Damping Copy");
+  const FIELD_3D& dampingArray = _compression_data->get_dampingArray();
+  for (unsigned int x = 0; x < nonZeros.size(); x++)
+  {
+    const int i = nonZeros[x];
+    // decoded[i] *= FIELD_3D::fastPow(dampingArray[i],gamma) * sInv;
+    // since every gamma is 1.0 in debug mode, we don't need to even
+    // bother with a fastPow
+    decoded[i] *= dampingArray[i] * sInv;
+  }
+}
+////////////////////////////////////////////////////////
+// does the same operations as DecodeBlock, but with a passed
+// in compression data parameter rather than decompression data 
+// due to const poisoning, compression data cannot be marked const,
+// but nonetheless it is not modified.
+////////////////////////////////////////////////////////
 void DecodeBlockWithCompressionDataSparse(const INTEGER_FIELD_3D& intBlock, 
+  int blockNumber, int col, COMPRESSION_DATA* data, Real* decoded, const NONZERO_ENTRIES& nonZeros)
+{ 
+  TIMER functionTimer(__FUNCTION__);
+
+  int numBlocks = data->get_numBlocks();
+  // make sure we are not accessing an invalid block
+  assert( (blockNumber >= 0) && (blockNumber < numBlocks) );
+
+  //TIMER castTimer("Decode Cast");
+  //CastIntFieldToDouble(intBlock, intBlock.totalCells(), decoded);
+  //FIELD_3D dummy(BLOCK_SIZE, BLOCK_SIZE, BLOCK_SIZE);
+  //CastIntFieldToDouble(intBlock, intBlock.totalCells(), dummy.data(), nonZeros);
+  CastIntFieldToDouble(intBlock, intBlock.totalCells(), decoded, nonZeros);
+
+  bool debug = data->get_debug();
+
+  // use the appropriate scale factor to decode
+  MatrixXd* sList = data->get_sListMatrix();
+  const double sInv = 1.0 / (*sList)(blockNumber, col);
+  MatrixXd* gammaList = data->get_gammaListMatrix();
+  const double gamma = (*gammaList)(blockNumber, col);
+    
+  // dequantize by inverting the scaling by s and contracting by the 
+  // appropriate gamma-modulated damping array
+  const FIELD_3D& dampingArray = data->get_dampingArray();
+
+  if (debug) {
+    for (unsigned int x = 0; x < nonZeros.size(); x++)
+    {
+      const int i = nonZeros[x];
+      decoded[i] *= dampingArray[i] * sInv;
+    }
+  }
+  else {
+    for (unsigned int x = 0; x < nonZeros.size(); x++)
+    {
+      const int i = nonZeros[x];
+      decoded[i] *= FIELD_3D::fastPow(dampingArray[i],gamma) * sInv;
+    }
+  }
+}
+
+////////////////////////////////////////////////////////
+// does the same operations as DecodeBlock, but with a passed
+// in compression data parameter rather than decompression data 
+// due to const poisoning, compression data cannot be marked const,
+// but nonetheless it is not modified.
+// debug version, so gamma = 1.0 everywhere, and fastPow
+// is bypassed.
+////////////////////////////////////////////////////////
+void DecodeBlockWithCompressionDataSparseDebug(const INTEGER_FIELD_3D& intBlock, 
   int blockNumber, int col, COMPRESSION_DATA* data, Real* decoded, const NONZERO_ENTRIES& nonZeros) 
 { 
   TIMER functionTimer(__FUNCTION__);
@@ -1319,7 +1411,9 @@ void DecodeBlockWithCompressionDataSparse(const INTEGER_FIELD_3D& intBlock,
   for (unsigned int x = 0; x < nonZeros.size(); x++)
   {
     const int i = nonZeros[x];
-    decoded[i] *= FIELD_3D::fastPow(dampingArray[i],gamma) * sInv;
+    // decoded[i] *= FIELD_3D::fastPow(dampingArray[i],gamma) * sInv;
+    // gamma = 1.0, so we skip taking any fastPow
+    decoded[i] *= dampingArray[i] * sInv;
   }
 }
 
@@ -1610,6 +1704,73 @@ void RunLengthDecodeBinaryInPlaceSparse(int* allData, int blockNumber, int col,
     }
   }
 }
+
+////////////////////////////////////////////////////////
+// decode a run-length encoded binary file and fill 
+// a VectorXi with the contents. return the sparsity as
+// sparsity = number of nonzero elements / BLOCK_SIZE^3
+////////////////////////////////////////////////////////
+double RunLengthDecodeBinaryInPlaceSparseGetSparsity(int* allData, int blockNumber, int col, 
+    const INTEGER_FIELD_3D& reverseZigzag, 
+    COMPRESSION_DATA* compression_data,
+    INTEGER_FIELD_3D& parsedDataField,
+    NONZERO_ENTRIES& nonZeros)
+    //vector<int>& nonZeros)
+{
+  TIMER functionTimer(__FUNCTION__);
+  //MatrixXi* blockLengthsMatrix = compression_data->get_blockLengthsMatrix(); 
+  const int compressedBlockSize = (*compression_data->get_blockLengthsMatrix())(blockNumber, col);
+  //assert(compressedBlockSize >= 0 && compressedBlockSize <= 2 * BLOCK_SIZE * BLOCK_SIZE * BLOCK_SIZE);
+
+  //MatrixXi* blockIndicesMatrix = compression_data->get_blockIndicesMatrix();
+  const int blockIndex = (*compression_data->get_blockIndicesMatrix())(blockNumber, col);
+
+  int i = 0;
+  //int runLength = 1;
+  int j = 0;
+
+  //TIMER whileTimer("Run length in-place while timer");
+  while (i < compressedBlockSize) 
+  {
+    const int index = blockIndex + i;
+    const int value = allData[index];
+    const int next = allData[index + 1];
+    const int runLength = allData[index + 2];
+
+    if (value == 0 && next == 0)
+    {
+      i += 3;
+      j += runLength;
+    }
+    else
+    {
+      parsedDataField[reverseZigzag[j]] = value;
+      if (value != 0)
+        nonZeros.push_back(reverseZigzag[j]);
+      if ((i + 1 < compressedBlockSize) && value == next) 
+      {
+        for (int x = 0; x < runLength - 1; x++)
+        {
+          parsedDataField[reverseZigzag[j + 1 + x]] = value;
+
+          if (value != 0)
+            nonZeros.push_back(reverseZigzag[j + 1 + x]);
+        }
+        
+        i += 2;
+        j += (runLength - 1);
+      }
+      i++;
+      j++;
+    }
+  }
+
+  // ADJ: Let's see what the sparsity is
+  int nonzeroCount = nonZeros.size();
+  double sparsityPercent = nonzeroCount / (double) (BLOCK_SIZE * BLOCK_SIZE * BLOCK_SIZE);
+  return sparsityPercent;
+}
+
 
 ////////////////////////////////////////////////////////
 // decode a run-length encoded binary file and fill 
@@ -1941,7 +2102,7 @@ void CompressAndWriteField(const char* filename, const FIELD_3D& F, int col,
 // which is the result of an SVD coordinate transform, compresses
 // it according to the general scheme, and writes it to a binary file.
 // meant to be called in a chain so that the binary file
-// continues to grow. for debugging, gamma is set to zero everywhere! 
+// continues to grow. for debugging, gamma is set to 1.0 everywhere! 
 ////////////////////////////////////////////////////////
 
 void CompressAndWriteFieldDebug(const char* filename, const FIELD_3D& F, int col,
@@ -3008,7 +3169,7 @@ void CompressAndWriteMatrixComponents(const char* filename, const MatrixXd& U,
 // compress all of the scalar field components
 // of a matrix (which represents a vector field) and write them to
 // a binary file. applies svd coordinate transform first.
-// uses gamma as zero everywhere for debugging!
+// uses gamma as 1.0 everywhere for debugging!
 ////////////////////////////////////////////////////////
 void CompressAndWriteMatrixComponentsDebug(const char* filename, const MatrixXd& U,  
       COMPRESSION_DATA* data0, COMPRESSION_DATA* data1, COMPRESSION_DATA* data2) 

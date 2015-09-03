@@ -66,9 +66,13 @@ void runOnce();
 void runEverytime();
 
 // global resolutions, for scope reasons
-int g_xRes = 48;
-int g_yRes = 64;
-int g_zRes = 48;
+// int g_xRes = 48;
+// int g_yRes = 64;
+// int g_zRes = 48;
+
+int g_xRes = 200;
+int g_yRes = 266;
+int g_zRes = 200;
 
 VEC3F cellCenter(int x, int y, int z);
 vector<VECTOR> snapshots;
@@ -321,6 +325,8 @@ int main(int argc, char *argv[])
   int zRes = parser.getInt("zRes", 48);
   string reducedPath = parser.getString("reduced path", "./data/reduced.dummy/");
   snapshotPath = parser.getString("snapshot path", "./data/dummy/");
+  previewReducedMovie = parser.getString("preview movie", "./data/movie.mov");
+  cout << "Reduced movie is written to: " << previewReducedMovie << endl;
   simulationSnapshots = parser.getInt("simulation snapshots", 20);
   Real vorticity = parser.getFloat("vorticity", 0);
 
@@ -353,8 +359,11 @@ int main(int argc, char *argv[])
   bool fastPow = parser.getBool("fast pow", false);
   cout << " fast pow: " << fastPow << endl;
 
+  bool debug = parser.getBool("debug", 0);
+  cout << "Debug: " << debug << endl;
+
 	fluid = new SUBSPACE_FLUID_3D_COMPRESSED_EIGEN(xRes, yRes, zRes, reducedPath, &boundaries[0], usingIOP);
-  fluid->loadReducedIOP();
+  fluid->loadReducedIOP(string(""), debug);
   fluid->initCompressionData();
 
   fluid->fullRankPath() = snapshotPath;

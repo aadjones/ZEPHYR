@@ -258,6 +258,14 @@ void RunLengthDecodeBinaryInPlaceSparse(int* allData, int blockNumber, int col,
     INTEGER_FIELD_3D& parsedDataField, NONZERO_ENTRIES& nonZeros);
 void RunLengthDecodeBinaryInPlaceSparseStackless();
 
+// ADJ: a testing version that returns the sparsity of each block as
+// sparsity = number of nonzero entries / BLOCK_SIZE^3
+double RunLengthDecodeBinaryInPlaceSparseGetSparsity(int* allData, int blockNumber, int col, 
+    const INTEGER_FIELD_3D& reverseZigzag, 
+    COMPRESSION_DATA* compression_data,
+    INTEGER_FIELD_3D& parsedDataField,
+    NONZERO_ENTRIES& nonZeros);
+
 // takes an input FIELD_3D which is the result of
 // an SVD coordinate transform, compresses it according
 // to the general scheme, and writes it to a binary file 

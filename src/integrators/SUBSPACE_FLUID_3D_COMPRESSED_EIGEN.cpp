@@ -1275,7 +1275,7 @@ void SUBSPACE_FLUID_3D_COMPRESSED_EIGEN::loadReducedRuntimeBases(string path)
 //
 // the path variable is there in case we want to load off the SSD
 //////////////////////////////////////////////////////////////////////
-void SUBSPACE_FLUID_3D_COMPRESSED_EIGEN::loadReducedIOP(string path)
+void SUBSPACE_FLUID_3D_COMPRESSED_EIGEN::loadReducedIOP(string path, bool debug)
 {
 
   // we need to load preproject, preadvect, and final (??)
@@ -1300,6 +1300,10 @@ void SUBSPACE_FLUID_3D_COMPRESSED_EIGEN::loadReducedIOP(string path)
   int* allData1 = ReadBinaryFileToMemory(preadvectFile.c_str(), &compression_data1);
   preadvectFile = _reducedPath + string("U.preadvect.component2");
   int* allData2 = ReadBinaryFileToMemory(preadvectFile.c_str(), &compression_data2);
+
+  compression_data0.set_debug(debug);
+  compression_data1.set_debug(debug);
+  compression_data2.set_debug(debug);
 
   _U_preadvect_data = MATRIX_COMPRESSION_DATA(allData0, allData1, allData2,
       &compression_data0, &compression_data1, &compression_data2); 
@@ -1334,6 +1338,10 @@ void SUBSPACE_FLUID_3D_COMPRESSED_EIGEN::loadReducedIOP(string path)
   finalFile = _reducedPath + string("U.final.component2");
   allData2 = ReadBinaryFileToMemory(finalFile.c_str(), &final_compression_data2);
 
+
+  final_compression_data0.set_debug(debug);
+  final_compression_data1.set_debug(debug);
+  final_compression_data2.set_debug(debug);
 
   _U_final_data = MATRIX_COMPRESSION_DATA(allData0, allData1, allData2,
       &final_compression_data0, &final_compression_data1, &final_compression_data2); 

@@ -31,12 +31,18 @@
 ///////////////////////////////////////////////////////
 // Globals
 ////////////////////////////////////////////////////////
-int xRes = 46;
-int yRes = 62;
-int zRes = 46;
-int xPadded = 48;
-int yPadded = 64;
-int zPadded = 48;
+// int xRes = 46;
+// int yRes = 62;
+// int zRes = 46;
+int xRes = 198;
+int yRes = 264;
+int zRes = 198;
+// int xPadded = 48;
+// int yPadded = 64;
+// int zPadded = 48;
+int xPadded = 200;
+int yPadded = 264;
+int zPadded = 200;
 int numRows = 3 * xRes * yRes * zRes;
 int numCols = 151;
 int numBlocks = (xPadded * yPadded * zPadded) / (BLOCK_SIZE * BLOCK_SIZE * BLOCK_SIZE);
@@ -48,15 +54,15 @@ FIELD_3D F(xRes, yRes, zRes);
 vector<FIELD_3D> g_blocks;
 vector<VectorXd> g_blocksEigen;
 fftw_plan plan;
-string path("../../U.preadvect.matrix");
+// string path("../../U.preadvect.matrix");
 COMPRESSION_DATA compression_data0, compression_data1, compression_data2;
 int* allData0;
 int* allData1;
 int* allData2;
 MATRIX_COMPRESSION_DATA matrix_data;
-int nBits = 31;
-double percent = 1.0;
-int maxIterations = 50;
+int nBits = 32;
+double percent = 0.999;
+int maxIterations = 32;
 
 ////////////////////////////////////////////////////////
 // Function Declarations
@@ -122,6 +128,9 @@ void ReadToMemoryTest();
 // test the run-length codec
 void RunLengthTest(int blockNumber, int col, COMPRESSION_DATA* data);
 
+// test the run-length codec's sparsity
+void RunLengthSparseTest(int blockNumber, int col, COMPRESSION_DATA* compression_data);
+
 // test the block indices matrix construction
 void BuildBlockIndicesTest();
 
@@ -173,9 +182,9 @@ int main(int argc, char* argv[])
   TIMER functionTimer(__FUNCTION__);
   InitGlobals();
 
-  // int blockNumber = 287;
+  int blockNumber = 0;
   // int row = 0;
-  // int col = 24;
+  int col = 0;
 
   // EncodeOneBlockTest(blockNumber, col, &compression_data0);
 
@@ -199,9 +208,9 @@ int main(int argc, char* argv[])
  
   // PeeledCompressedProjectTest();
 
-  GammaSearchTest();
+  // GammaSearchTest();
   
- 
+  RunLengthSparseTest(blockNumber, col, &compression_data0);
 
   
 
@@ -222,15 +231,16 @@ void InitGlobals()
   srand(time(NULL));
   VECTOR::printVertical = false;
 
+  cout << "Num blocks: " << numBlocks << endl;
   InitCompressionData(percent, maxIterations, nBits, numBlocks, numCols);
 
-  InitMatrixCompressionData();
+  // InitMatrixCompressionData();
 
-  EIGEN::read(path.c_str(), U); 
+  // EIGEN::read(path.c_str(), U); 
 
-  V = VECTOR3_FIELD_3D(U.col(0), xRes, yRes, zRes);
+  // V = VECTOR3_FIELD_3D(U.col(0), xRes, yRes, zRes);
   // TransformVectorFieldSVDCompression(&V, &compression_data1);
-  F = V.scalarField(0);
+  // F = V.scalarField(0);
   // GetBlocks(F, &g_blocks);
   // UnitaryBlockDCT(1, &g_blocks);
 }
@@ -244,6 +254,7 @@ void InitCompressionData(double percent, int maxIterations, int nBits,
   compression_data0.set_percent(percent);
   compression_data0.set_maxIterations(maxIterations);
   compression_data0.set_nBits(nBits);
+  cout << "Num blocks: " << numBlocks << endl;
   compression_data0.set_numBlocks(numBlocks);
   compression_data0.set_numCols(numCols);
   compression_data0.set_dims(dims);
@@ -485,7 +496,7 @@ void EncodeDecodeBlockTest()
   cout << quantized.flattened() << endl;
 
   FIELD_3D decoded;
-  DecodeBlockWithCompressionData(quantized, blockNumber, col, &compression_data0, &decoded);
+  DecodeBlockWithCompressionData(quantized, blockNumber, col, &compression_data0, decoded.data());
 
   cout << "newBlock: " << endl;
   cout << decoded.flattened() << endl;
@@ -612,6 +623,37 @@ void RunLengthTest(int blockNumber, int col, COMPRESSION_DATA* data)
   cout << unflattened.flattened() << endl;
 }
 
+////////////////////////////////////////////////////////
+// test the run-length decoding's sparsity using the
+// passed in inputs
+////////////////////////////////////////////////////////
+void RunLengthSparseTest(int blockNumber, int col, COMPRESSION_DATA* compression_data)
+{
+  const char* filename = "U.preadvect.component0";
+  int* allData = ReadBinaryFileToMemory(filename, compression_data);
+  const INTEGER_FIELD_3D& reverseZigzag = compression_data->get_zigzagArray();
+  // int numBlocks = compression_data->get_numBlocks();
+  
+  cout << " Num blocks: " << numBlocks << endl;
+  cout << " Block size: " << BLOCK_SIZE << endl;
+  int numCols = compression_data->get_numCols();
+  MatrixXd percents(numBlocks, numCols);
+  INTEGER_FIELD_3D parsedDataField(BLOCK_SIZE, BLOCK_SIZE, BLOCK_SIZE);
+  
+  for (int col = 0; col < numCols; col++) {
+    for (int blockNumber = 0; blockNumber < numBlocks; blockNumber++) {
+      NONZERO_ENTRIES nonZeros;
+        double s = RunLengthDecodeBinaryInPlaceSparseGetSparsity(allData, blockNumber, col, reverseZigzag, compression_data, parsedDataField, nonZeros);
+          percents(blockNumber, col) = s;
+    }
+  }
+  string matrixString("sparsity.matrix");
+  EIGEN::write(matrixString, percents);
+}
+
+////////////////////////////////////////////////////////
+// test whether the indices are built correctly
+////////////////////////////////////////////////////////
 void BuildBlockIndicesTest() 
 {
 
@@ -651,7 +693,7 @@ void DequantizationTest(int blockNumber, int col, COMPRESSION_DATA* data)
   cout << unflattened.flattened() << endl;
 
   FIELD_3D decoded;
-  DecodeBlockWithCompressionData(unflattened, blockNumber, col, data, &decoded);
+  DecodeBlockWithCompressionData(unflattened, blockNumber, col, data, decoded.data());
   cout << "decoded: " << endl;
   cout << decoded.flattened() << endl;
 

@@ -477,6 +477,8 @@ public:
   // http://martin.ankerl.com/2012/01/25/optimized-approximative-pow-in-c-and-cpp/
   static inline double fastPow(double a, double b) 
   {
+    // DEBUG only!!
+    // puts(" Calling fastPow! ");
     union {
       double d;
       int x[2];

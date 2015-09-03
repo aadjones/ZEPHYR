@@ -31,6 +31,7 @@ class COMPRESSION_DATA {
     double get_percent() const { return _percent; }
     int get_nBits() const { return _nBits; } 
     int get_maxIterations() const { return _maxIterations; } 
+    bool get_debug() const { return _debug; }
     const VectorXi& get_blockLengths() const { return _blockLengths; }
     const VectorXi& get_blockIndices() const { return _blockIndices; }
     
@@ -64,6 +65,7 @@ class COMPRESSION_DATA {
     void set_percent(double percent) { _percent = percent; }
     void set_nBits(int nBits) { _nBits = nBits; }
     void set_maxIterations(int maxIterations) { _maxIterations = maxIterations; }
+    void set_debug(bool debug) { _debug = debug; }
 
     void set_blockLengths(const VectorXi& blockLengths) { 
       int length = blockLengths.size();
@@ -144,6 +146,8 @@ class COMPRESSION_DATA {
     const int yRes = BLOCK_SIZE;
     const int zRes = BLOCK_SIZE;
 
+    cout << "Using block size: " << BLOCK_SIZE << endl;
+
     _dct_in = (double*) fftw_malloc(xRes * yRes * zRes * sizeof(double));
     _dct_out = (double*) fftw_malloc(xRes * yRes * zRes * sizeof(double));
 
@@ -172,6 +176,7 @@ class COMPRESSION_DATA {
     int _numBlocks;
     int _currBlockNum;
     int _maxIterations;
+    bool _debug;
     double _nBits;
     double _percent;
 
