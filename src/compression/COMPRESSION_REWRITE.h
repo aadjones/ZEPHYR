@@ -312,6 +312,11 @@ void ReadSVDData(const char* filename, COMPRESSION_DATA* data);
 // reads from a binary file into a buffer and sets initializations
 // inside compression data
 int* ReadBinaryFileToMemory(const char* filename, 
+    COMPRESSION_DATA* data);
+
+// does the same as above but also writes the gamma matrix to a file
+// for additional analysis
+int* ReadBinaryFileToMemoryGammaTesting(const char* filename, 
     COMPRESSION_DATA* data); 
 
 // decode a particular scalar component of the corresponding column of the 

@@ -129,7 +129,7 @@ void ReadToMemoryTest();
 void RunLengthTest(int blockNumber, int col, COMPRESSION_DATA* data);
 
 // test the run-length codec's sparsity
-void RunLengthSparseTest(int blockNumber, int col, COMPRESSION_DATA* compression_data);
+void RunLengthSparseTest(COMPRESSION_DATA* compression_data, const char* filename, string outStr);
 
 // test the block indices matrix construction
 void BuildBlockIndicesTest();
@@ -173,6 +173,9 @@ void DecodeFromRowColTest(int row, int col);
 // test getting a submatrix for the reduced compressed advection
 void GetSubmatrixTest(int startRow);
 
+// test the distribution of gamma values in a data set
+void GammaAnalyticsTest(COMPRESSION_DATA* data);
+
 ////////////////////////////////////////////////////////
 // Main
 ////////////////////////////////////////////////////////
@@ -210,8 +213,27 @@ int main(int argc, char* argv[])
 
   // GammaSearchTest();
   
-  RunLengthSparseTest(blockNumber, col, &compression_data0);
+  const char* filename = "U.preadvect.component1";
+  string outStr("density1.matrix");
+  RunLengthSparseTest(&compression_data0, filename, outStr);
 
+  filename = "U.preadvect.component2";
+  outStr = "density2.matrix";
+  RunLengthSparseTest(&compression_data0, filename, outStr);
+    
+  filename = "U.final.component0";
+  outStr = "densityFinal0.matrix";
+  RunLengthSparseTest(&compression_data0, filename, outStr);
+    
+  filename = "U.final.component1";
+  outStr = "densityFinal1.matrix";
+  RunLengthSparseTest(&compression_data0, filename, outStr);
+    
+  filename = "U.final.component2";
+  outStr = "densityFinal2.matrix";
+  RunLengthSparseTest(&compression_data0, filename, outStr);
+    
+  // GammaAnalyticsTest(&compression_data0);
   
 
   functionTimer.printTimings();
@@ -627,9 +649,8 @@ void RunLengthTest(int blockNumber, int col, COMPRESSION_DATA* data)
 // test the run-length decoding's sparsity using the
 // passed in inputs
 ////////////////////////////////////////////////////////
-void RunLengthSparseTest(int blockNumber, int col, COMPRESSION_DATA* compression_data)
+void RunLengthSparseTest(COMPRESSION_DATA* compression_data, const char* filename, string outStr)
 {
-  const char* filename = "U.preadvect.component0";
   int* allData = ReadBinaryFileToMemory(filename, compression_data);
   const INTEGER_FIELD_3D& reverseZigzag = compression_data->get_zigzagArray();
   // int numBlocks = compression_data->get_numBlocks();
@@ -647,8 +668,7 @@ void RunLengthSparseTest(int blockNumber, int col, COMPRESSION_DATA* compression
           percents(blockNumber, col) = s;
     }
   }
-  string matrixString("sparsity.matrix");
-  EIGEN::write(matrixString, percents);
+  EIGEN::write(outStr, percents);
 }
 
 ////////////////////////////////////////////////////////
@@ -1043,6 +1063,8 @@ void DecodeFromRowColTest(int row, int col)
 
 
 ////////////////////////////////////////////////////////
+//
+////////////////////////////////////////////////////////
 void GetSubmatrixTest(int startRow)
 {
   
@@ -1062,6 +1084,9 @@ void GetSubmatrixTest(int startRow)
 }
 
 
+////////////////////////////////////////////////////////
+// 
+////////////////////////////////////////////////////////
 void PeeledCompressedUnprojectTransformTest()
 {
 
@@ -1102,5 +1127,22 @@ void PeeledCompressedUnprojectTransformTest()
   cout << "error between compressed unproject and no compression: " << error << endl;
 
   fclose(pFile);
+
+}
+
+////////////////////////////////////////////////////////
+// Write the gammaListMatrix matrix to a binary file
+// for analysis in MATLAB
+////////////////////////////////////////////////////////
+void GammaAnalyticsTest(COMPRESSION_DATA* data)
+{
+  int* allData = ReadBinaryFileToMemoryGammaTesting("U.final.component0", data);
+  system("mv gammaListMatrix.matrix gammaListMatrixFinal0.matrix");
+
+  allData = ReadBinaryFileToMemoryGammaTesting("U.final.component1", data);
+  system("mv gammaListMatrix.matrix gammaListMatrixFinal1.matrix");
+
+  allData = ReadBinaryFileToMemoryGammaTesting("U.final.component2", data);
+  system("mv gammaListMatrix.matrix gammaListMatrixFinal2.matrix");
 
 }

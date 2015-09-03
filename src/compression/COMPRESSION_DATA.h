@@ -50,6 +50,7 @@ class COMPRESSION_DATA {
     vector<Matrix3d>* get_vList() { return &(_vList); }
     
     const FIELD_3D& get_dampingArray() const { return _dampingArray; }
+    vector<FIELD_3D>* get_dampingArrayList() { return &(_dampingArrayList); }
     const INTEGER_FIELD_3D& get_zigzagArray() const { return _zigzagArray; }
     const INTEGER_FIELD_3D& get_reverseZigzag() const { return _reverseZigzag; }
     double* get_dct_in() const { return _dct_in; }
@@ -109,6 +110,17 @@ class COMPRESSION_DATA {
       }
       _dampingArray = damp;
     }
+  
+  void set_dampingArrayList() {
+    // choose the number of different discrete gamma values to clamp to
+    // approximately nBits/2 is a first test
+    int numGammas = 17; 
+    _dampingArrayList.resize(numGammas);
+    for (int i = 0; i < numGammas; i++) {
+      _dampingArrayList[i] = _dampingArray;
+      _dampingArrayList[i].toFastPower(2 * i);
+    }
+  }
 
     
   void set_zigzagArray() {
@@ -196,7 +208,8 @@ class COMPRESSION_DATA {
     FIELD_3D _dampingArray;
     INTEGER_FIELD_3D _zigzagArray;
     INTEGER_FIELD_3D _reverseZigzag;
-
+    
+    vector<FIELD_3D> _dampingArrayList;
     double* _dct_in;
     double* _dct_out;
     fftw_plan _dct_plan;

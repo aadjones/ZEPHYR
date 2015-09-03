@@ -2016,6 +2016,107 @@ int* ReadBinaryFileToMemory(const char* filename,
 }
 
 ////////////////////////////////////////////////////////
+// reads from a binary file into a buffer, and sets
+// important initializations inside compression data
+////////////////////////////////////////////////////////
+
+int* ReadBinaryFileToMemoryGammaTesting(const char* filename, 
+    COMPRESSION_DATA* data) 
+{
+  TIMER functionTimer(__FUNCTION__);
+
+  // initialize what we will return
+  int* allData = NULL;
+
+  FILE* pFile;
+
+  pFile = fopen(filename, "rb");
+  if (pFile == NULL) {
+    perror("Error opening file.");
+    exit(EXIT_FAILURE);
+  }
+
+  else {
+    
+    // build the damping array and zigzag arrays 
+    data->set_dampingArray();
+    data->set_zigzagArray();
+ 
+    // read nBits and set it
+    int nBits;
+    fread(&nBits, 1, sizeof(int), pFile);
+    data->set_nBits(nBits);
+    // cout << "nBits: " << nBits << endl;
+
+    // read dims, numCols, and numBlocks
+    int xRes, yRes, zRes;
+    fread(&xRes, 1, sizeof(int), pFile);
+    fread(&yRes, 1, sizeof(int), pFile);
+    fread(&zRes, 1, sizeof(int), pFile);
+    VEC3I dims(xRes, yRes, zRes);
+    data->set_dims(dims);
+    // cout << "dims: " << dims << endl;
+
+    int numCols, numBlocks;
+    fread(&numCols, 1, sizeof(int), pFile);
+    fread(&numBlocks, 1, sizeof(int), pFile);
+    // set the decompression data accordingly
+    data->set_numCols(numCols);
+    data->set_numBlocks(numBlocks);
+    // cout << "numCols: " << numCols << endl;
+    // cout << "numBlocks: " << numBlocks << endl;
+    
+    // read in the sListMatrix and set the data
+    int blocksXcols = numBlocks * numCols;
+    MatrixXd* sListMatrix = data->get_sListMatrix();
+    sListMatrix->resize(numBlocks, numCols);
+    fread(sListMatrix->data(), blocksXcols, sizeof(double), pFile);
+    
+    // do the same for gammaListMatrix
+    MatrixXd* gammaListMatrix = data->get_gammaListMatrix();
+    gammaListMatrix->resize(numBlocks, numCols);
+    fread(gammaListMatrix->data(), blocksXcols, sizeof(double), pFile);
+    
+    // write out the gammaListMatrix for analytics
+    string gammaStr("gammaListMatrix.matrix");
+    EIGEN::write(gammaStr, *gammaListMatrix);
+
+    // do the same for the blockLengthsMatrix, except the data are ints
+    MatrixXi* blockLengthsMatrix = data->get_blockLengthsMatrix();
+    blockLengthsMatrix->resize(numBlocks, numCols);
+    fread(blockLengthsMatrix->data(), blocksXcols, sizeof(int), pFile);
+
+    // cout << "blockLengthsMatrix, column 0: " << endl;
+    VectorXi blockLengths0 = blockLengthsMatrix->col(0);
+    // cout << EIGEN::convertInt(blockLengths0) << endl;
+
+    // store the total length of all blocks to be able to 
+    // read in the full compressed data later
+    int totalLength = blockLengthsMatrix->sum();
+    // cout << "totalLength: " << totalLength << endl;
+
+    // read in blockIndicesMatrix
+    MatrixXi* blockIndicesMatrix = data->get_blockIndicesMatrix();
+    blockIndicesMatrix->resize(numBlocks, numCols);
+    fread(blockIndicesMatrix->data(), blocksXcols, sizeof(int), pFile);
+
+    // cout << "blockIndicesMatrix, column 0: " << endl;
+    // cout << EIGEN::convertInt(blockIndicesMatrix->col(0)) << endl; 
+
+    // finally, read in the full compressed data
+    allData = (int*) malloc(totalLength * sizeof(int));
+    if (allData == NULL) {
+      perror("Malloc failed to allocate allData!");
+      exit(EXIT_FAILURE);
+    }
+
+    fread(allData, totalLength, sizeof(int), pFile);
+  }
+
+  return allData;
+}
+
+////////////////////////////////////////////////////////
 // deletes a file if it already exists
 ////////////////////////////////////////////////////////
 void DeleteIfExists(const char* filename)
