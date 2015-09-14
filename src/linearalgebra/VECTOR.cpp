@@ -333,6 +333,15 @@ VECTOR operator*(const Real& scalar, const VECTOR& x)
 #include <algorithm>
 #include <memory.h>
 #if __APPLE__
+
+// hack needed to get g++ to compile Accelerate on Yosemite:
+// http://stackoverflow.com/questions/26527077/compiling-with-accelerate-framework-on-osx-yosemite
+#ifndef __has_extension
+#define __has_extension(x) 0
+#endif
+#define vImage_Utilities_h
+#define vImage_CVUtilities_h
+
 #include <Accelerate/Accelerate.h>
 #endif
 
@@ -479,4 +488,18 @@ Real operator^(const VECTOR& x, const VECTOR& y)
 #else
   return x * y;
 #endif
+}
+
+//////////////////////////////////////////////////////////////////////
+// dot product with another vector
+//////////////////////////////////////////////////////////////////////
+Real VECTOR::dot(const VECTOR& vector) const
+{
+  assert(vector._size == _size);
+
+  Real final = 0;
+  for (int x = 0; x < _size; x++)
+    final += vector[x] * (*this)[x];
+
+  return final;
 }

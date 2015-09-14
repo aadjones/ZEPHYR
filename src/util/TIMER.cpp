@@ -178,9 +178,9 @@ void TIMER::printTimingsPerFrame(const int frames)
   }
 
   // print the map out backwards since it sorts from least to greatest
-  cout << "====================================================================================" << endl;
+  cout << "=======================================================================================================" << endl;
   cout << " TIMING BREAKDOWN, FRAME " << frames << ": " << endl;
-  cout << "====================================================================================" << endl;
+  cout << "=======================================================================================================" << endl;
   map<double,string>::reverse_iterator backwardIter;
   char buffer[256];
   string timeString;
@@ -235,9 +235,85 @@ void TIMER::printTimingsPerFrame(const int frames)
 
   sprintf(buffer, "%02i", seconds(totalTime));
   secondsString = string(buffer);
-  cout << "====================================================================================" << endl;
+  cout << "=======================================================================================================" << endl;
   cout << " Total time: " << hoursString.c_str() << ":" << minutesString.c_str() << ":" << secondsString.c_str() << " (" << totalTime << "s) " << endl;
   cout << " Time per frame: " << totalTime / frames << endl;
-  cout << "====================================================================================" << endl;
+  cout << "=======================================================================================================" << endl;
+}
+
+///////////////////////////////////////////////////////////////////////
+///////////////////////////////////////////////////////////////////////
+void TIMER::printRawTimingsPerFrame(const int frames)
+{
+  timeval now;
+  gettimeofday(&now, 0);
+
+  double currentTimer = timing(_tick, now);
+  string currentName;
+  if (_callStack.size() > 0) 
+    currentName = _callStack.top();
+
+  // create an inverse map so that it will sort by time
+  map<double, string> inverseMap;
+  map<string, double>::iterator forwardIter;
+  double totalTime = 0.0;
+  for (forwardIter = _timings.begin(); forwardIter != _timings.end(); forwardIter++)
+  {
+    string name = forwardIter->first;
+    double time = forwardIter->second;
+
+    // if we are dinside this function, add the timing
+    if (name.compare(currentName) == 0)
+      time += currentTimer;
+
+    inverseMap[time] = name;
+    totalTime += time;
+  }
+
+  // print the map out backwards since it sorts from least to greatest
+  cout << "=======================================================================================================" << endl;
+  cout << " TIMING BREAKDOWN, FRAME " << frames << ": " << endl;
+  cout << "=======================================================================================================" << endl;
+  map<double,string>::reverse_iterator backwardIter;
+  char buffer[256];
+  string percentString;
+  string timeString;
+  string timePerFrameString;
+  string msPerFrameString;
+  for (backwardIter = inverseMap.rbegin(); backwardIter != inverseMap.rend(); backwardIter++)
+  {
+    string name = (*backwardIter).second;
+    double time = (*backwardIter).first;
+
+    string padding("                                               ");
+
+    name = name + padding;
+    name = name.substr(0,30);
+
+    sprintf(buffer, "%f", time / totalTime * 100.0);
+    percentString = string(buffer);
+    percentString = percentString + padding;
+    percentString = percentString.substr(0,10);
+
+    sprintf(buffer, "%f", time);
+    timeString = string(buffer);
+    
+    sprintf(buffer, "%f", time / frames);
+    timePerFrameString = string(buffer);
+    
+    sprintf(buffer, "%f", time * 1000 / frames);
+    msPerFrameString = string(buffer);
+
+    cout << "[" << percentString.c_str() << "%]: "
+         << name.c_str() << " " << timeString.c_str() << "s total ";
+
+    cout << " " << timePerFrameString.c_str() << " s/frame ";
+    cout << " " << msPerFrameString.c_str() << " ms/frame " << endl;
+  }
+  cout << "=======================================================================================================" << endl;
+  cout << " Total time: " << totalTime << "s " << endl;
+  cout << " Time per frame: " << totalTime / frames << endl;
+  cout << " Milliseconds per frame: " << totalTime * 1000 / frames << endl;
+  cout << "=======================================================================================================" << endl;
 }
 

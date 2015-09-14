@@ -7133,3 +7133,339 @@ FIELD_3D FIELD_3D::yRampField(const FIELD_3D& example, const Real plumeBase)
   
   return final;
 }
+
+///////////////////////////////////////////////////////////////////////
+// take the DCT in the Y direction
+///////////////////////////////////////////////////////////////////////
+void FIELD_3D::yDCT()
+{
+#if USING_FFTW
+  assert(sizeof(Real) == sizeof(double));
+  int n[] = {_xRes};
+  //int howmany = _yRes * _zRes;
+  int howmany = _yRes;
+  int flags = FFTW_ESTIMATE;
+  fftw_r2r_kind kind =  FFTW_REDFT10;
+
+  for (int y = 0; y < _yRes; y++)
+  {
+    fftw_plan plan;
+    plan = fftw_plan_many_r2r(
+        1, n, howmany,
+        &_data[y * _slabSize], NULL,
+        _xRes, 1,
+        &_data[y * _slabSize], NULL,
+        _xRes, 1,
+        &kind, flags);
+    fftw_execute(plan);
+  }
+  (*this) *= 0.5;
+
+  //int rank, const int *n, int howmany,
+  //double *in, const int *inembed,
+  //int istride, int idist,
+  //double *out, const int *onembed,
+  //int ostride, int odist,
+  //const fftw_r2r_kind *kind, unsigned flags
+#endif
+}
+
+///////////////////////////////////////////////////////////////////////
+// take the DCT in the Z direction
+///////////////////////////////////////////////////////////////////////
+void FIELD_3D::zDCT()
+{
+#if USING_FFTW
+  assert(sizeof(Real) == sizeof(double));
+  int n[] = {_xRes};
+  //int howmany = _yRes * _zRes;
+  int howmany = _yRes;
+  int flags = FFTW_ESTIMATE;
+  fftw_r2r_kind kind =  FFTW_REDFT10;
+
+  fftw_plan plan;
+
+  for (int z = 0; z < _zRes; z++)
+  {
+    plan = fftw_plan_many_r2r(
+        1, n, howmany,
+        &_data[z * _xRes], NULL,
+        _slabSize, 1,
+        &_data[z * _xRes], NULL,
+        _slabSize, 1,
+        &kind, flags);
+    fftw_execute(plan);
+  }
+  (*this) *= 0.5;
+
+  //int rank, const int *n, int howmany,
+  //double *in, const int *inembed,
+  //int istride, int idist,
+  //double *out, const int *onembed,
+  //int ostride, int odist,
+  //const fftw_r2r_kind *kind, unsigned flags
+#endif
+}
+
+///////////////////////////////////////////////////////////////////////
+// take the DST in the X direction
+///////////////////////////////////////////////////////////////////////
+void FIELD_3D::xDST()
+{
+#if USING_FFTW
+  assert(sizeof(Real) == sizeof(double));
+  int n[] = {_xRes};
+  int howmany = _yRes * _zRes;
+  int flags = FFTW_ESTIMATE;
+  fftw_r2r_kind kind =  FFTW_RODFT00;
+
+  fftw_plan plan;
+  plan = fftw_plan_many_r2r(
+      1, n, howmany,
+      _data, NULL,
+      1, _xRes,
+      _data, NULL,
+      1, _xRes,
+      &kind, flags);
+  fftw_execute(plan);
+  (*this) *= 0.5;
+
+  //int rank, const int *n, int howmany,
+  //double *in, const int *inembed,
+  //int istride, int idist,
+  //double *out, const int *onembed,
+  //int ostride, int odist,
+  //const fftw_r2r_kind *kind, unsigned flags
+#endif
+}
+
+///////////////////////////////////////////////////////////////////////
+///////////////////////////////////////////////////////////////////////
+void FIELD_3D::xDSTyDCTzDCT()
+{
+  assert(sizeof(Real) == sizeof(double));
+  //int flags = FFTW_EXHAUSTIVE;
+  int flags = FFTW_ESTIMATE;
+
+  fftw_plan plan;
+  plan = fftw_plan_r2r_3d(_xRes, _yRes, _zRes, _data, _data,
+                          FFTW_REDFT10, 
+                          FFTW_REDFT10, 
+                          FFTW_RODFT00, // the convention here seems to be backwards.
+                                        // placing the DST here gives the correct answer,
+                                        // but it should be in the first entry, not the third.
+                          flags);
+
+  fftw_execute(plan);
+  //(*this) *= 1.0 / 8.0;
+}
+
+///////////////////////////////////////////////////////////////////////
+///////////////////////////////////////////////////////////////////////
+void FIELD_3D::xDCTyDSTzDCT()
+{
+  assert(sizeof(Real) == sizeof(double));
+  //int flags = FFTW_EXHAUSTIVE;
+  int flags = FFTW_ESTIMATE;
+
+  fftw_plan plan;
+  plan = fftw_plan_r2r_3d(_xRes, _yRes, _zRes, _data, _data,
+                          FFTW_REDFT10, 
+                          FFTW_RODFT00,
+                          FFTW_REDFT10, 
+                          flags);
+
+  fftw_execute(plan);
+  //(*this) *= 1.0 / 8.0;
+}
+
+///////////////////////////////////////////////////////////////////////
+///////////////////////////////////////////////////////////////////////
+void FIELD_3D::xDCTyDCTzDST()
+{
+  assert(sizeof(Real) == sizeof(double));
+  //int flags = FFTW_EXHAUSTIVE;
+  int flags = FFTW_ESTIMATE;
+
+  fftw_plan plan;
+  plan = fftw_plan_r2r_3d(_xRes, _yRes, _zRes, _data, _data,
+                          FFTW_RODFT00, // the convention here seems to be backwards.
+                                        // placing the DST here gives the correct answer,
+                                        // but it should be in the first entry, not the third.
+                          FFTW_REDFT10, 
+                          FFTW_REDFT10, 
+                          flags);
+
+  fftw_execute(plan);
+  //(*this) *= 1.0 / 8.0;
+}
+
+///////////////////////////////////////////////////////////////////////
+///////////////////////////////////////////////////////////////////////
+void FIELD_3D::xIDCTyIDCTzIDST()
+{
+  assert(sizeof(Real) == sizeof(double));
+  //int flags = FFTW_EXHAUSTIVE;
+  int flags = FFTW_ESTIMATE;
+
+  fftw_plan plan;
+  plan = fftw_plan_r2r_3d(_xRes, _yRes, _zRes, _data, _data,
+                          FFTW_RODFT00, // the convention here seems to be backwards.
+                                        // placing the DST here gives the correct answer,
+                                        // but it should be in the first entry, not the third.
+                          FFTW_REDFT01, 
+                          FFTW_REDFT01, 
+                          flags);
+
+  fftw_execute(plan);
+  (*this) *= 1.0 / ((_zRes + 1) * (2.0 * sqrt(_xRes / 2.0)) * (2.0 * sqrt(_yRes / 2.0))) / 128.0;
+}
+
+///////////////////////////////////////////////////////////////////////
+///////////////////////////////////////////////////////////////////////
+void FIELD_3D::xIDCTyIDSTzIDCT()
+{
+  assert(sizeof(Real) == sizeof(double));
+  //int flags = FFTW_EXHAUSTIVE;
+  int flags = FFTW_ESTIMATE;
+
+  fftw_plan plan;
+  plan = fftw_plan_r2r_3d(_xRes, _yRes, _zRes, _data, _data,
+                          FFTW_REDFT01, 
+                          FFTW_RODFT00, // the convention here seems to be backwards.
+                                        // placing the DST here gives the correct answer,
+                                        // but it should be in the first entry, not the third.
+                          FFTW_REDFT01, 
+                          flags);
+
+  fftw_execute(plan);
+  (*this) *= 1.0 / ((_yRes + 1) * (2.0 * sqrt(_xRes / 2.0)) * (2.0 * sqrt(_zRes / 2.0))) / 128.0;
+}
+
+///////////////////////////////////////////////////////////////////////
+///////////////////////////////////////////////////////////////////////
+void FIELD_3D::xIDSTyIDCTzIDCT()
+{
+  assert(sizeof(Real) == sizeof(double));
+  //int flags = FFTW_EXHAUSTIVE;
+  int flags = FFTW_ESTIMATE;
+
+  fftw_plan plan;
+  plan = fftw_plan_r2r_3d(_xRes, _yRes, _zRes, _data, _data,
+                          FFTW_REDFT01, 
+                          FFTW_REDFT01, 
+                          FFTW_RODFT00, // the convention here seems to be backwards.
+                                        // placing the DST here gives the correct answer,
+                                        // but it should be in the first entry, not the third.
+                          flags);
+
+  fftw_execute(plan);
+  (*this) *= 1.0 / ((_xRes + 1) * (2.0 * sqrt(_yRes / 2.0)) * (2.0 * sqrt(_zRes / 2.0))) / 128.0;
+}
+
+///////////////////////////////////////////////////////////////////////
+// get the index of the maximum absolute value
+///////////////////////////////////////////////////////////////////////
+int FIELD_3D::maxAbsIndex()
+{
+  int final = 0;
+  Real bestFound = fabs(_data[0]);
+  for (int x = 1; x < _totalCells; x++)
+  {
+    if (fabs(_data[x]) > bestFound)
+    {
+      final = x;
+      bestFound = fabs(_data[x]);
+    }
+  }
+
+  return final;
+}
+
+///////////////////////////////////////////////////////////////////////
+// get the index of the maximum absolute value
+///////////////////////////////////////////////////////////////////////
+void FIELD_3D::maxAbsIndex(VEC3I& finalIndex)
+{
+  finalIndex[0] = 0;
+  finalIndex[1] = 0;
+  finalIndex[2] = 0;
+  Real bestFound = fabs(_data[0]);
+
+  for (int z = 0; z < _zRes; z++)
+    for (int y = 0; y < _yRes; y++)
+      for (int x = 0; x < _xRes; x++)
+      {
+        int index = x + y * _xRes + z * _slabSize;
+
+        if (fabs(_data[index]) > bestFound)
+        {
+          bestFound = fabs(_data[index]);
+          finalIndex[0] = x;
+          finalIndex[1] = y;
+          finalIndex[2] = z;
+        }
+      }
+}
+
+///////////////////////////////////////////////////////////////////////
+///////////////////////////////////////////////////////////////////////
+void FIELD_3D::planISICIC(fftw_plan& plan)
+{
+  int flags = FFTW_EXHAUSTIVE;
+  plan = fftw_plan_r2r_3d(_xRes, _yRes, _zRes, _data, _data,
+                          FFTW_REDFT01, 
+                          FFTW_REDFT01, 
+                          FFTW_RODFT00, // the convention here seems to be backwards.
+                                        // placing the DST here gives the correct answer,
+                                        // but it should be in the first entry, not the third.
+                          flags);
+}
+
+///////////////////////////////////////////////////////////////////////
+///////////////////////////////////////////////////////////////////////
+void FIELD_3D::planICISIC(fftw_plan& plan)
+{
+  int flags = FFTW_EXHAUSTIVE;
+  plan = fftw_plan_r2r_3d(_xRes, _yRes, _zRes, _data, _data,
+                          FFTW_REDFT01, 
+                          FFTW_RODFT00,
+                          FFTW_REDFT01, 
+                          flags);
+}
+
+///////////////////////////////////////////////////////////////////////
+///////////////////////////////////////////////////////////////////////
+void FIELD_3D::planICICIS(fftw_plan& plan)
+{
+  int flags = FFTW_EXHAUSTIVE;
+  plan = fftw_plan_r2r_3d(_xRes, _yRes, _zRes, _data, _data,
+                          FFTW_RODFT00,
+                          FFTW_REDFT01, 
+                          FFTW_REDFT01, 
+                          flags);
+}
+
+///////////////////////////////////////////////////////////////////////
+///////////////////////////////////////////////////////////////////////
+void FIELD_3D::xIDSTyIDCTzIDCT(const fftw_plan& plan)
+{
+  fftw_execute(plan);
+  (*this) *= 1.0 / ((_xRes + 1) * (2.0 * sqrt(_yRes / 2.0)) * (2.0 * sqrt(_zRes / 2.0))) / 128.0;
+}
+
+///////////////////////////////////////////////////////////////////////
+///////////////////////////////////////////////////////////////////////
+void FIELD_3D::xIDCTyIDSTzIDCT(const fftw_plan& plan)
+{
+  fftw_execute(plan);
+  (*this) *= 1.0 / ((_yRes + 1) * (2.0 * sqrt(_xRes / 2.0)) * (2.0 * sqrt(_zRes / 2.0))) / 128.0;
+}
+
+///////////////////////////////////////////////////////////////////////
+///////////////////////////////////////////////////////////////////////
+void FIELD_3D::xIDCTyIDCTzIDST(const fftw_plan& plan)
+{
+  fftw_execute(plan);
+  (*this) *= 1.0 / ((_zRes + 1) * (2.0 * sqrt(_xRes / 2.0)) * (2.0 * sqrt(_yRes / 2.0))) / 128.0;
+}

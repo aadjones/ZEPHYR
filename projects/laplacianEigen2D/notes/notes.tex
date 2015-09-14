@@ -1,0 +1,148 @@
+\documentclass[12pt,onecolumn]{article}
+\usepackage{amsmath}
+\usepackage{epsfig}
+\usepackage{fullpage}
+\usepackage{xcolor}
+\usepackage{amssymb}
+\usepackage{fancyhdr}
+
+\newcommand{\JJ}{{\bf J}}
+\newcommand{\vv}{{\bf v}}
+\newcommand{\uu}{{\bf u}}
+\newcommand{\II}{{\bf I}}
+\newcommand{\BB}{{\bf B}}
+\newcommand{\FF}{{\bf F}}
+\newcommand{\RR}{{\bf R}}
+\newcommand{\UU}{{\bf U}}
+\newcommand{\qq}{{\bf q}}
+\newcommand{\pp}{{\bf p}}
+\newcommand{\VV}{{\bf V}}
+\newcommand{\DD}{{\bf D}}
+\newcommand{\TT}{{\bf T}}
+\newcommand{\trans}{{\bf t}}
+\newcommand{\ff}{{\bf f}}
+\newcommand{\xx}{{\bf x}}
+\newcommand{\boldt}{{\bf t}}
+\newcommand{\bolda}{{\bf a}}
+\newcommand{\boldb}{{\bf b}}
+\newcommand{\bb}{{\bf b}}
+\newcommand{\fancyS}{{\mathcal S}}
+\newcommand{\boldS}{{\bf S}}
+\newcommand{\boldA}{{\bf A}}
+\newcommand{\rr}{{\bf r}}
+\newcommand{\cc}{{\bf c}}
+\newcommand{\dd}{{\bf d}}
+\newcommand{\QQ}{{\bf Q}}
+\newcommand{\MM}{{\bf M}}
+\newcommand{\HH}{\bf H}
+\newcommand{\boldB}{{\bf B}}
+\newcommand{\CC}{{\bf C}}
+\newcommand{\Top}{{\mathbb T}}
+\newcommand{\Bottom}{{\mathbb B}}
+\newcommand{\functionf}{{\mathbb F}}
+\newcommand{\functionr}{{\mathbb R}}
+\newcommand{\functions}{{\mathbb S}}
+\newcommand{\DB}{\mathbb{D}\Bottom}
+\DeclareMathOperator{\sech}{sech}
+\DeclareMathOperator{\curl}{curl}
+
+\fancyhf{}
+\lfoot{ \fancyplain{}{Page \thepage} }
+\rfoot{ \fancyplain{}{\today} }
+\pagestyle{fancyplain}
+
+\begin{document}
+\vspace*{1em}
+\section{Working Notes on Laplacian Eigenfunctions}
+%Revision: \today
+\subsection{Analytic Solutions}
+
+One vorticity basis function is:
+\begin{equation}
+\phi_a = \sin(a_1x) \sin(a_2 y) \bolda_z.
+\end{equation}
+Its curl is:
+\begin{equation}
+\curl \phi_a = a_2 \sin(a_1x) \cos(a_2 y) \bolda_x - a_1 \cos(a_1 x) \sin(a_2 y) \bolda_y.
+\end{equation}
+Crossed with another basis function, we get:
+\begin{eqnarray}
+\curl \phi_a \times \curl \phi_b &=& a_1 b_2 \cos(a_1 x) \cos(b_2 y) \sin(a_2 x) \sin(b_1 y) - \\
+&& a_2 b_1 \cos(a_2 x) \cos(b_1 y) \sin(a_1 x) \sin(b_2 y).
+\end{eqnarray}
+{\bf This is a typo in the DeWitt thesis. The actual function is:}
+\begin{eqnarray}
+\curl \phi_a \times \curl \phi_b &=& a_1 b_2 \cos(a_1 x) \cos(b_2 y) \sin(a_2 y) \sin(b_1 x) - \\
+&& a_2 b_1 \cos(a_2 y) \cos(b_1 x) \sin(a_1 x) \sin(b_2 y).
+\end{eqnarray}
+Finally, we are interested in the projection onto a single basis function, $k_1 = 1, k_2 = 1$.
+\begin{equation}
+C = \int_0^\pi \int_0^\pi (\curl \phi_a \times \curl \phi_b) \cdot \phi_k \;dx\;dy
+\end{equation}
+The known structure coefficient for a single pair:
+\begin{eqnarray}
+a_1 &=& 2 \\
+a_2 &=& 3 \\
+b_1 &=& 1 \\
+b_2 &=& 2 \\
+k_1 &=& 1 \\
+k_2 &=& 1
+\end{eqnarray}
+is $-0.05 = -\frac{1}{20}$. According to the thesis, it should work out to $-\frac{1}{4}(a_1 b_2 - a_2 b_1) = -\frac{1}{4}(2 \cdot 2 - 3 \cdot 1) = -\frac{1}{4}$. The final $\frac{1}{5}$ factor should come in when the wave number is finally added at the very end, $\lambda_j^{-1} = \frac{1}{b_1^2 + b_2^2} = \frac{1}{5}$, giving the final coefficient $-\frac{1}{4}\frac{1}{5} = -0.05$.
+
+Plugging into Mathematica for a sanity check. Over $[0,\pi] \times [0, \pi]$, the function integrates to $-\frac{\pi^2}{16}$. Presumably the $\pi^2$ factor comes from the two integrals over $[0,\pi]$. When we instead integrate over $[-\pi, \pi] \times [-\pi, \pi]$, we get the more expected $-\frac{\pi^2}{4}$.
+
+Try for another known pair:
+
+The known structure coefficient for a single pair:
+\begin{eqnarray}
+a_1 &=& 2 \\
+a_2 &=& 4 \\
+b_1 &=& 1 \\
+b_2 &=& 3 \\
+k_1 &=& 1 \\
+k_2 &=& 1
+\end{eqnarray}
+is $-0.05 = -\frac{1}{20}$, and the symmetric pair:
+\begin{eqnarray}
+a_1 &=& 4 \\
+a_2 &=& 2 \\
+b_1 &=& 3 \\
+b_2 &=& 1 \\
+k_1 &=& 1 \\
+k_2 &=& 1
+\end{eqnarray}
+is $0.025 = \frac{1}{40}$.
+
+\newpage
+\subsection{Double Curl}
+
+To compute the eigenfunctions numerically, we need a discrete version of the double curl $\nabla \times \nabla \times = (\nabla \times)^2$ operator. For a velocity field $F = (F_x, F_y, F_z)$, this corresponds to:
+\begin{eqnarray*}
+(\nabla \times)^2 F 
+&=&-\left(\frac{\partial^2 F_x}{\partial y^2} + \frac{\partial^2 F_x}{\partial z^2}\right) + \frac{\partial}{\partial x}\left(\frac{\partial F_y}{\partial y} + \frac{\partial F_z}{\partial z}\right) \mathbf{x} \\
+&&  -\left(\frac{\partial^2 F_y}{\partial x^2} + \frac{\partial^2 F_y}{\partial z^2}\right) + \frac{\partial}{\partial y}\left(\frac{\partial F_x}{\partial x} + \frac{\partial F_z}{\partial z}\right) \mathbf{y} \\
+&&  -\left(\frac{\partial^2 F_z}{\partial x^2} + \frac{\partial^2 F_z}{\partial y^2}\right) + \frac{\partial}{\partial z}\left(\frac{\partial F_x}{\partial x} + \frac{\partial F_y}{\partial y}\right) \mathbf{z} \\
+&=&-\left(\frac{\partial^2 F_x}{\partial y^2} + \frac{\partial^2 F_x}{\partial z^2}\right) + \frac{\partial^2 F_y}{\partial x \partial y} + \frac{\partial^2 F_z}{\partial x \partial z} \; \mathbf{x} \\
+&&  -\left(\frac{\partial^2 F_y}{\partial x^2} + \frac{\partial^2 F_y}{\partial z^2}\right) + \frac{\partial^2 F_x}{\partial y \partial x} + \frac{\partial^2 F_z}{\partial y \partial z} \; \mathbf{y} \\
+&&  -\left(\frac{\partial^2 F_z}{\partial x^2} + \frac{\partial^2 F_z}{\partial y^2}\right) + \frac{\partial^2 F_x}{\partial z \partial x} + \frac{\partial^2 F_y}{\partial z \partial y} \; \mathbf{z}
+\end{eqnarray*}
+
+The mixed derivative can be approximated by rotating the stencil:
+
+\begin{equation}
+\frac{\partial^2 F}{\partial x\partial y} = \frac{F_{x + 1,y + 1} - F_{x + 1,y - 1} - F_{x - 1,y + 1} + F_{x - 1,y - 1}}{4 \Delta x \Delta y}
+\end{equation}
+
+In 2D, we get:
+\begin{eqnarray*}
+(\nabla \times)^2 F 
+&=&-\frac{\partial^2 F_x}{\partial y^2} + \frac{\partial^2 F_y}{\partial x \partial y} \; \mathbf{x} \\
+&&  -\frac{\partial^2 F_y}{\partial x^2} + \frac{\partial^2 F_x}{\partial y \partial x} \; \mathbf{y}
+\end{eqnarray*}
+\end{document}
+
+xy = 4 cos(2x) cos(2 y) sin(3 x) sin(y) - 3 cos(3 x) cos(y) sin(2 x) sin(2 y)
+z = sin(x) sin(y)
+
+integrate (4 cos(2x) cos(2 y) sin(3 x) sin(y) - 3 cos(3 x) cos(y) sin(2 x) sin(2 y)) * sin(x) sin(y) dx dy, x = 0..pi, y=0..pi

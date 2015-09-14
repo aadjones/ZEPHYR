@@ -62,6 +62,7 @@ public:
 
   static void printTimings();
   static void printTimingsPerFrame(const int frames);
+  static void printRawTimingsPerFrame(const int frames);
 
 private:
   // begin and end of current block being timed

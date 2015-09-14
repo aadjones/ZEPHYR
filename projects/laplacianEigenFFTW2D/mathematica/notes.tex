@@ -1,0 +1,195 @@
+\documentclass[12pt,onecolumn]{article}
+\usepackage{amsmath}
+\usepackage{epsfig}
+\usepackage{fullpage}
+\usepackage{xcolor}
+\usepackage{amssymb}
+\usepackage{fancyhdr}
+
+\newcommand{\JJ}{{\bf J}}
+\newcommand{\vv}{{\bf v}}
+\newcommand{\uu}{{\bf u}}
+\newcommand{\II}{{\bf I}}
+\newcommand{\BB}{{\bf B}}
+\newcommand{\FF}{{\bf F}}
+\newcommand{\RR}{{\bf R}}
+\newcommand{\UU}{{\bf U}}
+\newcommand{\qq}{{\bf q}}
+\newcommand{\pp}{{\bf p}}
+\newcommand{\VV}{{\bf V}}
+\newcommand{\DD}{{\bf D}}
+\newcommand{\TT}{{\bf T}}
+\newcommand{\trans}{{\bf t}}
+\newcommand{\ff}{{\bf f}}
+\newcommand{\xx}{{\bf x}}
+\newcommand{\boldt}{{\bf t}}
+\newcommand{\bolda}{{\bf a}}
+\newcommand{\boldb}{{\bf b}}
+\newcommand{\bb}{{\bf b}}
+\newcommand{\fancyS}{{\mathcal S}}
+\newcommand{\boldS}{{\bf S}}
+\newcommand{\boldA}{{\bf A}}
+\newcommand{\rr}{{\bf r}}
+\newcommand{\cc}{{\bf c}}
+\newcommand{\dd}{{\bf d}}
+\newcommand{\QQ}{{\bf Q}}
+\newcommand{\MM}{{\bf M}}
+\newcommand{\HH}{\bf H}
+\newcommand{\boldB}{{\bf B}}
+\newcommand{\CC}{{\bf C}}
+\newcommand{\Top}{{\mathbb T}}
+\newcommand{\Bottom}{{\mathbb B}}
+\newcommand{\functionf}{{\mathbb F}}
+\newcommand{\functionr}{{\mathbb R}}
+\newcommand{\functions}{{\mathbb S}}
+\newcommand{\DB}{\mathbb{D}\Bottom}
+\DeclareMathOperator{\sech}{sech}
+\DeclareMathOperator{\curl}{curl}
+\DeclareMathOperator{\Left}{left}
+\DeclareMathOperator{\Right}{right}
+
+\fancyhf{}
+\lfoot{ \fancyplain{}{Page \thepage} }
+\rfoot{ \fancyplain{}{\today} }
+\pagestyle{fancyplain}
+
+\begin{document}
+\vspace*{1em}
+\section{Working Notes on Laplacian Eigenfunctions}
+%Revision: \today
+\subsection{Efficiently Computing the Structure Coefficients}
+
+We define two parts of the the quantity that needs to be integrated:
+\begin{eqnarray*}
+\Left(a_1, a_2, b_1, b_2, k_1, k_2) &=& \cos(a_1 x) \sin(a_2 y) \sin(b_1 x) \cos(b_2 y) \sin(k_1 x) \sin(k_2 y)\\
+\Right(a_1, a_2, b_1, b_2, k_1, k_2) &=& \cos(b_1 x) \sin(b_2 y) \sin(a_1 x) \cos(a_2 y) \sin(k_1 x) \sin(k_2 y)
+\end{eqnarray*}
+The integral for a specific structure coefficient is then:
+\begin{equation}
+\int_{-\pi}^\pi\int_{-\pi}^\pi \Left(a_1, a_2, b_1, b_2, k_1, k_2) - \Right(a_1, a_2, b_1, b_2, k_1, k_2) dx \; dy
+\end{equation}
+The coefficient is only non-zero if one of the following is true for $(a_1, b_1, k_1)$:
+\begin{eqnarray*}
+a_1 + b_1 &=& k_1 \\
+a_1 + k_1 &=& b_1 \\
+b_1 + k_1 &=& a _1
+\end{eqnarray*}
+as well as one of the following for $(a_2, b_2, k_2)$:
+\begin{eqnarray*}
+a_2 + b_2 &=& k_2 \\
+a_2 + k_2 &=& b_2 \\
+b_2 + k_2 &=& a _2
+\end{eqnarray*}
+Note however that this is a necessary condition for a non-zero coefficient, not sufficient. The left and right terms can still cancel each other out.
+
+The double integral for the left then evaluates to:
+\begin{equation}
+\begin{split}
+&\int_{-\pi}^\pi\int_{-\pi}^\pi \Left(a_1, a_2, b_1, b_2, k_1, k_2) dx \; dy = \\
+&\frac{1}{4}\left( 
+\frac{\sin\left((a_2 - b_2 - k_2)\pi\right)}{a_2 - b_2 - k_2}
++ \frac{\sin\left((a_2 + b_2 - k_2)\pi\right)}{a_2 + b_2 - k_2}
+- \frac{\sin\left((a_2 - b_2 + k_2)\pi\right)}{a_2 - b_2 + k_2}
+- \frac{\sin\left((a_2 + b_2 + k_2)\pi\right)}{a_2 + b_2 + k_2}
+\right) \cdot\\
+&\left( 
+-\frac{\sin\left((a_1 - b_1 - k_1)\pi\right)}{a_1 - b_1 - k_1}
++ \frac{\sin\left((a_1 + b_1 - k_1)\pi\right)}{a_1 + b_1 - k_1}
++ \frac{\sin\left((a_1 - b_1 + k_1)\pi\right)}{a_1 - b_1 + k_1}
+- \frac{\sin\left((a_1 + b_1 + k_1)\pi\right)}{a_1 + b_1 + k_1}
+\right)
+\end{split}
+\end{equation}
+Plugging the non-zero conditions directly into this causes a divide by zero error. The correct way to compute things is to plug in a $\pi$ into the terms that have been met. For example, for the following settings:
+\begin{eqnarray*}
+a_1 = 1\\
+b_1 = 1\\
+k_1 = 2\\
+a_2 = 1\\
+b_2 = 2\\
+k_2 = 1
+\end{eqnarray*}
+the following conditions are true:
+\begin{eqnarray*}
+a_1 + b_1 &=& k_1\\
+a_2 + k_2 &=& b_2
+\end{eqnarray*}
+which means we set the terms that resolve to zero:
+\begin{eqnarray*}
+a_1 + b_1 - k_1\\
+a_2 - b_2 + k_2
+\end{eqnarray*}
+equal to $\pi$:
+\begin{equation}
+\begin{split}
+&\int_{-\pi}^\pi\int_{-\pi}^\pi \Left(1,1,1,2,2,1) dx \; dy = \\
+&\frac{1}{4}\left( 
+\frac{\sin\left((a_2 - b_2 - k_2)\pi\right)}{a_2 - b_2 - k_2}
++ \frac{\sin\left((a_2 + b_2 - k_2)\pi\right)}{a_2 + b_2 - k_2}
+- \pi
+- \frac{\sin\left((a_2 + b_2 + k_2)\pi\right)}{a_2 + b_2 + k_2}
+\right) \cdot\\
+&\left( 
+-\frac{\sin\left((a_1 - b_1 - k_1)\pi\right)}{a_1 - b_1 - k_1}
++ \pi
++ \frac{\sin\left((a_1 - b_1 + k_1)\pi\right)}{a_1 - b_1 + k_1}
+- \frac{\sin\left((a_1 + b_1 + k_1)\pi\right)}{a_1 + b_1 + k_1}
+\right)
+\end{split}
+\end{equation}
+The other sine terms then resolve to zero:
+\begin{equation}
+\int_{-\pi}^\pi\int_{-\pi}^\pi \Left(1,1,1,2,2,1) dx \; dy =
+\frac{1}{4}\left( - \pi \right) \left( + \pi\right) = -\frac{\pi^2}{4}
+\end{equation}
+
+The double integral for the right follows similarly, but has slightly different signs:
+\begin{equation}
+\begin{split}
+&\int_{-\pi}^\pi\int_{-\pi}^\pi \Right(a_1, a_2, b_1, b_2, k_1, k_2) dx \; dy = \\
+&\frac{1}{4}\left( 
+-\frac{\sin\left((a_2 - b_2 - k_2)\pi\right)}{a_2 - b_2 - k_2}
++ \frac{\sin\left((a_2 + b_2 - k_2)\pi\right)}{a_2 + b_2 - k_2}
++ \frac{\sin\left((a_2 - b_2 + k_2)\pi\right)}{a_2 - b_2 + k_2}
+- \frac{\sin\left((a_2 + b_2 + k_2)\pi\right)}{a_2 + b_2 + k_2}
+\right) \cdot\\
+&\left( 
+ \frac{\sin\left((a_1 - b_1 - k_1)\pi\right)}{a_1 - b_1 - k_1}
++ \frac{\sin\left((a_1 + b_1 - k_1)\pi\right)}{a_1 + b_1 - k_1}
+- \frac{\sin\left((a_1 - b_1 + k_1)\pi\right)}{a_1 - b_1 + k_1}
+- \frac{\sin\left((a_1 + b_1 + k_1)\pi\right)}{a_1 + b_1 + k_1}
+\right)
+\end{split}
+\end{equation}
+
+\section{Adding back the scalings}
+
+The eigenfunctions in fact contain a scalar on the front:
+\begin{eqnarray*}
+\Phi(a_1, a_2)_x &=& a_2 \sin(a_1 x) \cos(a_2 y)\\
+\Phi(a_1, a_2)_y &=& -a_1 \cos(a_1 x) \sin(a_2 y)\\
+\end{eqnarray*}
+The vorticity has no such scaling:
+\begin{equation*}
+\phi(k_1, k_2) = \sin(k_1 x) \sin(k_2 y)
+\end{equation*}
+The left and right terms then become:
+\begin{eqnarray*}
+\Left(a_1, a_2, b_1, b_2, k_1, k_2) &=& b_2 a_1\cdot \cos(a_1 x) \sin(a_2 y) \sin(b_1 x) \cos(b_2 y) \sin(k_1 x) \sin(k_2 y)\\
+\Right(a_1, a_2, b_1, b_2, k_1, k_2) &=& b_1 a_2 \cdot \cos(b_1 x) \sin(b_2 y) \sin(a_1 x) \cos(a_2 y) \sin(k_1 x) \sin(k_2 y)
+\end{eqnarray*}
+The non-zero cases of the integrals then resolve to (within a minus sign):
+\begin{equation*}
+\int_{-\pi}^\pi\int_{-\pi}^\pi \Left(a_1, a_2, b_1, b_2, k_1, k_2) dx \; dy = b_2 a_1 \cdot \frac{\pi^2}{4}
+\end{equation*}
+\begin{equation*}
+\int_{-\pi}^\pi\int_{-\pi}^\pi \Right(a_1, a_2, b_1, b_2, k_1, k_2) dx \; dy = b_1 a_2 \cdot \frac{\pi^2}{4}
+\end{equation*}
+After normalizing off the $\frac{\pi^2}{4}$ term, and assuming that all the minuses do not cause the term to cancel off, the final structure coefficient is then:
+\begin{equation*}
+s(a_1, a_2, b_1, b_2, k_1, k_2) = \frac{b_2 a_1 - b_1 a_2}{b_1^2 + b_2^2}
+\end{equation*}
+This does seem to align with the terms from Appendix A of the DeWitt paper, though within a factor of 4. Presumably they added a 4 somewhere that we stripped off.
+
+{\bf Note:} After implementation, it looks like the factor of 4 should actually be there. It perhaps arises because the $\pi$ factor gets repeated 4 times when it is double integrated over the $\int_\pi^{-\pi}$ intervals.
+\end{document}

@@ -77,12 +77,26 @@ void printGlString(string output)
 ///////////////////////////////////////////////////////////////////////
 void initTexture(FIELD_2D& texture)
 {
+  float* rgb = new float[3 * texture.totalCells()];
+
+  for (int x = 0; x < texture.totalCells(); x++)
+  {
+    rgb[3 * x] = rgb[3 * x + 1] = rgb[3 * x + 2] = texture[x];
+
+    /*
+    if (originalField[zSlice * originalField.slabSize() + x] > 0)
+      rgb[3 * x] = texture[x];
+    else
+      rgb[3 * x + 2] = texture[x];
+      */
+  }
+
   glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
   glTexImage2D(GL_TEXTURE_2D, 0, 3, 
       texture.xRes(), 
       texture.yRes(), 0, 
-      GL_LUMINANCE, GL_FLOAT, 
-      texture.data());
+      GL_RGB, GL_FLOAT, 
+      rgb);
 
   glTexParameterf(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP);
   glTexParameterf(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP);

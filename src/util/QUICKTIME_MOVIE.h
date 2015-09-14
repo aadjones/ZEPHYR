@@ -33,6 +33,7 @@
 #include <cstdio>
 #include <cstdlib>
 #include <string>
+#include <cstring>
 #include <cassert>
 #include <vector>
 #include <jpeglib.h>

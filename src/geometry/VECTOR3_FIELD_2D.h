@@ -49,7 +49,13 @@ public:
   const int totalCells() const { return _totalCells; };
   const VEC3F constEntry(int index) const { return _data[index]; };
   void clear();
- 
+
+  VECTOR3_FIELD_2D& operator*=(const Real& alpha);
+  VECTOR3_FIELD_2D& operator+=(const VECTOR3_FIELD_2D& input);
+
+  void setX(const FIELD_2D& xField);
+  void setY(const FIELD_2D& yField);
+
   // overloaded operators
   VECTOR3_FIELD_2D& operator=(const VECTOR3_FIELD_2D& input);
 
@@ -75,8 +81,40 @@ public:
   // write a LIC iamge
   // http://www.zhanpingliu.org/research/flowvis/LIC/MiniLIC.c
   void writeLIC(const char* filename);
+  FIELD_2D LIC();
   
   void writeLIC(int scaleUp, const char* filename);
+
+  // compute the Laplacian Eigenfunction according to the DeWitt et al. paper
+  void eigenfunction(int k1, int k2);
+  void eigenfunctionUnscaled(int k1, int k2);
+  void eigenfunctionFFTW(int k1, int k2);
+
+  // compute the vorticity function according to the DeWitt et al. paper
+  void vorticity(int k1, int k2);
+
+  // compute the curl of two crossed vorticity functions
+  void curlCrossedVorticity(int a1, int a2, int b1, int b2);
+  void dotCurledCrossed(int a1, int a2, int b1, int b2, int k1, int k2);
+
+  // convert to and from a big vector
+  VECTOR flatten();
+  void unflatten(const VECTOR& v);
+  VECTOR flattenXY();
+  void unflattenXY(const VECTOR& v);
+
+  // get the curl of the scalar field
+  static VECTOR3_FIELD_2D curl(const FIELD_2D& scalar);
+
+  // get the structure coefficient
+  static Real structureCoefficient(int a1, int a2, int b1, int b2, int k1, int k2, int xRes = 256, int yRes = 256);
+  static Real structureCoefficientAnalytic(int a1, int a2, int b1, int b2, int k1, int k2);
+
+  // get the summed square of all the entries
+  Real sumSq();
+
+  // stomp the border to zero
+  void stompBorder();
 
 private:
   int _xRes;
@@ -97,6 +135,8 @@ private:
   // physical lengths
   Real _dx;
   Real _dy;
+  Real _invDx;
+  Real _invDy;
 };
 
 #endif

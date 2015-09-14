@@ -78,6 +78,42 @@ ostream& operator<<(ostream &out, SPARSE_MATRIX& matrix)
 }
 
 //////////////////////////////////////////////////////////////////////
+//////////////////////////////////////////////////////////////////////
+void SPARSE_MATRIX::buildStatic()
+{
+  _out.clear();
+  _in.clear();
+  _values.clear();
+
+  // iterate through all the entries
+  map<pair<int,int>, Real>::const_iterator iter;
+  const map<pair<int,int>, Real>& data = _matrix;
+  for (iter = data.begin(); iter != data.end(); iter++)
+  {
+    const pair<int,int> index = iter->first;
+    const Real value = iter->second;
+    int i = index.first;
+    int j = index.second;
+
+    _out.push_back(i);
+    _in.push_back(j);
+    _values.push_back(value);
+  }
+}
+
+//////////////////////////////////////////////////////////////////////
+// do a static multiply, assuming buildStatic() has already been
+// called
+//////////////////////////////////////////////////////////////////////
+VECTOR SPARSE_MATRIX::staticMultiply(const VECTOR& v)
+{
+  VECTOR y(_rows);
+  for (unsigned int x = 0; x < _out.size(); x++)
+    y[_out[x]] += v[_in[x]] * _values[x];
+  return y;
+}
+
+//////////////////////////////////////////////////////////////////////
 // sparse matrix-vector multiply
 //////////////////////////////////////////////////////////////////////
 VectorXd operator*(const SPARSE_MATRIX& A, const VectorXd& x) 
@@ -120,8 +156,8 @@ VECTOR operator*(const SPARSE_MATRIX& A, const VECTOR& x)
   {
     const pair<int,int> index = iter->first;
     const Real value = iter->second;
-    int i = index.first;
-    int j = index.second;
+    const int i = index.first;
+    const int j = index.second;
     y(i) += x[j] * value;
   }
   return y;
@@ -503,6 +539,23 @@ void SPARSE_MATRIX::readGz(gzFile& file)
 }
 
 //////////////////////////////////////////////////////////////////////
+//////////////////////////////////////////////////////////////////////
+void SPARSE_MATRIX::write(const string& filename) const
+{
+  FILE* file = NULL;
+  file = fopen(filename.c_str(), "wb");
+  if (file == NULL)
+  {
+    cout << __FILE__ << " " << __FUNCTION__ << " " << __LINE__ << " : " << endl;
+    cout << " Failed to open file " << filename.c_str() << "!!!" << endl;
+    return;
+  }
+
+  write(file);
+  fclose(file);
+}
+
+//////////////////////////////////////////////////////////////////////
 // write to a file stream
 //////////////////////////////////////////////////////////////////////
 void SPARSE_MATRIX::write(FILE* file) const
@@ -558,4 +611,23 @@ void SPARSE_MATRIX::writeGz(gzFile& file) const
     gzwrite(file, (void*)&col, sizeof(int));
     gzwrite(file, (void*)&entry, sizeof(Real));
   }
+}
+
+//////////////////////////////////////////////////////////////////////
+// call Matlab to get the eigendecomposition
+//
+// Since a sparse solver is called, "howMany" determines how many eigenvalues
+// are solved for. The results are stored in the specified filenames
+//////////////////////////////////////////////////////////////////////
+void SPARSE_MATRIX::matlabEigs(const int howMany, const string& matrixFilename, const string& vectorFilename)
+{
+  string inputFilename("temp.sparse");
+  write(inputFilename.c_str());
+
+  char buffer[1024];
+  sprintf(buffer, "matlab ./matlab -nosplash -nodisplay -nodesktop -nojvm -r \"getEigs(%i, '%s', '%s', '%s');exit\"", howMany, inputFilename.c_str(), matrixFilename.c_str(), vectorFilename.c_str());
+  system(buffer);
+
+  //string rm("rm " + inputFilename);
+  //system(rm.c_str());
 }

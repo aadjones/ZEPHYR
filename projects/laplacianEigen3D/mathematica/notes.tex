@@ -1,0 +1,464 @@
+\documentclass[12pt,onecolumn]{article}
+\usepackage{amsmath}
+\usepackage{epsfig}
+\usepackage{fullpage}
+\usepackage{xcolor}
+\usepackage{amssymb}
+\usepackage{fancyhdr}
+
+\newcommand{\JJ}{{\bf J}}
+\newcommand{\vv}{{\bf v}}
+\newcommand{\uu}{{\bf u}}
+\newcommand{\II}{{\bf I}}
+\newcommand{\BB}{{\bf B}}
+\newcommand{\FF}{{\bf F}}
+\newcommand{\RR}{{\bf R}}
+\newcommand{\UU}{{\bf U}}
+\newcommand{\qq}{{\bf q}}
+\newcommand{\pp}{{\bf p}}
+\newcommand{\VV}{{\bf V}}
+\newcommand{\DD}{{\bf D}}
+\newcommand{\TT}{{\bf T}}
+\newcommand{\trans}{{\bf t}}
+\newcommand{\ff}{{\bf f}}
+\newcommand{\xx}{{\bf x}}
+\newcommand{\boldt}{{\bf t}}
+\newcommand{\bolda}{{\bf a}}
+\newcommand{\boldb}{{\bf b}}
+\newcommand{\bb}{{\bf b}}
+\newcommand{\fancyS}{{\mathcal S}}
+\newcommand{\boldS}{{\bf S}}
+\newcommand{\boldA}{{\bf A}}
+\newcommand{\rr}{{\bf r}}
+\newcommand{\cc}{{\bf c}}
+\newcommand{\dd}{{\bf d}}
+\newcommand{\QQ}{{\bf Q}}
+\newcommand{\MM}{{\bf M}}
+\newcommand{\HH}{\bf H}
+\newcommand{\boldB}{{\bf B}}
+\newcommand{\CC}{{\bf C}}
+\newcommand{\Top}{{\mathbb T}}
+\newcommand{\Bottom}{{\mathbb B}}
+\newcommand{\functionf}{{\mathbb F}}
+\newcommand{\functionr}{{\mathbb R}}
+\newcommand{\functions}{{\mathbb S}}
+\newcommand{\DB}{\mathbb{D}\Bottom}
+\DeclareMathOperator{\sech}{sech}
+\DeclareMathOperator{\curl}{curl}
+\DeclareMathOperator{\Left}{left}
+\DeclareMathOperator{\Right}{right}
+
+\fancyhf{}
+\lfoot{ \fancyplain{}{Page \thepage} }
+\rfoot{ \fancyplain{}{\today} }
+\pagestyle{fancyplain}
+
+\begin{document}
+\vspace*{1em}
+\section{Working Notes on Laplacian Eigenfunctions}
+%Revision: \today
+\subsection{Efficiently Computing the 3D Structure Coefficients}
+In 3D, all the eigenfunctions, regardless of the velocity direction, have the same form, but the coefficients differ. For simplicity, we can abstract these away into constants:
+\begin{eqnarray*}
+a_x &=& \alpha_1 \sin(a_1 x) \cos(a_2 y) \cos(a_3 z) \\
+a_y &=& \alpha_2 \cos(a_1 x) \sin(a_2 y) \cos(a_3 z) \\
+a_z &=& \alpha_3 \cos(a_1 x) \cos(a_2 y) \sin(a_3 z)
+\end{eqnarray*}
+\begin{eqnarray*}
+b_x &=& \beta_1 \sin(b_1 x) \cos(b_2 y) \cos(b_3 z) \\
+b_y &=& \beta_2 \cos(b_1 x) \sin(b_2 y) \cos(b_3 z) \\
+b_z &=& \beta_3 \cos(b_1 x) \cos(b_2 y) \sin(b_3 z)
+\end{eqnarray*}
+For example, the $a$ field can be used to generate an $x$ velocity field by setting:
+\begin{eqnarray*}
+\alpha_1 &=& -(a_2  a_2 + a_3 a_3) \\
+\alpha_2 &=& a_1 a_2 \\
+\alpha_3 &=& a_1 a_3
+\end{eqnarray*}
+The vorticity functions flip the trig functions,
+\begin{eqnarray*}
+v_x &=& \kappa_1 \cos(k_1 x) \sin(k_2 y) \sin(k_3 z) \\
+v_y &=& \kappa_2 \sin(k_1 x) \cos(k_2 y) \sin(k_3 z) \\
+v_z &=& \kappa_3 \sin(k_1 x) \sin(k_2 y) \cos(k_3 z)
+\end{eqnarray*}
+and in all cases, one of the $\kappa_*$ terms will be zero, canceling out entire terms later on. 
+
+The conditions for a structure coefficient to be non-zero are then the same as in the 2D case. For each $(a_i, b_i, k_i)$ triplet, two of the terms must sum to the third:
+\begin{eqnarray*}
+a_i + b_i &=& k_i \\
+a_i + k_i &=& b_i \\
+b_i + k_i &=& a_i
+\end{eqnarray*}
+The structure coefficient is then:
+\begin{equation}
+\begin{split}
+-\frac{1}{64} \alpha_3 \beta_2 \kappa_1 
+   \left[\frac{\sin((a_1 - b_1 - k_1) \pi)}{a_1 - b_1 - k_1} + 
+    \frac{\sin((a_1 + b_1 - k_1) \pi)}{a_1 + b_1 - k_1} + 
+    \frac{\sin((a_1 - b_1 + k_1) \pi)}{a_1 - b_1 + k_1} + 
+    \frac{\sin((a_1 + b_1 + k_1) \pi)}{a_1 + b_1 + k_1}\right]\\
+   \left[-\frac{\sin((a_2 - b_2 - k_2) \pi)}{a_2 - b_2 - k_2)} + 
+    \frac{\sin((a_2 + b_2 - k_2) \pi)}{a_2 + b_2 - k_2} + 
+    \frac{\sin((a_2 - b_2 + k_2) \pi)}{a_2 - b_2 + k_2} - 
+    \frac{\sin((a_2 + b_2 + k_2) \pi)}{a_2 + b_2 + k_2}\right]\\
+   \left[\frac{\sin((a_3 - b_3 - k_3) \pi)}{a_3 - b_3 - k_3} + 
+    \frac{\sin((a_3 + b_3 - k_3) \pi)}{a_3 + b_3 - k_3} - 
+    \frac{\sin((a_3 - b_3 + k_3) \pi)}{a_3 - b_3 + k_3} - 
+    \frac{\sin((a_3 + b_3 + k_3) \pi)}{a_3 + b_3 + k_3}\right] +\\ 
+ \frac{1}{64} \alpha_3 \beta_1 \kappa_2 \left[-\frac{\sin((a_1 - b_1 - k_1) \pi)}{
+     a_1 - b_1 - k_1} + \frac{\sin((a_1 + b_1 - k_1) \pi)}{a_1 + b_1 - k_1} + 
+    \frac{\sin((a_1 - b_1 + k_1) \pi)}{a_1 - b_1 + k_1} - 
+    \frac{\sin((a_1 + b_1 + k_1) \pi)}{a_1 + b_1 + k_1}\right]\\ 
+   \left[\frac{\sin((a_2 - b_2 - k_2) \pi)}{a_2 - b_2 - k_2} + 
+    \frac{\sin((a_2 + b_2 - k_2) \pi)}{a_2 + b_2 - k_2} + 
+    \frac{\sin((a_2 - b_2 + k_2) \pi)}{a_2 - b_2 + k_2} + 
+    \frac{\sin((a_2 + b_2 + k_2) \pi)}{a_2 + b_2 + k_2}\right]\\
+   \left[\frac{\sin((a_3 - b_3 - k_3) \pi)}{a_3 - b_3 - k_3} + 
+    \frac{\sin((a_3 + b_3 - k_3) \pi)}{a_3 + b_3 - k_3} - 
+    \frac{\sin((a_3 - b_3 + k_3) \pi)}{a_3 - b_3 + k_3} - 
+    \frac{\sin((a_3 + b_3 + k_3) \pi)}{a_3 + b_3 + k_3}\right] +\\
+\frac{1}{64} \alpha_2 \beta_2 \kappa_1 \left[\frac{\sin((a_1 - b_1 - k_1) \pi)}{a_1 - b_1 - k_1} + 
+    \frac{\sin((a_1 + b_1 - k_1) \pi)}{a_1 + b_1 - k_1} + 
+    \frac{\sin((a_1 - b_1 + k_1) \pi)}{a_1 - b_1 + k_1} + 
+    \frac{\sin((a_1 + b_1 + k_1) \pi)}{a_1 + b_1 + k_1}\right]\\
+   \left[\frac{\sin((a_2 - b_2 - k_2) \pi)}{a_2 - b_2 - k_2} + 
+    \frac{\sin((a_2 + b_2 - k_2) \pi)}{a_2 + b_2 - k_2} - 
+    \frac{\sin((a_2 - b_2 + k_2) \pi)}{a_2 - b_2 + k_2} - 
+    \frac{\sin((a_2 + b_2 + k_2) \pi)}{a_2 + b_2 + k_2}\right]\\
+   \left[-\frac{\sin((a_3 - b_3 - k_3) \pi)}{a_3 - b_3 - k_3} + 
+    \frac{\sin((a_3 + b_3 - k_3) \pi)}{a_3 + b_3 - k_3} + 
+    \frac{\sin((a_3 - b_3 + k_3) \pi)}{a_3 - b_3 + k_3} - 
+    \frac{\sin((a_3 + b_3 + k_3) \pi)}{a_3 + b_3 + k_3}\right] - \\
+ \frac{1}{64} \alpha_1 \beta_2 \kappa_2 \left[\frac{\sin((a_1 - b_1 - k_1) \pi)}{a_1 - b_1 - k_1} + 
+    \frac{\sin((a_1 + b_1 - k_1) \pi)}{a_1 + b_1 - k_1} - 
+    \frac{\sin((a_1 - b_1 + k_1) \pi)}{a_1 - b_1 + k_1} - 
+    \frac{\sin((a_1 + b_1 + k_1) \pi)}{a_1 + b_1 + k_1}\right]\\
+   \left[\frac{\sin((a_2 - b_2 - k_2) \pi)}{a_2 - b_2 - k_2} + 
+    \frac{\sin((a_2 + b_2 - k_2) \pi)}{a_2 + b_2 - k_2} + 
+    \frac{\sin((a_2 - b_2 + k_2) \pi)}{a_2 - b_2 + k_2} + 
+    \frac{\sin((a_2 + b_2 + k_2) \pi)}{a_2 + b_2 + k_2}\right]\\
+   \left[-\frac{\sin((a_3 - b_3 - k_3) \pi)}{a_3 - b_3 - k_3} + 
+    \frac{\sin((a_3 + b_3 - k_3) \pi)}{a_3 + b_3 - k_3} + 
+    \frac{\sin((a_3 - b_3 + k_3) \pi)}{a_3 - b_3 + k_3} - 
+    \frac{\sin((a_3 + b_3 + k_3) \pi)}{a_3 + b_3 + k_3}\right] -\\
+ \frac{1}{64} \alpha_2 \beta_1 \kappa_3 \left[-\frac{\sin((a_1 - b_1 - k_1) \pi)}{
+     a_1 - b_1 - k_1} + \frac{\sin((a_1 + b_1 - k_1) \pi)}{a_1 + b_1 - k_1} + 
+    \frac{\sin((a_1 - b_1 + k_1) \pi)}{a_1 - b_1 + k_1} - 
+    \frac{\sin((a_1 + b_1 + k_1) \pi)}{a_1 + b_1 + k_1}\right]\\
+   \left[\frac{\sin((a_2 - b_2 - k_2) \pi)}{a_2 - b_2 - k_2} + 
+    \frac{\sin((a_2 + b_2 - k_2) \pi)}{a_2 + b_2 - k_2} - 
+    \frac{\sin((a_2 - b_2 + k_2) \pi)}{a_2 - b_2 + k_2} - 
+    \frac{\sin((a_2 + b_2 + k_2) \pi)}{a_2 + b_2 + k_2}\right]\\
+   \left[\frac{\sin((a_3 - b_3 - k_3) \pi)}{a_3 - b_3 - k_3} + 
+    \frac{\sin((a_3 + b_3 - k_3) \pi)}{a_3 + b_3 - k_3} + 
+    \frac{\sin((a_3 - b_3 + k_3) \pi)}{a_3 - b_3 + k_3} + 
+    \frac{\sin((a_3 + b_3 + k_3) \pi)}{a_3 + b_3 + k_3}\right] + \\
+ \frac{1}{64} \alpha_1 \beta_2 \kappa_3 \left[\frac{\sin((a_1 - b_1 - k_1) \pi)}{a_1 - b_1 - k_1} + 
+    \frac{\sin((a_1 + b_1 - k_1) \pi)}{a_1 + b_1 - k_1} - 
+    \frac{\sin((a_1 - b_1 + k_1) \pi)}{a_1 - b_1 + k_1} - 
+    \frac{\sin((a_1 + b_1 + k_1) \pi)}{a_1 + b_1 + k_1}\right]\\
+   \left[-\frac{\sin((a_2 - b_2 - k_2) \pi)}{a_2 - b_2 - k_2} + 
+    \frac{\sin((a_2 + b_2 - k_2) \pi)}{a_2 + b_2 - k_2} + 
+    \frac{\sin((a_2 - b_2 + k_2) \pi)}{a_2 - b_2 + k_2} - 
+    \frac{\sin((a_2 + b_2 + k_2) \pi)}{a_2 + b_2 + k_2}\right]\\
+   \left[\frac{\sin((a_3 - b_3 - k_3) \pi)}{a_3 - b_3 - k_3} + 
+    \frac{\sin((a_3 + b_3 - k_3) \pi)}{a_3 + b_3 - k_3} + 
+    \frac{\sin((a_3 - b_3 + k_3) \pi)}{a_3 - b_3 + k_3} + 
+    \frac{\sin((a_3 + b_3 + k_3) \pi)}{a_3 + b_3 + k_3}\right]
+\end{split}
+\end{equation}
+This can be further simplified by introducing the conditions:
+\begin{eqnarray*}
+  c_{100}(a,b,k)&=&\begin{cases}
+    \pi, & \text{if $a - b - k = 0$}.\\
+    0, & \text{otherwise}.
+  \end{cases} \\
+  c_{110}(a,b,k)&=&\begin{cases}
+    \pi, & \text{if $a + b - k = 0$}.\\
+    0, & \text{otherwise}.
+  \end{cases} \\
+  c_{101}(a,b,k)&=&\begin{cases}
+    \pi, & \text{if $a - b + k = 0$}.\\
+    0, & \text{otherwise}.
+  \end{cases} \\
+\end{eqnarray*}
+Note that the case where the $a + b + k = 0$ does not need to be covered, because the variables are always non-negative, so this case is only true when $a  = b = k = 0$. The expression then simplifies to:
+\begin{equation}
+\begin{split}
+-\frac{1}{64} \alpha_3 \beta_2 \kappa_1 
+   \left[c_{100}(a_1, b_1, k_1) + 
+    c_{110}(a_1, b_1, k_1) + 
+    c_{101}(a_1, b_1, k_1)\right]\\
+   \left[-c_{100}(a_2, b_2, k_2) + 
+    c_{110}(a_2, b_2, k_2) + 
+    c_{101}(a_2, b_2, k_2)\right]\\
+   \left[c_{100}(a_3, b_3, k_3) + 
+    c_{110}(a_3, b_3, k_3) - 
+    c_{101}(a_3, b_3, k_3)\right] \\ 
++ \frac{1}{64} \alpha_3 \beta_1 \kappa_2 \left[-c_{100}(a_1, b_1, k_1) + c_{110}(a_1, b_1, k_1) + 
+    c_{101}(a_1, b_1, k_1)\right]\\ 
+   \left[c_{100}(a_2, b_2, k_2) + 
+    c_{110}(a_2, b_2, k_2) + 
+    c_{101}(a_2, b_2, k_2)\right]\\
+   \left[c_{100}(a_3, b_3, k_3) + 
+    c_{110}(a_3, b_3, k_3) - 
+    c_{101}(a_3, b_3, k_3)\right] \\
++\frac{1}{64} \alpha_2 \beta_2 \kappa_1 \left[c_{100}(a_1, b_1, k_1) + 
+    c_{110}(a_1, b_1, k_1) + 
+    c_{101}(a_1, b_1, k_1)\right]\\
+   \left[c_{100}(a_2, b_2, k_2) + 
+    c_{110}(a_2, b_2, k_2) - 
+    c_{101}(a_2, b_2, k_2)\right]\\
+   \left[-c_{100}(a_3, b_3, k_3) + 
+    c_{110}(a_3, b_3, k_3) + 
+    c_{101}(a_3, b_3, k_3)\right] \\
+- \frac{1}{64} \alpha_1 \beta_2 \kappa_2 \left[c_{100}(a_1, b_1, k_1) + 
+    c_{110}(a_1, b_1, k_1) - 
+    c_{101}(a_1, b_1, k_1)\right]\\
+   \left[c_{100}(a_2, b_2, k_2) + 
+    c_{110}(a_2, b_2, k_2) + 
+    c_{101}(a_2, b_2, k_2)\right]\\
+   \left[-c_{100}(a_3, b_3, k_3) + 
+    c_{110}(a_3, b_3, k_3) + 
+    c_{101}(a_3, b_3, k_3)\right] \\
+- \frac{1}{64} \alpha_2 \beta_1 \kappa_3 \left[-c_{100}(a_1, b_1, k_1) + 
+ c_{110}(a_1, b_1, k_1) + 
+    c_{101}(a_1, b_1, k_1)\right]\\
+   \left[c_{100}(a_2, b_2, k_2) + 
+    c_{110}(a_2, b_2, k_2) - 
+    c_{101}(a_2, b_2, k_2)\right]\\
+   \left[c_{100}(a_3, b_3, k_3) + 
+    c_{110}(a_3, b_3, k_3) + 
+    c_{101}(a_3, b_3, k_3)\right] \\
++ \frac{1}{64} \alpha_1 \beta_2 \kappa_3 \left[c_{100}(a_1, b_1, k_1) + 
+    c_{110}(a_1, b_1, k_1) - 
+    c_{101}(a_1, b_1, k_1)\right]\\
+   \left[-c_{100}(a_2, b_2, k_2) + 
+    c_{110}(a_2, b_2, k_2) + 
+    c_{101}(a_2, b_2, k_2)\right]\\
+   \left[c_{100}(a_3, b_3, k_3) + 
+    c_{110}(a_3, b_3, k_3) + 
+    c_{101}(a_3, b_3, k_3)\right]
+\end{split}
+\end{equation}
+To visualize the pattern of positives and negatives:
+\begin{equation}
+\begin{split}
+-\frac{1}{64} \alpha_3 \beta_2 \kappa_1 
+\left[ \begin{array}{ccc}
+1 & 1 & 1 \\
+-1 & 1 & 1 \\
+1 & 1 & -1 \end{array} \right] 
++ \frac{1}{64} \alpha_3 \beta_1 \kappa_2
+\left[ \begin{array}{ccc}
+-1 & 1 & 1 \\
+1 & 1 & 1 \\
+1 & 1 & -1 \end{array} \right] 
++\frac{1}{64} \alpha_2 \beta_2 \kappa_1 
+\left[ \begin{array}{ccc}
+1 & 1 & 1 \\
+1 & 1 & -1 \\
+-1 & 1 & 1 \end{array} \right] \\
+- \frac{1}{64} \alpha_1 \beta_2 \kappa_2 
+\left[ \begin{array}{ccc}
+1 & 1 & -1 \\
+1 & 1 & 1 \\
+-1 & 1 & 1 \end{array} \right]
+- \frac{1}{64} \alpha_2 \beta_1 \kappa_3 
+\left[ \begin{array}{ccc}
+-1 & 1 & 1 \\
+1 & 1 & -1 \\
+1 & 1 & 1 \end{array} \right]
++ \frac{1}{64} \alpha_1 \beta_2 \kappa_3 
+\left[ \begin{array}{ccc}
+1 & 1 & -1 \\
+-1 & 1 & -1 \\
+1 & 1 & 1 \end{array} \right]
+\end{split}
+\end{equation}
+
+\subsection{Eigenfunction and Vorticity Constants}
+
+An $x$ velocity field:
+\begin{eqnarray*}
+\alpha_1 &=& -(a_2^2 + a_3^2) \\
+\alpha_2 &=& a_1 a_2 \\
+\alpha_3 &=& a_1 a_3
+\end{eqnarray*}
+A $y$ velocity field:
+\begin{eqnarray*}
+\alpha_1 &=& -a_1 a _2 \\
+\alpha_2 &=& a_1^2+ a_3^2\\
+\alpha_3 &=& -a_2 a_3
+\end{eqnarray*}
+A $z$ velocity field:
+\begin{eqnarray*}
+\alpha_1 &=& a_1 a _3 \\
+\alpha_2 &=& a_2 a_3\\
+\alpha_3 &=& -(a_1^2 + a_2^2)
+\end{eqnarray*}
+An $x$ vorticity field:
+\begin{eqnarray*}
+\kappa_1 &=& 0 \\
+\kappa_2 &=& k_3\\
+\kappa_3 &=& -k_2
+\end{eqnarray*}
+A $y$ vorticity field:
+\begin{eqnarray*}
+\kappa_1 &=& k_3 \\
+\kappa_2 &=& 0\\
+\kappa_3 &=& -k_1
+\end{eqnarray*}
+A $z$ vorticity field:
+\begin{eqnarray*}
+\kappa_1 &=& k_2 \\
+\kappa_2 &=& -k_1\\
+\kappa_3 &=& 0
+\end{eqnarray*}
+
+\subsection{Post-Implementation}
+
+Depending on the Mathematica run, we seem to get slightly different terms in the integral. Combining them seems to yield:
+\begin{equation}
+\begin{split}
+-\frac{1}{64} \alpha_3 \beta_2 \kappa_1 
+   \left[c_{100}(a_1, b_1, k_1) + 
+    c_{110}(a_1, b_1, k_1) + 
+    c_{101}(a_1, b_1, k_1)\right]\\
+   \left[-c_{100}(a_2, b_2, k_2) + 
+    c_{110}(a_2, b_2, k_2) + 
+    c_{101}(a_2, b_2, k_2)\right]\\
+   \left[c_{100}(a_3, b_3, k_3) + 
+    c_{110}(a_3, b_3, k_3) - 
+    c_{101}(a_3, b_3, k_3)\right] \\ 
++ \frac{1}{64} \alpha_3 \beta_1 \kappa_2 \left[-c_{100}(a_1, b_1, k_1) + c_{110}(a_1, b_1, k_1) + 
+    c_{101}(a_1, b_1, k_1)\right]\\ 
+   \left[c_{100}(a_2, b_2, k_2) + 
+    c_{110}(a_2, b_2, k_2) + 
+    c_{101}(a_2, b_2, k_2)\right]\\
+   \left[c_{100}(a_3, b_3, k_3) + 
+    c_{110}(a_3, b_3, k_3) - 
+    c_{101}(a_3, b_3, k_3)\right] \\
++\frac{1}{64} (\alpha_2 \beta_2 \kappa_1 + \alpha_2 \beta_3 \kappa_1) \left[c_{100}(a_1, b_1, k_1) + 
+    c_{110}(a_1, b_1, k_1) + 
+    c_{101}(a_1, b_1, k_1)\right]\\
+   \left[c_{100}(a_2, b_2, k_2) + 
+    c_{110}(a_2, b_2, k_2) - 
+    c_{101}(a_2, b_2, k_2)\right]\\
+   \left[-c_{100}(a_3, b_3, k_3) + 
+    c_{110}(a_3, b_3, k_3) + 
+    c_{101}(a_3, b_3, k_3)\right] \\
+- \frac{1}{64} (\alpha_1 \beta_2 \kappa_2 + \alpha_1 \beta_3 \kappa_2) \left[c_{100}(a_1, b_1, k_1) + 
+    c_{110}(a_1, b_1, k_1) - 
+    c_{101}(a_1, b_1, k_1)\right]\\
+   \left[c_{100}(a_2, b_2, k_2) + 
+    c_{110}(a_2, b_2, k_2) + 
+    c_{101}(a_2, b_2, k_2)\right]\\
+   \left[-c_{100}(a_3, b_3, k_3) + 
+    c_{110}(a_3, b_3, k_3) + 
+    c_{101}(a_3, b_3, k_3)\right] \\
+- \frac{1}{64} \alpha_2 \beta_1 \kappa_3 \left[-c_{100}(a_1, b_1, k_1) + 
+ c_{110}(a_1, b_1, k_1) + 
+    c_{101}(a_1, b_1, k_1)\right]\\
+   \left[c_{100}(a_2, b_2, k_2) + 
+    c_{110}(a_2, b_2, k_2) - 
+    c_{101}(a_2, b_2, k_2)\right]\\
+   \left[c_{100}(a_3, b_3, k_3) + 
+    c_{110}(a_3, b_3, k_3) + 
+    c_{101}(a_3, b_3, k_3)\right] \\
++ \frac{1}{64} \alpha_1 \beta_2 \kappa_3 \left[c_{100}(a_1, b_1, k_1) + 
+    c_{110}(a_1, b_1, k_1) - 
+    c_{101}(a_1, b_1, k_1)\right]\\
+   \left[-c_{100}(a_2, b_2, k_2) + 
+    c_{110}(a_2, b_2, k_2) + 
+    c_{101}(a_2, b_2, k_2)\right]\\
+   \left[c_{100}(a_3, b_3, k_3) + 
+    c_{110}(a_3, b_3, k_3) + 
+    c_{101}(a_3, b_3, k_3)\right]
+\end{split}
+\end{equation}
+This does not seem to work. The $(\alpha_2 \beta_2 \kappa_1 + \alpha_2 \beta_3 \kappa_1)$ can cancel, yielding a spurious zero entry. Switching over to {\em only} the higher index on $\beta$ seems to work (why?). The symmetry of the equation at least looks a little nicer now; the $(\alpha, \beta, \kappa)$ coefficient is always a permutation on $(1,2,3)$.
+\begin{equation}
+\begin{split}
+-\frac{1}{64} \alpha_3 \beta_2 \kappa_1 
+   \left[c_{100}(a_1, b_1, k_1) + 
+    c_{110}(a_1, b_1, k_1) + 
+    c_{101}(a_1, b_1, k_1)\right]\\
+   \left[-c_{100}(a_2, b_2, k_2) + 
+    c_{110}(a_2, b_2, k_2) + 
+    c_{101}(a_2, b_2, k_2)\right]\\
+   \left[c_{100}(a_3, b_3, k_3) + 
+    c_{110}(a_3, b_3, k_3) - 
+    c_{101}(a_3, b_3, k_3)\right] \\ 
++ \frac{1}{64} \alpha_3 \beta_1 \kappa_2 \left[-c_{100}(a_1, b_1, k_1) + c_{110}(a_1, b_1, k_1) + 
+    c_{101}(a_1, b_1, k_1)\right]\\ 
+   \left[c_{100}(a_2, b_2, k_2) + 
+    c_{110}(a_2, b_2, k_2) + 
+    c_{101}(a_2, b_2, k_2)\right]\\
+   \left[c_{100}(a_3, b_3, k_3) + 
+    c_{110}(a_3, b_3, k_3) - 
+    c_{101}(a_3, b_3, k_3)\right] \\
++\frac{1}{64} \alpha_2 \beta_3 \kappa_1 \left[c_{100}(a_1, b_1, k_1) + 
+    c_{110}(a_1, b_1, k_1) + 
+    c_{101}(a_1, b_1, k_1)\right]\\
+   \left[c_{100}(a_2, b_2, k_2) + 
+    c_{110}(a_2, b_2, k_2) - 
+    c_{101}(a_2, b_2, k_2)\right]\\
+   \left[-c_{100}(a_3, b_3, k_3) + 
+    c_{110}(a_3, b_3, k_3) + 
+    c_{101}(a_3, b_3, k_3)\right] \\
+- \frac{1}{64} \alpha_1 \beta_3 \kappa_2 \left[c_{100}(a_1, b_1, k_1) + 
+    c_{110}(a_1, b_1, k_1) - 
+    c_{101}(a_1, b_1, k_1)\right]\\
+   \left[c_{100}(a_2, b_2, k_2) + 
+    c_{110}(a_2, b_2, k_2) + 
+    c_{101}(a_2, b_2, k_2)\right]\\
+   \left[-c_{100}(a_3, b_3, k_3) + 
+    c_{110}(a_3, b_3, k_3) + 
+    c_{101}(a_3, b_3, k_3)\right] \\
+- \frac{1}{64} \alpha_2 \beta_1 \kappa_3 \left[-c_{100}(a_1, b_1, k_1) + 
+ c_{110}(a_1, b_1, k_1) + 
+    c_{101}(a_1, b_1, k_1)\right]\\
+   \left[c_{100}(a_2, b_2, k_2) + 
+    c_{110}(a_2, b_2, k_2) - 
+    c_{101}(a_2, b_2, k_2)\right]\\
+   \left[c_{100}(a_3, b_3, k_3) + 
+    c_{110}(a_3, b_3, k_3) + 
+    c_{101}(a_3, b_3, k_3)\right] \\
++ \frac{1}{64} \alpha_1 \beta_2 \kappa_3 \left[c_{100}(a_1, b_1, k_1) + 
+    c_{110}(a_1, b_1, k_1) - 
+    c_{101}(a_1, b_1, k_1)\right]\\
+   \left[-c_{100}(a_2, b_2, k_2) + 
+    c_{110}(a_2, b_2, k_2) + 
+    c_{101}(a_2, b_2, k_2)\right]\\
+   \left[c_{100}(a_3, b_3, k_3) + 
+    c_{110}(a_3, b_3, k_3) + 
+    c_{101}(a_3, b_3, k_3)\right]
+\end{split}
+\end{equation}
+
+\subsection{Zero Modes}
+
+Recalling that eigenfunctions are of the form:
+\begin{eqnarray*}
+a_x &=& \alpha_1 \sin(a_1 x) \cos(a_2 y) \cos(a_3 z) \\
+a_y &=& \alpha_2 \cos(a_1 x) \sin(a_2 y) \cos(a_3 z) \\
+a_z &=& \alpha_3 \cos(a_1 x) \cos(a_2 y) \sin(a_3 z)
+\end{eqnarray*}
+Eigenfunctions with zero amplitude also appear, and these should be discarded for efficiency. For a specific frequency triplet, $(k_1, k_2, k_3)$, and a component $i$, which can be equal to $x$, $y$, or $z$, two conditions will zero out the entire eigenfunction.
+
+If two of the $k_*$ frequencies are zero, the entire function goes to zero, because the $\alpha_1$, $\alpha_2$, and $\alpha_3$ will all be forced to zero. If one of the $k_j$ entries is zero, and $j = i$, this will also force the eigenfunction to zero. In this case, the $k_j$ will force two of the $\alpha_*$ entries to zero, and the $k_j$ itself will force the $\sin(k_j *)$ to zero, effectively canceling out the third component as well.
+
+\subsection{The Fourier Delta Functions}
+
+Each eigenfunction generates a delta function in Fourier space (really cosine-cosine-sine space). For a given triplet $(k_1, k_2, k_3)$, the delta function then appears at, for each component,
+\begin{eqnarray*}
+x &=& (k_1 - 1, k_2, k_3) \\
+y &=& (k_1, k_2 - 1, k_3) \\
+z &=& (k_1, k_2, k_3 - 1) \\
+\end{eqnarray*}
+The minus one appears when a component has DST applied instead of DCT, since there is no DC component in DST, so everything shifts over by one.
+
+
+
+\end{document}

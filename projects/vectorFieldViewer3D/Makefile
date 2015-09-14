@@ -2,8 +2,10 @@ include ../include.mk
 
 # calls:
 CC         = g++
-CFLAGS     = ${CFLAGS_COMMON} -O3
-LDFLAGS    = ${LDFLAGS_COMMON}
+#CFLAGS     = ${CFLAGS_COMMON} -O3
+#LDFLAGS    = ${LDFLAGS_COMMON}
+CFLAGS     = -Wno-deprecated-declarations ${CFLAGS_COMMON} -flax-vector-conversions
+LDFLAGS    = -L/opt/local/lib/gcc5/ -L/usr/local/lib/x86_64/ -fopenmp ${LDFLAGS_COMMON} 
 EXECUTABLE = ../../bin/vectorFieldViewer3D
 
 SOURCES    = vectorFieldViewer3D.cpp \

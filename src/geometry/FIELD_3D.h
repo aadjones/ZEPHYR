@@ -14,6 +14,11 @@
 #include "MIN_HEAP.h"
 #include "VECTOR.h"
 
+#define USING_FFTW 1
+#if USING_FFTW
+#include <fftw3.h>
+#endif
+
 #ifndef VARNAME
 #define VARNAME(x) #x
 #endif
@@ -486,6 +491,29 @@ public:
     return u.d;
   }
 
+  // 3D FFTW calls
+  void xDST();
+  void yDCT();
+  void zDCT();
+  void xDSTyDCTzDCT();
+  void xDCTyDSTzDCT();
+  void xDCTyDCTzDST();
+  void xIDSTyIDCTzIDCT();
+  void xIDCTyIDSTzIDCT();
+  void xIDCTyIDCTzIDST();
+
+#if USING_FFTW
+  void xIDSTyIDCTzIDCT(const fftw_plan& plan);
+  void xIDCTyIDSTzIDCT(const fftw_plan& plan);
+  void xIDCTyIDCTzIDST(const fftw_plan& plan);
+  void planISICIC(fftw_plan& plan);
+  void planICISIC(fftw_plan& plan);
+  void planICICIS(fftw_plan& plan);
+#endif
+
+  // get the index of the maximum absolute value
+  int maxAbsIndex();
+  void maxAbsIndex(VEC3I& index);
 
 private:
   int _xRes;
