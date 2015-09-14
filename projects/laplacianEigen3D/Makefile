@@ -13,6 +13,7 @@ SOURCES    = laplacianEigen3D.cpp \
 						 ../../src/util/TIMER.cpp \
 						 ../../src/util/SIMPLE_PARSER.cpp \
 						 ../../src/linearalgebra/SPARSE_MATRIX.cpp \
+						 ../../src/linearalgebra/SPARSE_TENSOR3.cpp \
 						 ../../src/linearalgebra/VECTOR.cpp \
 						 ../../src/linearalgebra/MATRIX.cpp \
 						 ../../src/linearalgebra/MATRIX3.cpp \

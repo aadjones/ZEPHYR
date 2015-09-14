@@ -36,6 +36,7 @@
 #include "TENSOR3.h"
 #include "SIMPLE_PARSER.h"
 #include "SPARSE_MATRIX.h"
+#include "SPARSE_TENSOR3.h"
 
 using namespace std;
 
@@ -58,10 +59,7 @@ string previewMovie("./data/stam.mov");
 int simulationSnapshots = 20;
 
 VEC3F center(0,0,0);
-//VEC3F center(0.5, 0.5, 0.5);
 VEC3F lengths(1,1,1);
-//FIELD_3D field(10,10,10, center, lengths);
-//FIELD_3D field(20,20,20, center, lengths);
 
 // these determine the size of the basis that will be used
 //int res = 40;
@@ -70,9 +68,9 @@ int res = 32;
 //int dim = 2;
 //int res = 100;
 //int dim = 3;
-//int dim = 4;
+int dim = 4;
 //int dim = 5;
-int dim = 6;
+//int dim = 6;
 //int dim = 10;
 
 //int res = 100;
@@ -89,7 +87,8 @@ map<int, int> ixyzReverse;
 MATRIX velocityU;
 MATRIX vorticityU;
 TENSOR3 C;
-vector<SPARSE_MATRIX> sparseC;
+//vector<SPARSE_MATRIX> sparseC;
+SPARSE_TENSOR3 tensorC;
 
 // use for reverse lookups later
 int slabSize;
@@ -101,15 +100,12 @@ Real dt = 0.001;
 int frames = 0;
 
 vector<int> xDeltaIndices;
-//vector<int> xMagnitudes;
 vector<Real> xMagnitudes;
 vector<Real> xProjection;
 vector<int> yDeltaIndices;
-//vector<int> yMagnitudes;
 vector<Real> yMagnitudes;
 vector<Real> yProjection;
 vector<int> zDeltaIndices;
-//vector<int> zMagnitudes;
 vector<Real> zMagnitudes;
 vector<Real> zProjection;
 
@@ -173,9 +169,16 @@ void stepEigenfunctions()
     wDot[k] = w.dot(slab * w);
   }
 #else
+  /*
   for (int k = 0; k < basisRank; k++)
   {
     SPARSE_MATRIX& slab = sparseC[k];
+    wDot[k] = w.dot(slab.staticMultiply(w));
+  }
+  */
+  for (int k = 0; k < basisRank; k++)
+  {
+    SPARSE_MATRIX& slab = tensorC.slab(k);
     wDot[k] = w.dot(slab.staticMultiply(w));
   }
 #endif
@@ -575,6 +578,77 @@ Real structureCoefficientAnalytic(const vector<int>& a123, const vector<int>& b1
 ///////////////////////////////////////////////////////////////////////
 // build the structure coefficient tensor using analytic formulae
 ///////////////////////////////////////////////////////////////////////
+void buildSparseAnalyticC_OMP()
+{
+  TIMER functionTimer(__FUNCTION__);
+  cout << " Building C ... " << flush;
+  int basisRank = ixyz.size();
+  int totalEntries = basisRank * basisRank * basisRank;
+
+  // set up for threaded version
+  int threads = omp_get_max_threads();
+  vector<SPARSE_TENSOR3> tempC(threads);
+  for (int x = 0; x < threads; x++)
+    tempC[x].resize(basisRank, basisRank, basisRank);
+  vector<int> nonZeros(threads);
+
+#pragma omp parallel
+#pragma omp for  schedule(dynamic)
+  for (int d1 = 0; d1 < basisRank; d1++)
+  {
+    int threadID = omp_get_thread_num();
+
+    vector<int> a123 = ixyz[d1];
+    for (int d2 = 0; d2 < basisRank; d2++) 
+    {
+      vector<int> b123 = ixyz[d2];
+
+      int a = reverseLookup(a123);
+      int b = reverseLookup(b123);
+
+      for (int d3 = 0; d3 < basisRank; d3++)
+      {
+        vector<int> k123 = ixyz[d3];
+        int k = reverseLookup(k123);
+        
+        Real coef = structureCoefficientAnalytic(a123, b123, k123);
+
+        if (fabs(coef) > 1e-8)
+        {
+          tempC[threadID](b,a,k) = -coef;
+          nonZeros[threadID]++;
+        }
+      }
+    }
+
+    cout << d1 << " " << flush;
+  }
+  cout << "done. " << endl;
+
+  // consolidate non-zero counts
+  int totalNonZeros = 0;
+  for (unsigned int x = 0; x < nonZeros.size(); x++)
+    totalNonZeros += nonZeros[x];
+
+  // consolidate tensors
+  tensorC.resize(basisRank, basisRank, basisRank);
+  for (unsigned int x = 0; x < tempC.size(); x++)
+    tensorC += tempC[x];
+
+  float percent = (100.0 * totalNonZeros) / totalEntries;
+  cout << " Non-zeros " << totalNonZeros << " out of " << totalEntries << " (" << percent << "%)" << endl;
+  
+  // build arrays for fast static multiplies
+  //for (int x = 0; x < basisRank; x++)
+  //  sparseC[x].buildStatic();
+
+  // build arrays for fast static multiplies
+  tensorC.buildStatic();
+}
+
+///////////////////////////////////////////////////////////////////////
+// build the structure coefficient tensor using analytic formulae
+///////////////////////////////////////////////////////////////////////
 void buildSparseAnalyticC()
 {
   TIMER functionTimer(__FUNCTION__);
@@ -583,16 +657,14 @@ void buildSparseAnalyticC()
   int nonZeros = 0;
   int totalEntries = 0;
 
-  sparseC.clear();
+  //sparseC.clear();
+  tensorC.resize(basisRank, basisRank, basisRank);
 
-  for (int x = 0; x < basisRank; x++)
-    sparseC.push_back(SPARSE_MATRIX(basisRank, basisRank));
-
+#pragma omp parallel
+#pragma omp for  schedule(dynamic)
   for (int d1 = 0; d1 < basisRank; d1++)
   {
     vector<int> a123 = ixyz[d1];
-#pragma omp parallel
-#pragma omp for  schedule(dynamic)
     for (int d2 = 0; d2 < basisRank; d2++) 
     {
       vector<int> b123 = ixyz[d2];
@@ -610,7 +682,8 @@ void buildSparseAnalyticC()
         if (fabs(coef) > 1e-8)
         {
 #pragma omp critical
-          sparseC[k](b,a) = -coef;
+          tensorC(b,a,k) = -coef;
+
           //sparseC[k](b,a) = coef;
 #pragma omp atomic
           nonZeros++;
@@ -627,8 +700,11 @@ void buildSparseAnalyticC()
   cout << " Non-zeros " << nonZeros << " out of " << totalEntries << " (" << percent << "%)" << endl;
   
   // build arrays for fast static multiplies
-  for (int x = 0; x < basisRank; x++)
-    sparseC[x].buildStatic();
+  //for (int x = 0; x < basisRank; x++)
+  //  sparseC[x].buildStatic();
+
+  // build arrays for fast static multiplies
+  tensorC.buildStatic();
 }
 
 ///////////////////////////////////////////////////////////////////////
@@ -1195,7 +1271,8 @@ int main(int argc, char *argv[])
 
   //printSliceC(26);
   //buildAnalyticC();
-  buildSparseAnalyticC();
+  //buildSparseAnalyticC();
+  buildSparseAnalyticC_OMP();
   TIMER::printTimings();
 
   // this is not actually needed at runtime
