@@ -70,7 +70,8 @@ int res = 32;
 //int dim = 3;
 //int dim = 4;
 //int dim = 5;
-int dim = 6;
+//int dim = 6;
+int dim = 7;
 //int dim = 10;
 
 //int res = 100;
@@ -585,7 +586,7 @@ void buildSparseAnalyticC_OMP()
   TIMER functionTimer(__FUNCTION__);
   cout << " Building C ... " << flush;
   int basisRank = ixyz.size();
-  long long totalEntries = basisRank * basisRank * basisRank;
+  long long totalEntries = (long long)basisRank * (long long)basisRank * (long long)basisRank;
 
   // set up for threaded version
   int threads = omp_get_max_threads();
@@ -637,7 +638,7 @@ void buildSparseAnalyticC_OMP()
   for (unsigned int x = 0; x < tempC.size(); x++)
     tensorC += tempC[x];
 
-  float percent = (100.0 * totalNonZeros) / totalEntries;
+  Real percent = (100.0 * totalNonZeros) / (Real) totalEntries;
   cout << " Non-zeros " << totalNonZeros << " out of " << totalEntries << " (" << percent << "%)" << endl;
   
   // build arrays for fast static multiplies
