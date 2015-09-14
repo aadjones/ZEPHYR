@@ -585,7 +585,7 @@ void buildSparseAnalyticC_OMP()
   TIMER functionTimer(__FUNCTION__);
   cout << " Building C ... " << flush;
   int basisRank = ixyz.size();
-  int totalEntries = basisRank * basisRank * basisRank;
+  long long totalEntries = basisRank * basisRank * basisRank;
 
   // set up for threaded version
   int threads = omp_get_max_threads();
