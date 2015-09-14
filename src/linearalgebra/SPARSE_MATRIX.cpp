@@ -539,6 +539,37 @@ void SPARSE_MATRIX::readGz(gzFile& file)
 }
 
 //////////////////////////////////////////////////////////////////////
+// read from a file stream
+//////////////////////////////////////////////////////////////////////
+void SPARSE_MATRIX::read(FILE* file)
+{
+  _matrix.clear();
+
+  // write dimensions
+  fread((void*)&_rows, sizeof(int), 1, file);
+  fread((void*)&_cols, sizeof(int), 1, file);
+
+  // write out how many sparse entries there are
+  int totalEntries;
+  fread((void*)&totalEntries, sizeof(int), 1, file);
+
+  if (_rows == 0 && _cols == 0) return;
+  map<pair<int,int>, Real>::const_iterator i;
+  for (int i = 0; i < totalEntries; i++)
+  {
+    int row;
+    int col;
+    Real entry;
+
+    fread((void*)&row, sizeof(int), 1, file);
+    fread((void*)&col, sizeof(int), 1, file);
+    fread((void*)&entry, sizeof(Real), 1, file);
+
+    (*this)(row,col) = entry;
+  }
+}
+
+//////////////////////////////////////////////////////////////////////
 //////////////////////////////////////////////////////////////////////
 void SPARSE_MATRIX::write(const string& filename) const
 {

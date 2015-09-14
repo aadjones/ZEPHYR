@@ -63,6 +63,10 @@ public:
   void clear();
   void buildStatic();
 
+  // file IO
+  void write(const string& filename) const;
+  bool read(const string& filename);
+
 protected:
   // resize based on the current dimensions
   void resize();

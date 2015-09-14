@@ -105,3 +105,58 @@ SPARSE_TENSOR3& SPARSE_TENSOR3::operator+=(const SPARSE_TENSOR3& A)
 
   return *this;
 } 
+
+//////////////////////////////////////////////////////////////////////
+//////////////////////////////////////////////////////////////////////
+void SPARSE_TENSOR3::write(const string& filename) const
+{
+  FILE* file = NULL;
+  file = fopen(filename.c_str(), "wb");
+  if (file == NULL)
+  {
+    cout << __FILE__ << " " << __FUNCTION__ << " " << __LINE__ << " : " << endl;
+    cout << " Failed to open file " << filename.c_str() << "!!!" << endl;
+    return;
+  }
+
+  cout << " Writing file " << filename.c_str() << " ..." << flush;  
+  fwrite((void*)&_rows, sizeof(int), 1, file);
+  fwrite((void*)&_cols, sizeof(int), 1, file);
+  fwrite((void*)&_slabs, sizeof(int), 1, file);
+ 
+  for (int x = 0; x < _slabs; x++) 
+    _data[x].write(file);
+
+  fclose(file);
+  cout << "done." << endl;
+}
+
+//////////////////////////////////////////////////////////////////////
+//////////////////////////////////////////////////////////////////////
+bool SPARSE_TENSOR3::read(const string& filename)
+{
+  FILE* file;
+  file = fopen(filename.c_str(), "rb");
+  if (file == NULL)
+  {
+    cout << __FILE__ << " " << __LINE__ << " : File " << filename << " not found! " << endl;
+    return false;
+  }
+
+  cout << " Reading file " << filename.c_str() << " ..." << flush;
+
+  // read dimensions
+  fread((void*)&_rows, sizeof(int), 1, file);
+  fread((void*)&_cols, sizeof(int), 1, file);
+  fread((void*)&_slabs, sizeof(int), 1, file);
+
+  resize();
+  for (int x = 0; x < _slabs; x++) 
+    _data[x].read(file);
+
+  fclose(file);
+  cout << "done." << endl;
+
+  buildStatic();
+  return true;
+}

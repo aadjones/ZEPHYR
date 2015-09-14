@@ -77,6 +77,7 @@ public:
 
   // read from a file stream
   void readGz(gzFile& file);
+  void read(FILE* file);
 
   // direct access to the matrix
   const map<pair<int,int>, Real>& matrix() const { return _matrix; };

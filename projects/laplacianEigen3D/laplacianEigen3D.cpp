@@ -68,9 +68,9 @@ int res = 32;
 //int dim = 2;
 //int res = 100;
 //int dim = 3;
-int dim = 4;
+//int dim = 4;
 //int dim = 5;
-//int dim = 6;
+int dim = 6;
 //int dim = 10;
 
 //int res = 100;
@@ -176,6 +176,8 @@ void stepEigenfunctions()
     wDot[k] = w.dot(slab.staticMultiply(w));
   }
   */
+#pragma omp parallel
+#pragma omp for  schedule(dynamic)
   for (int k = 0; k < basisRank; k++)
   {
     SPARSE_MATRIX& slab = tensorC.slab(k);
@@ -590,7 +592,7 @@ void buildSparseAnalyticC_OMP()
   vector<SPARSE_TENSOR3> tempC(threads);
   for (int x = 0; x < threads; x++)
     tempC[x].resize(basisRank, basisRank, basisRank);
-  vector<int> nonZeros(threads);
+  vector<long long> nonZeros(threads);
 
 #pragma omp parallel
 #pragma omp for  schedule(dynamic)
@@ -626,7 +628,7 @@ void buildSparseAnalyticC_OMP()
   cout << "done. " << endl;
 
   // consolidate non-zero counts
-  int totalNonZeros = 0;
+  long long totalNonZeros = 0;
   for (unsigned int x = 0; x < nonZeros.size(); x++)
     totalNonZeros += nonZeros[x];
 
@@ -1260,20 +1262,23 @@ int main(int argc, char *argv[])
   char buffer[256];
   bool success = true;
 
-  sprintf(buffer, "./data/C.res.%i.dim.%i.tensor", res, dim);
-  /*
-  success = C.read(buffer);
+  sprintf(buffer, "./data/C.dim.%i.tensor", dim);
+  success = tensorC.read(buffer);
   if (!success)
-    buildC(buffer);
-  else
-    cout << buffer << " found! " << endl;
-    */
+  {
+    buildSparseAnalyticC_OMP();
+    TIMER::printTimings();
+    tensorC.write(buffer);
+  }
 
+  /*
   //printSliceC(26);
   //buildAnalyticC();
   //buildSparseAnalyticC();
   buildSparseAnalyticC_OMP();
-  TIMER::printTimings();
+
+  tensorC.write(buffer);
+  */
 
   // this is not actually needed at runtime
   /*
