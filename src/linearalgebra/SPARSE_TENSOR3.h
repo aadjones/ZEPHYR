@@ -57,6 +57,13 @@ public:
   const int& cols() const { return _cols; };
   const int& slabs() const { return _slabs; };
 
+  bool exists(const int row, const int col, const int slab) {
+    return _data[slab].exists(row, col);
+  };
+
+  // take the product w.r.t. mode three, i.e. scale each slab by vector entries, and sum them
+  SPARSE_MATRIX modeThreeProduct(const VECTOR& x);
+    
   SPARSE_MATRIX& slab(const int i) { return _data[i]; };
 
   void resize(const int rows, const int cols, const int slabs);
@@ -66,6 +73,10 @@ public:
   // file IO
   void write(const string& filename) const;
   bool read(const string& filename);
+  void writeGz(const string& filename) const;
+  bool readGz(const string& filename);
+
+  int size();
 
 protected:
   // resize based on the current dimensions

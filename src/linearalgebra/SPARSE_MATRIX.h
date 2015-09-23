@@ -45,12 +45,18 @@ public:
 
   virtual ~SPARSE_MATRIX() {};
 
+  // see if an entry exists in the matrix
+  bool exists(int row, int col) const;
+
   // get the reference to an entry -
   // note that if an entry doesn't exist, it will be created and
   // set to zero.
   // 
   // to check if an entry already exists, use the exists() function
   Real& operator()(int row, int col);
+  
+  // const version of above
+  Real constEntry(int row, int col) const;
 
   const int& rows() const { return _rows; };
   const int& cols() const { return _cols; };
@@ -72,6 +78,7 @@ public:
 
   // write to a file stream
   void write(const string& filename) const;
+  void writeGz(const string& filename) const;
   void write(FILE* file) const;
   void writeGz(gzFile& file) const;
 
@@ -103,6 +110,15 @@ public:
   // do a static multiply
   VECTOR staticMultiply(const VECTOR& v);
 
+  // Get the matrix exponential
+  SPARSE_MATRIX exp();
+
+  // get the maximum absolute entry
+  Real maxAbsEntry();
+
+  // convert to a full matrix
+  MATRIX full() const;
+
 protected:
   int _rows;
   int _cols;
@@ -123,8 +139,10 @@ ostream& operator<<(ostream &out, SPARSE_MATRIX& matrix);
 VECTOR operator*(const SPARSE_MATRIX& A, const VECTOR& x);
 SPARSE_MATRIX operator*(SPARSE_MATRIX& A, Real& alpha);
 MATRIX operator*(const SPARSE_MATRIX& A, const MATRIX& B);
+SPARSE_MATRIX operator*(const SPARSE_MATRIX& A, const SPARSE_MATRIX& B);
 SPARSE_MATRIX operator*(const Real& alpha, const SPARSE_MATRIX& A);
 SPARSE_MATRIX operator-(const SPARSE_MATRIX& A, const SPARSE_MATRIX& B);
+SPARSE_MATRIX operator+(const SPARSE_MATRIX& A, const SPARSE_MATRIX& B);
 MATRIX operator^(const MATRIX& A, const SPARSE_MATRIX& B);
 MATRIX operator*(const MATRIX& A, const SPARSE_MATRIX& B);
 VECTOR operator^(const SPARSE_MATRIX& A, const VECTOR& x);

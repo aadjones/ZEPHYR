@@ -133,6 +133,61 @@ void SPARSE_TENSOR3::write(const string& filename) const
 
 //////////////////////////////////////////////////////////////////////
 //////////////////////////////////////////////////////////////////////
+void SPARSE_TENSOR3::writeGz(const string& filename) const
+{
+  gzFile file = NULL;
+  file = gzopen(filename.c_str(), "wb1");
+  if (file == NULL)
+  {
+    cout << __FILE__ << " " << __FUNCTION__ << " " << __LINE__ << " : " << endl;
+    cout << " Failed to open file " << filename.c_str() << "!!!" << endl;
+    return;
+  }
+
+  cout << " Writing file " << filename.c_str() << " ..." << flush;  
+  gzwrite(file, (void*)&_rows, sizeof(int));
+  gzwrite(file, (void*)&_cols, sizeof(int));
+  gzwrite(file, (void*)&_slabs, sizeof(int));
+ 
+  for (int x = 0; x < _slabs; x++) 
+    _data[x].writeGz(file);
+
+  gzclose(file);
+  cout << "done." << endl;
+}
+
+//////////////////////////////////////////////////////////////////////
+//////////////////////////////////////////////////////////////////////
+bool SPARSE_TENSOR3::readGz(const string& filename)
+{
+  gzFile file;
+  file = gzopen(filename.c_str(), "rb1");
+  if (file == NULL)
+  {
+    cout << __FILE__ << " " << __LINE__ << " : File " << filename << " not found! " << endl;
+    return false;
+  }
+
+  cout << " Reading file " << filename.c_str() << " ..." << flush;
+
+  // read dimensions
+  gzread(file, (void*)&_rows, sizeof(int));
+  gzread(file, (void*)&_cols, sizeof(int));
+  gzread(file, (void*)&_slabs, sizeof(int));
+
+  resize();
+  for (int x = 0; x < _slabs; x++) 
+    _data[x].readGz(file);
+
+  gzclose(file);
+  cout << "done." << endl;
+
+  buildStatic();
+  return true;
+}
+
+//////////////////////////////////////////////////////////////////////
+//////////////////////////////////////////////////////////////////////
 bool SPARSE_TENSOR3::read(const string& filename)
 {
   FILE* file;
@@ -159,4 +214,32 @@ bool SPARSE_TENSOR3::read(const string& filename)
 
   buildStatic();
   return true;
+}
+
+//////////////////////////////////////////////////////////////////////
+//////////////////////////////////////////////////////////////////////
+int SPARSE_TENSOR3::size()
+{
+  int final = 0;
+  for (int x = 0; x < _slabs; x++)
+    final += _data[x].size();
+
+  return final;
+}
+
+//////////////////////////////////////////////////////////////////////
+// take the product w.r.t. mode three, i.e. scale each slab by 
+// vector entries, and sum them
+//////////////////////////////////////////////////////////////////////
+SPARSE_MATRIX SPARSE_TENSOR3::modeThreeProduct(const VECTOR& x)
+{
+  TIMER functionTimer(__FUNCTION__);
+  assert(_slabs == x.size());
+  assert(_slabs > 0);
+
+  SPARSE_MATRIX result(_rows, _cols);
+  for (int slab = 0; slab < _slabs; slab++)
+    result += x[slab] * _data[slab]; 
+
+  return result;
 }

@@ -431,6 +431,9 @@ public:
   // call Matlab to compute the SVD
   void matlabSVD(MATRIX& U, VECTOR& S, const string& scratchPath);
 
+  // get the matrix exponential
+  MATRIX exp();
+
 protected:
   int _rows;
   int _cols;

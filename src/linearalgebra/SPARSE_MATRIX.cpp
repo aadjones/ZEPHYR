@@ -39,6 +39,18 @@ SPARSE_MATRIX::SPARSE_MATRIX() :
 }
 
 //////////////////////////////////////////////////////////////////////
+// check if an entry already exists
+//////////////////////////////////////////////////////////////////////
+bool SPARSE_MATRIX::exists(int row, int col) const
+{
+  pair<int,int> index(row, col);
+  map<pair<int,int>, Real>::const_iterator i = _matrix.find(index);
+  if (i != _matrix.end())
+    return true;
+  return false;
+}
+
+//////////////////////////////////////////////////////////////////////
 // return a reference to an entry
 //////////////////////////////////////////////////////////////////////
 Real& SPARSE_MATRIX::operator()(int row, int col)
@@ -58,6 +70,26 @@ Real& SPARSE_MATRIX::operator()(int row, int col)
   // if it doesn't exist, create it
   _matrix[index] = 0.0f;
   return _matrix[index];
+}
+
+//////////////////////////////////////////////////////////////////////
+// const accessor to matrix entries
+//////////////////////////////////////////////////////////////////////
+Real SPARSE_MATRIX::constEntry(int row, int col) const
+{
+  // bounds check
+  assert(col >= 0);
+  assert(row >= 0); 
+  assert(col < _cols);
+  assert(row < _rows);
+
+  // lookup the entry
+  pair<int,int> index(row, col);
+  map<pair<int,int>, Real>::const_iterator i = _matrix.find(index);
+  if (i != _matrix.end())
+    return i->second;
+
+  return 0.0;
 }
 
 //////////////////////////////////////////////////////////////////////
@@ -215,6 +247,19 @@ SPARSE_MATRIX operator-(const SPARSE_MATRIX& A, const SPARSE_MATRIX& B)
 
   SPARSE_MATRIX final(A);
   final -= B;
+
+  return final;
+}
+
+//////////////////////////////////////////////////////////////////////
+// sparse-sparse matrix subtract
+//////////////////////////////////////////////////////////////////////
+SPARSE_MATRIX operator+(const SPARSE_MATRIX& A, const SPARSE_MATRIX& B)
+{
+  assert(A.rows() == B.rows() && A.cols() == B.cols());
+
+  SPARSE_MATRIX final(A);
+  final += B;
 
   return final;
 }
@@ -571,6 +616,23 @@ void SPARSE_MATRIX::read(FILE* file)
 
 //////////////////////////////////////////////////////////////////////
 //////////////////////////////////////////////////////////////////////
+void SPARSE_MATRIX::writeGz(const string& filename) const
+{
+  gzFile file = NULL;
+  file = gzopen(filename.c_str(), "wb1");
+  if (file == NULL)
+  {
+    cout << __FILE__ << " " << __FUNCTION__ << " " << __LINE__ << " : " << endl;
+    cout << " Failed to open file " << filename.c_str() << "!!!" << endl;
+    return;
+  }
+
+  writeGz(file);
+  gzclose(file);
+}
+
+//////////////////////////////////////////////////////////////////////
+//////////////////////////////////////////////////////////////////////
 void SPARSE_MATRIX::write(const string& filename) const
 {
   FILE* file = NULL;
@@ -661,4 +723,137 @@ void SPARSE_MATRIX::matlabEigs(const int howMany, const string& matrixFilename, 
 
   //string rm("rm " + inputFilename);
   //system(rm.c_str());
+}
+
+//////////////////////////////////////////////////////////////////////
+// Get the matrix exponential
+//////////////////////////////////////////////////////////////////////
+SPARSE_MATRIX SPARSE_MATRIX::exp()
+{
+  TIMER functionTimer(__FUNCTION__);
+  // only implementing Taylor series version here. As long as the norm
+  // is small enough, this is the right computation method. See:
+  // 
+  // Fung, Computation of the matrix exponential and its derivatives by
+  // scaling and squaring, international journal for numerical methods
+  // in engineering, 2004, 59:1273-1286.
+
+  //assert(this->norm2() < 0.2);
+
+  SPARSE_MATRIX final(_rows, _cols);
+  final.setToIdentity();
+  int k = 1;
+  SPARSE_MATRIX& A = *this;
+  SPARSE_MATRIX Aminus1 = final;
+  Real maxEntry = 1.0;
+
+  while (maxEntry > 1e-16)
+  {
+    // Eqn. 22
+    Aminus1 = (1.0 / (Real)k) * (Aminus1 * A);
+    final += Aminus1;
+    maxEntry = Aminus1.maxAbsEntry();
+    k++;
+  }
+
+  return final;
+
+  /*
+  // implementing full scale and square version here. See:
+  // 
+  // Fung, Computation of the matrix exponential and its derivatives by
+  // scaling and squaring, international journal for numerical methods
+  // in engineering, 2004, 59:1273-1286.
+  //
+  int m = 10;
+  int N = 8;
+
+  SPARSE_MATRIX Bk(_rows, _cols);
+  Bk.setToIdentity();
+  SPARSE_MATRIX& A = *this;
+
+  SPARSE_MATRIX BN = Bk;
+  BN *= 0;
+  Real inv = 1.0 / pow(2.0, N);
+  for (int k = 1; k <= m; k++)
+  {
+    Bk = (1.0 / k) * inv * Bk * A;
+    BN += Bk; 
+  }
+
+  SPARSE_MATRIX final = BN;
+  for (int k = 0; k < N; k++)
+    final = 2 * final + final * final;
+
+  SPARSE_MATRIX identity(_rows, _cols);
+  identity.setToIdentity();
+  final += identity;
+
+  return final;
+  */
+}
+
+//////////////////////////////////////////////////////////////////////
+// sparse-sparse matrix multiply
+//////////////////////////////////////////////////////////////////////
+SPARSE_MATRIX operator*(const SPARSE_MATRIX& A, const SPARSE_MATRIX& B)
+{
+  SPARSE_MATRIX C(A.rows(), B.cols());
+
+  const map<pair<int,int>, Real>& matrix = A.matrix(); 
+
+  map<pair<int,int>, Real>::const_iterator iter;
+  for (iter = matrix.begin(); iter != matrix.end(); iter++)
+  {
+    pair<int,int> index = iter->first;
+    int row = index.first;
+    int col = index.second;
+    Real entry = iter->second;
+
+    for (int x = 0; x < B.cols(); x++)
+      if (B.exists(col, x))
+        C(row, x) += B.constEntry(col, x) * entry;
+  }
+
+  return C;
+}
+
+//////////////////////////////////////////////////////////////////////
+// get the maximum absolute entry
+//////////////////////////////////////////////////////////////////////
+Real SPARSE_MATRIX::maxAbsEntry()
+{
+  Real maxFound = 0;
+
+  // iterate through all the entries
+  map<pair<int,int>, Real>::const_iterator i;
+  for (i = _matrix.begin(); i != _matrix.end(); i++)
+  {
+    const pair<int,int> index = i->first;
+    const Real value = i->second;
+
+    if (fabs(value) > maxFound || i == _matrix.begin())
+      maxFound = fabs(value);
+  }
+  return maxFound;
+}
+
+//////////////////////////////////////////////////////////////////////
+// Convert to a full matrix
+//////////////////////////////////////////////////////////////////////
+MATRIX SPARSE_MATRIX::full() const
+{
+  TIMER functionTimer(__FUNCTION__);
+  MATRIX matrix(_rows, _cols);
+  
+  // iterate through all the entries
+  map<pair<int,int>, Real>::const_iterator i;
+  const map<pair<int,int>, Real>& data = this->matrix();
+  for (i = data.begin(); i != data.end(); i++)
+  {
+    const pair<int,int> index = i->first;
+    const Real value = i->second;
+    matrix(index.first, index.second) = value;
+  }
+  return matrix;
 }

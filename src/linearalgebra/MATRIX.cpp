@@ -2969,4 +2969,69 @@ void MATRIX::eigensystemSorted(VECTOR& eigenvalues, MATRIX& eigenvectors)
 #endif
 }
 
+//////////////////////////////////////////////////////////////////////
+// Get the matrix exponential
+//////////////////////////////////////////////////////////////////////
+MATRIX MATRIX::exp()
+{
+  TIMER functionTimer(__FUNCTION__);
+  /*
+  // only implementing Taylor series version here. As long as the norm
+  // is small enough, this is the right computation method. See:
+  // 
+  // Fung, Computation of the matrix exponential and its derivatives by
+  // scaling and squaring, international journal for numerical methods
+  // in engineering, 2004, 59:1273-1286.
+  assert(this->norm2() < 0.2);
 
+  MATRIX final(_rows, _cols);
+  final.setToIdentity();
+  int k = 1;
+  MATRIX& A = *this;
+  MATRIX Aminus1 = final;
+  Real maxEntry = 1.0;
+
+  while (maxEntry > 1e-16)
+  {
+    // Eqn. 22
+    Aminus1 = (1.0 / (Real)k) * (Aminus1 * A);
+    final += Aminus1;
+    maxEntry = Aminus1.maxAbsEntry();
+    k++;
+  }
+
+  return final;
+  */
+
+  // implementing full scale and square version here. See:
+  // 
+  // Fung, Computation of the matrix exponential and its derivatives by
+  // scaling and squaring, international journal for numerical methods
+  // in engineering, 2004, 59:1273-1286.
+  //
+  int m = 10;
+  int N = 8;
+
+  MATRIX Bk(_rows, _cols);
+  Bk.setToIdentity();
+  MATRIX& A = *this;
+
+  MATRIX BN = Bk;
+  BN *= 0;
+  Real inv = 1.0 / pow(2.0, N);
+  for (int k = 1; k <= m; k++)
+  {
+    Bk = (1.0 / k) * inv * Bk * A;
+    BN += Bk; 
+  }
+
+  MATRIX final = BN;
+  for (int k = 0; k < N; k++)
+    final = 2 * final + final * final;
+
+  MATRIX identity(_rows, _cols);
+  identity.setToIdentity();
+  final += identity;
+
+  return final;
+}

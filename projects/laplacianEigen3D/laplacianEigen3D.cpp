@@ -29,6 +29,7 @@
 #include <GL/glu.h>
 #endif
 #include <list>
+#include <QUICKTIME_MOVIE.h>
 #include "MERSENNETWISTER.h"
 #include "FIELD_3D.h"
 #include "VECTOR3_FIELD_3D.h"
@@ -68,14 +69,16 @@ int res = 32;
 //int dim = 2;
 //int res = 100;
 //int dim = 3;
-//int dim = 4;
+int dim = 4;
 //int dim = 5;
 //int dim = 6;
-int dim = 7;
+//int dim = 7;
 //int dim = 10;
 
 //int res = 100;
 VECTOR3_FIELD_3D velocityField(res, res, res, center, lengths);
+VECTOR3_FIELD_3D forceField(res, res, res, center, lengths);
+FIELD_3D densityField(res,res,res,center,lengths);
 
 vector<VEC3F> particles;
 vector<list<VEC3F> > ribbons;
@@ -98,6 +101,7 @@ int xRes;
 VECTOR w;
 VECTOR wDot;
 Real dt = 0.001;
+//Real dt = 0.0001;
 int frames = 0;
 
 vector<int> xDeltaIndices;
@@ -116,6 +120,16 @@ FIELD_3D zHat(res,res,res);
 fftw_plan xPlanIDSTyIDCTzIDCT;
 fftw_plan yPlanIDCTyIDSTzIDCT;
 fftw_plan zPlanIDCTyIDCTzIDST;
+
+string path;
+Real viscosity;
+
+enum RECONSTRUCTION_METHOD { FFT_RECON, MATRIX_VECTOR_RECON, ANALYTIC_RECON };
+RECONSTRUCTION_METHOD reconstructionMethod = FFT_RECON;
+
+QUICKTIME_MOVIE movie;
+//bool captureMovie = true;
+bool captureMovie = false;
 
 ///////////////////////////////////////////////////////////////////////
 // reconstruct the velocity field using FFT
@@ -152,6 +166,54 @@ void reconstructSparseFFT()
   velocityField.setX(xHat);
   velocityField.setY(yHat);
   velocityField.setZ(zHat);
+}
+
+///////////////////////////////////////////////////////////////////////
+// step the system forward in time
+///////////////////////////////////////////////////////////////////////
+void stepEigenfunctionsExp()
+{
+  TIMER functionTimer(__FUNCTION__);
+  int basisRank = ixyz.size();
+  Real e1 = w.dot(w);
+
+  SPARSE_MATRIX three = tensorC.modeThreeProduct(w);
+  three *= dt;
+
+  MATRIX threeFull = three.full();
+  w = threeFull.exp() * w;
+  
+  //w += dt * wDot;
+  //Real e2 = w.dot(w);
+  //if (e2 > 0)
+  //  w *= sqrt(e1 / e2);
+
+  for (int k = 0; k < basisRank; k++)
+  {
+    Real lambda = -(eigenvalues[k]);
+
+    //const Real viscosity = 0.0;
+    //
+    // this is the one the 2D version uses
+    //const Real viscosity = 0.1;
+    //const Real viscosity = 0.5;
+    //const Real viscosity = 1.0;
+    //const Real viscosity = 5;
+    //const Real viscosity = 10;
+
+    // diffuse
+    w[k] *= exp(lambda * dt * viscosity);
+  }
+
+  {
+  TIMER reconstructionTimer("Velocity Reconstruction");
+  //VECTOR final = velocityU * w;
+  //velocityField.unflatten(final);
+
+  reconstructSparseFFT();
+  }
+
+  frames++;
 }
 
 ///////////////////////////////////////////////////////////////////////
@@ -200,7 +262,7 @@ void stepEigenfunctions()
     //const Real viscosity = 0.0;
     //
     // this is the one the 2D version uses
-    const Real viscosity = 0.1;
+    //const Real viscosity = 0.1;
     //const Real viscosity = 0.5;
     //const Real viscosity = 1.0;
     //const Real viscosity = 5;
@@ -230,8 +292,8 @@ void stepEigenfunctions()
 void buildTableIXYZ(int dim)
 {
   ixyz.clear();
-  slabSize = dim * dim * 3;
-  xRes = dim * 3;
+  slabSize = (dim + 1) * (dim + 1) * 3;
+  xRes = (dim + 1) * 3;
 
   // add the cube of modes
   for (int z = 0; z < dim + 1; z++)
@@ -247,12 +309,14 @@ void buildTableIXYZ(int dim)
           int k3Zero = (z == 0);
           int sum = k1Zero + k2Zero + k3Zero;
 
+          /*
           // if two of the k's are zero, the whole velocity field will resolve to zero
           if (sum >= 2)
             continue;
           // if the component's k is zero, it will end up zeroing out the whole field
           if (ks[i] == 0)
             continue;
+            */
 
           vector<int> mode;
           mode.push_back(i);
@@ -490,7 +554,7 @@ void eigenfunctionCoefficients(const vector<int>& i123, Real& alpha1, Real& alph
 ///////////////////////////////////////////////////////////////////////
 // compute a single structure coefficient analytically
 ///////////////////////////////////////////////////////////////////////
-Real structureCoefficientAnalytic(const vector<int>& a123, const vector<int>& b123, const vector<int>& k123)
+bool structureCoefficientAnalytic(const vector<int>& a123, const vector<int>& b123, const vector<int>& k123, Real& coef)
 {
   const int a1 = a123[1];
   const int a2 = a123[2];
@@ -509,19 +573,19 @@ Real structureCoefficientAnalytic(const vector<int>& a123, const vector<int>& b1
   const bool c110_1 = c110(a1,b1,k1);
   const bool c101_1 = c101(a1,b1,k1);
   const bool or_1 = c100_1 || c110_1 || c101_1;
-  if (!or_1) return 0;
+  if (!or_1) return false;
   
   const bool c100_2 = c100(a2,b2,k2);
   const bool c110_2 = c110(a2,b2,k2);
   const bool c101_2 = c101(a2,b2,k2);
   const bool or_2 = c100_2 || c110_2 || c101_2;
-  if (!or_2) return 0;
+  if (!or_2) return false;
   
   const bool c100_3 = c100(a3,b3,k3);
   const bool c110_3 = c110(a3,b3,k3);
   const bool c101_3 = c101(a3,b3,k3);
   const bool or_3 = c100_3 || c110_3 || c101_3;
-  if (!or_3) return 0;
+  if (!or_3) return false;
 
   // build the coefficients
   Real alpha1, alpha2, alpha3;
@@ -575,7 +639,9 @@ Real structureCoefficientAnalytic(const vector<int>& a123, const vector<int>& b1
   final *= (1.0/ 64.0);
   final *= 1.0 / (b1 * b1 + b2 * b2 + b3 * b3);
 
-  return final;
+  coef = final;
+
+  return true;
 }
 
 ///////////////////////////////////////////////////////////////////////
@@ -589,11 +655,13 @@ void buildSparseAnalyticC_OMP()
   long long totalEntries = (long long)basisRank * (long long)basisRank * (long long)basisRank;
 
   // set up for threaded version
+  omp_set_num_threads(1);
   int threads = omp_get_max_threads();
   vector<SPARSE_TENSOR3> tempC(threads);
   for (int x = 0; x < threads; x++)
     tempC[x].resize(basisRank, basisRank, basisRank);
   vector<long long> nonZeros(threads);
+  vector<int> hits(threads);
 
 #pragma omp parallel
 #pragma omp for  schedule(dynamic)
@@ -613,13 +681,41 @@ void buildSparseAnalyticC_OMP()
       {
         vector<int> k123 = ixyz[d3];
         int k = reverseLookup(k123);
-        
-        Real coef = structureCoefficientAnalytic(a123, b123, k123);
+       
+        Real coef = 0; 
+        bool success = structureCoefficientAnalytic(a123, b123, k123, coef);
+
+        if (success)
+          hits[threadID]++;
 
         if (fabs(coef) > 1e-8)
         {
+          /*
+          if (tempC[threadID].exists(b,a,k))
+          {
+            cout << __FILE__ << " " << __FUNCTION__ << " " << __LINE__ << " : " << endl;
+            cout << __FILE__ << " " << __FUNCTION__ << " " << __LINE__ << " : " << endl;
+            cout << " Seen " << a << " " << b << " " << k << " before!!! " << endl;
+            cout << " before: " << -coef << endl;
+            cout << " now:    " << tempC[threadID](b,a,k) << endl;
+            cout << __FILE__ << " " << __FUNCTION__ << " " << __LINE__ << " : " << endl;
+            cout << __FILE__ << " " << __FUNCTION__ << " " << __LINE__ << " : " << endl;
+          }
+          */
+          
           tempC[threadID](b,a,k) = -coef;
           nonZeros[threadID]++;
+
+
+          /*
+          if (threadID == 0)
+          {
+            cout << " a: " << a123[0] << " " << a123[1] << " " << a123[2] << " " << a123[3] << endl;
+            cout << " b: " << b123[0] << " " << b123[1] << " " << b123[2] << " " << b123[3] << endl;
+            cout << " k: " << k123[0] << " " << k123[1] << " " << k123[2] << " " << k123[3] << endl;
+            cout << endl;
+          }
+          */
         }
       }
     }
@@ -640,7 +736,12 @@ void buildSparseAnalyticC_OMP()
 
   Real percent = (100.0 * totalNonZeros) / (Real) totalEntries;
   cout << " Non-zeros " << totalNonZeros << " out of " << totalEntries << " (" << percent << "%)" << endl;
-  
+ 
+  int totalHits = 0;
+  for (int x = 0; x < threads; x++)
+    totalHits += hits[x];
+  cout << " Total candidate non-zeros: " << totalHits << endl;
+
   // build arrays for fast static multiplies
   //for (int x = 0; x < basisRank; x++)
   //  sparseC[x].buildStatic();
@@ -680,7 +781,8 @@ void buildSparseAnalyticC()
         vector<int> k123 = ixyz[d3];
         int k = reverseLookup(k123);
         
-        Real coef = structureCoefficientAnalytic(a123, b123, k123);
+        Real coef = 0;
+        bool success = structureCoefficientAnalytic(a123, b123, k123, coef);
 
         if (fabs(coef) > 1e-8)
         {
@@ -767,6 +869,51 @@ VEC3F unproject(float x, float y, float z)
 }
 
 ///////////////////////////////////////////////////////////////////////
+///////////////////////////////////////////////////////////////////////
+void drawParticles()
+{
+  glColor4f(1,1,1,1);
+  glPointSize(1);
+  glBegin(GL_POINTS);
+    for (int x = 0; x < particles.size(); x++)
+    {
+      VEC3F velocity = velocityField(particles[x]);
+      //glNormal3f(velocity[0], velocity[1], velocity[2]);
+      glColor4f(particles[x][0 + 0.5], particles[x][1] + 0.5, particles[x][2] + 0.5, 1.0);
+      glVertex3f(particles[x][0], particles[x][1], particles[x][2]);
+    }
+  glEnd();
+}
+
+///////////////////////////////////////////////////////////////////////
+///////////////////////////////////////////////////////////////////////
+void drawRibbons()
+{
+  for (unsigned int x = 0; x < ribbons.size(); x++)
+  {
+    //VEC3F velocity = velocityField(particles[x]);
+    //glNormal3f(velocity[0], velocity[1], velocity[2]);
+    glLineWidth(2);
+    glBegin(GL_LINE_STRIP);
+      list<VEC3F>::iterator iter;
+      list<VEC3F>::iterator iterVelocity = velocityRibbons[x].begin();
+      for (iter = ribbons[x].begin(); iter != ribbons[x].end(); iter++)
+      {
+        VEC3F normalized = *iterVelocity;
+
+        normalized.normalize();
+
+        //glNormal3f(normalized[0], normalized[1], normalized[2]);
+        //glColor4f(fabs(normalized[0]), fabs(normalized[1]), fabs(normalized[2]), 1.0);
+        glColor4f(fabs(normalized[0]), fabs(normalized[1]), fabs(normalized[2]), 0.25);
+        //glNormal3f((*iterVelocity)[0], (*iterVelocity)[1], (*iterVelocity)[2]);
+        glVertex3f((*iter)[0], (*iter)[1], (*iter)[2]);
+      }
+    glEnd();
+  }
+}
+
+///////////////////////////////////////////////////////////////////////
 // GL and GLUT callbacks
 ///////////////////////////////////////////////////////////////////////
 void glutDisplay()
@@ -775,50 +922,21 @@ void glutDisplay()
     glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
     glEnable(GL_DEPTH_TEST);
 
+    glColor4f(3,0,0,1);
     glPushMatrix();
       velocityField.drawBoundingBox();
     glPopMatrix();
 
-    glColor4f(3,0,0,1);
-#if 0
-    glPointSize(1);
-    glBegin(GL_POINTS);
-      for (int x = 0; x < particles.size(); x++)
-      {
-        VEC3F velocity = velocityField(particles[x]);
-        glNormal3f(velocity[0], velocity[1], velocity[2]);
-        glVertex3f(particles[x][0], particles[x][1], particles[x][2]);
-      }
-    glEnd();
-#else
-    for (unsigned int x = 0; x < ribbons.size(); x++)
-    {
-      //VEC3F velocity = velocityField(particles[x]);
-      //glNormal3f(velocity[0], velocity[1], velocity[2]);
-      glLineWidth(2);
-      glBegin(GL_LINE_STRIP);
-        list<VEC3F>::iterator iter;
-        list<VEC3F>::iterator iterVelocity = velocityRibbons[x].begin();
-        for (iter = ribbons[x].begin(); iter != ribbons[x].end(); iter++)
-        {
-          VEC3F normalized = *iterVelocity;
-
-          normalized.normalize();
-
-          //glNormal3f(normalized[0], normalized[1], normalized[2]);
-          //glColor4f(fabs(normalized[0]), fabs(normalized[1]), fabs(normalized[2]), 1.0);
-          glColor4f(fabs(normalized[0]), fabs(normalized[1]), fabs(normalized[2]), 0.25);
-          //glNormal3f((*iterVelocity)[0], (*iterVelocity)[1], (*iterVelocity)[2]);
-          glVertex3f((*iter)[0], (*iter)[1], (*iter)[2]);
-        }
-      glEnd();
-    }
-#endif
+    //densityField.draw();
+    drawParticles();
+    //drawRibbons();
 
     glPushMatrix();
       glTranslatef(-0.5, -0.5, -0.5);
       drawAxes();
     glPopMatrix();
+  if (captureMovie)
+    movie.addFrameGL();
   glvu.EndFrame();
 }
 
@@ -828,7 +946,18 @@ void glutDisplay()
 void glutIdle()
 {
   if (animate)
+  {
+    static int frame = 0;
+
     runEverytime();
+
+    if (frame == 100 && captureMovie)
+    {
+      movie.writeMovie("movie.mov");
+      exit(0);
+    }
+    frame++;
+  }
 
   glutPostRedisplay();
 }
@@ -845,6 +974,8 @@ void glutKeyboard(unsigned char key, int x, int y)
     case 'q':
       TIMER::printTimings();
       TIMER::printRawTimingsPerFrame(frames);
+      if (captureMovie)
+        movie.writeMovie("movie.mov");
       exit(0);
       break;
     case 'v':
@@ -949,7 +1080,8 @@ int glvuWindow()
   glvuVec3f ModelMin(-10,-10,-10), ModelMax(10,10,10), 
         //Eye(1.59445, 1.6929, 2.40504), LookAtCntr(1.15667, 1.21574, 1.64302), Up(-0.150235, 0.874454, -0.461259);
         //Eye(1.39197, 1.37948, 2.14899), LookAtCntr(0.947247, 0.903024, 1.39057), Up(-0.150233, 0.874455, -0.461256);
-        Eye(1.00005, 0.994277, 1.81856), LookAtCntr(0.571001, 0.516282, 1.05212), Up(-0.150234, 0.874455, -0.461257);
+        //Eye(1.00005, 0.994277, 1.81856), LookAtCntr(0.571001, 0.516282, 1.05212), Up(-0.150234, 0.874455, -0.461257);
+        Eye(0.0364064, 0.636877, 2.21109), LookAtCntr(0.0186429, 0.310563, 1.26599), Up(-0.000107767, 0.945245, -0.326363);
 
   float Yfov = 45;
   float Aspect = 1;
@@ -988,6 +1120,7 @@ void computeFieldFFTs()
   zMagnitudes.resize(size);
   zProjection.resize(size);
 
+  Real projectionFactor = 1.0 / (res * res * (res + 1)) / 8.0;
 //#pragma omp parallel
 //#pragma omp for  schedule(dynamic)
   for (int x = 0; x < ixyz.size(); x++)
@@ -1005,60 +1138,14 @@ void computeFieldFFTs()
     xField.xDSTyDCTzDCT();
     yField.xDCTyDSTzDCT();
     zField.xDCTyDCTzDST();
- 
-    int xIndex = xField.maxAbsIndex();
-    xDeltaIndices[x] = xIndex;
-    xMagnitudes[x] = xField[xIndex];
-    //xMagnitudesInv[x] = (xField[xIndex] != 0) ? 1.0 / xField[xIndex] : 0;
 
-    /*
-    if (fabs((xField[xIndex]) - 33791) < 1e-3)
-    {
-      cout << " index: " << xIndex << endl;
-      cout << " int: " << (int)xField[xIndex] << endl;
-      cout << " fabs: " << fabs(xField[xIndex]) << endl;
-      cout << " diff: " << (int)xField[xIndex] - 33791 << endl;
-      cout << " magnitude: " << xField[xIndex] << endl;
-      FIELDVIEW3D(xField);
-      //FIELDVIEW3D(yField);
-      //FIELDVIEW3D(zField);
-      exit(0);
-    }
-    */
-    
-    int yIndex = yField.maxAbsIndex();
-    yDeltaIndices[x] = yIndex;
-    yMagnitudes[x] = yField[yIndex];
-    //yMagnitudesInv[x] = (yField[yIndex] != 0) ? 1.0 / yField[yIndex] : 0;
-    
-    int zIndex = zField.maxAbsIndex();
-    zDeltaIndices[x] = zIndex;
-    zMagnitudes[x] = zField[zIndex];
-    //zMagnitudesInv[x] = (zField[zIndex] != 0) ? 1.0 / zField[zIndex] : 0;
-    cout << x << " " << flush;
-
-    /*
     Real alpha1, alpha2, alpha3;
     eigenfunctionCoefficients(ixyz[x], alpha1, alpha2, alpha3);
     Real inv = 1.0 / (k1 * k1 + k2 * k2 + k3 * k3);
 
-    VEC3I xTriplet;
-    VEC3I yTriplet;
-    VEC3I zTriplet;
-    xField.maxAbsIndex(xTriplet);
-    yField.maxAbsIndex(yTriplet);
-    zField.maxAbsIndex(zTriplet);
-    cout << " i: " << i << " k1: " << k1 << " k2: " << k2 << " k3: " << k3 << endl;
-    //cout << " x index: " << xIndex << ", " << xTriplet[0] << " " << xTriplet[1] << " " << xTriplet[2] << " magnitude: " << xMagnitudes[x] << endl;
-    //cout << " y index: " << yIndex << ", " << yTriplet[0] << " " << yTriplet[1] << " " << yTriplet[2] << " magnitude: " << yMagnitudes[x] << endl;
-    //cout << " z index: " << zIndex << ", " << zTriplet[0] << " " << zTriplet[1] << " " << zTriplet[2] << " magnitude: " << zMagnitudes[x] << endl;
-    cout << " x index: " << xTriplet[0] << " " << xTriplet[1] << " " << xTriplet[2] << " magnitude: " << xMagnitudes[x] << endl;
-    cout << " y index: " << yTriplet[0] << " " << yTriplet[1] << " " << yTriplet[2] << " magnitude: " << yMagnitudes[x] << endl;
-    cout << " z index: " << zTriplet[0] << " " << zTriplet[1] << " " << zTriplet[2] << " magnitude: " << zMagnitudes[x] << endl;
-    //cout << " res ^2 * (res + 1): " << res * res * (res + 1) << endl;
-    Real xGuess = alpha1 * res * res * (res + 1)  * inv;
-    Real yGuess = alpha2 * res * res * (res + 1)  * inv;
-    Real zGuess = alpha3 * res * res * (res + 1)  * inv;
+    Real xGuess = alpha1 * res * res * (res + 1) * inv;
+    Real yGuess = alpha2 * res * res * (res + 1) * inv;
+    Real zGuess = alpha3 * res * res * (res + 1) * inv;
 
     if (k1 == 0)
     {
@@ -1078,44 +1165,42 @@ void computeFieldFFTs()
       yGuess *= 2;
       zGuess = 0;
     }
-    cout << " x guess: " << xGuess << endl;
-    cout << " y guess: " << yGuess << endl;
-    cout << " z guess: " << zGuess << endl;
+    
+    // take the product since we want to see later if one was zero
+    int kCheck = k1 * k2 * k3;
 
-    assert(fabs(xGuess - xMagnitudes[x]) < 1e-7);
-    assert(fabs(yGuess - yMagnitudes[x]) < 1e-7);
-    assert(fabs(zGuess - zMagnitudes[x]) < 1e-7);
+    int xIndex = xField.maxAbsIndex();
+    xDeltaIndices[x] = xIndex;
+    xMagnitudes[x] = xField[xIndex];
+    xProjection[x] = xGuess * projectionFactor;
+    xProjection[x] *= (kCheck) ? 1.0 : 0.5;
+    
+    int yIndex = yField.maxAbsIndex();
+    yDeltaIndices[x] = yIndex;
+    yMagnitudes[x] = yField[yIndex];
+    yProjection[x] = yGuess * projectionFactor;
+    yProjection[x] *= (kCheck) ? 1.0 : 0.5;
+    
+    int zIndex = zField.maxAbsIndex();
+    zDeltaIndices[x] = zIndex;
+    zMagnitudes[x] = zField[zIndex];
+    zProjection[x] = zGuess * projectionFactor;
+    zProjection[x] *= (kCheck) ? 1.0 : 0.5;
+    cout << x << " " << flush;
 
-    Real alpha = k1;
-    Real beta = k2;
-    Real gamma = k3;
-    int slabSize = res * res;
-    if (fabs(xMagnitudes[x]) > 0)
+    //if (k1 == 1 && k2 == 1 && k3 == 0)
+    if (k1 == 0 || k2 == 0 || k3 == 0)
     {
-      cout << " alpha: " << alpha - 1 << " triplet: " << xTriplet[0] << endl;
-      cout << " beta:  " << beta  << " triplet: " << xTriplet[1] << endl;
-      cout << " gamma: " << gamma << " triplet: " << xTriplet[2] << endl;
-      cout << " x index:       " << xDeltaIndices[x] << endl;
-      cout << " x index guess: " << alpha + beta * res + gamma * slabSize << endl;
-      cout << " field dims: " << xField.xRes() << " " << xField.slabSize() << endl;
-      assert(xTriplet[0] == alpha - 1);
-      assert(xTriplet[1] == beta);
-      assert(xTriplet[2] == gamma);
+      cout << __FILE__ << " " << __FUNCTION__ << " " << __LINE__ << " : " << endl;
+      cout << __FILE__ << " " << __FUNCTION__ << " " << __LINE__ << " : " << endl;
+      cout << " k: " << k1 << " " << k2 << " " << k3 << endl;
+      cout << " indices:    " << xIndex << "\t" << yIndex << "\t" << zIndex << endl;
+      cout << " magnitudes: " << xMagnitudes[x] << "\t" << yMagnitudes[x] << "\t" << zMagnitudes[x] << endl;
+      cout << " projection: " << xProjection[x] << "\t" << yProjection[x] << "\t" << zProjection[x] << endl;
+      cout << __FILE__ << " " << __FUNCTION__ << " " << __LINE__ << " : " << endl;
+      cout << __FILE__ << " " << __FUNCTION__ << " " << __LINE__ << " : " << endl;
+      //exit(0);
     }
-    if (fabs(yMagnitudes[x]) > 0)
-    {
-      assert(yTriplet[0] == alpha);
-      assert(yTriplet[1] == beta - 1);
-      assert(yTriplet[2] == gamma);
-    }
-    if (fabs(zMagnitudes[x]) > 0)
-    {
-      assert(zTriplet[0] == alpha);
-      assert(zTriplet[1] == beta);
-      assert(zTriplet[2] == gamma - 1);
-    }
-    cout << endl;
-    */
   }
 
   cout << "done. " << endl;
@@ -1190,22 +1275,46 @@ void computeDeltas()
     int zIndex = k1 + k2 * res + (k3 - 1) * slabSize;
    
     // take the product since we want to see later if one was zero
-    int kProduct = k1 * k2 * k3;
+    int kCheck = k1 * k2 * k3;
 
-    xDeltaIndices[x] = xIndex;
-    xMagnitudes[x] = xGuess;
-    xProjection[x] = xGuess * projectionFactor;
-    xProjection[x] *= (kProduct) ? 1.0 : 0.5;
+    if (k1 != 0)
+    {
+      xDeltaIndices[x] = xIndex;
+      xMagnitudes[x] = xGuess;
+      xProjection[x] = xGuess * projectionFactor;
+      xProjection[x] *= (kCheck) ? 1.0 : 0.5;
+    }
 
-    yDeltaIndices[x] = yIndex;
-    yMagnitudes[x] = yGuess;
-    yProjection[x] = yGuess * projectionFactor;
-    yProjection[x] *= (kProduct) ? 1.0 : 0.5;
-    
-    zDeltaIndices[x] = zIndex;
-    zMagnitudes[x] = zGuess;
-    zProjection[x] = zGuess * projectionFactor;
-    zProjection[x] *= (kProduct) ? 1.0 : 0.5;
+    if (k2 != 0)
+    {
+      yDeltaIndices[x] = yIndex;
+      yMagnitudes[x] = yGuess;
+      yProjection[x] = yGuess * projectionFactor;
+      yProjection[x] *= (kCheck) ? 1.0 : 0.5;
+    }
+   
+    if (k3 != 0)
+    { 
+      zDeltaIndices[x] = zIndex;
+      zMagnitudes[x] = zGuess;
+      zProjection[x] = zGuess * projectionFactor;
+      zProjection[x] *= (kCheck) ? 1.0 : 0.5;
+    }
+
+    /*
+    if (zIndex < 0)
+    {
+      cout << __FILE__ << " " << __FUNCTION__ << " " << __LINE__ << " : " << endl;
+      cout << __FILE__ << " " << __FUNCTION__ << " " << __LINE__ << " : " << endl;
+      cout << " k: " << k1 << " " << k2 << " " << k3 << endl;
+      cout << " zDeltaIndices: " << zIndex << endl;
+      cout << " zMagnitudes: " << zMagnitudes[x]<< endl;
+      cout << " zProjection: " << zProjection[x]<< endl;
+      cout << __FILE__ << " " << __FUNCTION__ << " " << __LINE__ << " : " << endl;
+      cout << __FILE__ << " " << __FUNCTION__ << " " << __LINE__ << " : " << endl;
+      exit(0);
+    }
+    */
   }
   cout << "done. " << endl;
 }
@@ -1227,19 +1336,16 @@ void computePlans()
   cout << " done." << endl;
 }
 
-//////////////////////////////////////////////////////////////////////////////
-//////////////////////////////////////////////////////////////////////////////
-void runEverytime()
+//////////////////////////////////////////////////////////////////////
+//////////////////////////////////////////////////////////////////////
+void updateRibbons()
 {
-  stepEigenfunctions();
-  
-  TIMER advectionTimer("Particle advection");
+  TIMER functionTimer(__FUNCTION__);
+
 #pragma omp parallel
 #pragma omp for  schedule(dynamic)
   for (unsigned int x = 0; x < particles.size(); x++)
   {
-    particles[x] += dt * velocityField(particles[x]);
-
     if (ribbons[x].size() > 20)
     //if (ribbons[x].size() > 2)
       ribbons[x].pop_front();
@@ -1252,25 +1358,315 @@ void runEverytime()
   }
 }
 
+//////////////////////////////////////////////////////////////////////
+// advect the density particles through the velocity field
+//////////////////////////////////////////////////////////////////////
+void advectParticlesRK4()
+{
+  TIMER functionTimer("Particle advection (RK4)");
+  const int totalParticles = particles.size();
+
+  vector<VEC3F> k1(totalParticles);
+#pragma omp parallel
+#pragma omp for  schedule(static)
+  for (unsigned int x = 0; x < particles.size(); x++)
+  {
+    VEC3F position = particles[x];
+    VEC3F velocity = velocityField.cubicLookup(position);
+
+    // try something higher order here
+    VEC3F particle = dt * velocity;
+    k1[x] = particle;
+  }
+
+  vector<VEC3F> k2(totalParticles);
+#pragma omp parallel
+#pragma omp for  schedule(static)
+  for (unsigned int x = 0; x < particles.size(); x++)
+  {
+    // try something higher order here
+    VEC3F position = particles[x] + 0.5 * k1[x];
+    VEC3F velocity = velocityField.cubicLookup(position);
+    k2[x] = dt * velocity;
+  }
+  
+  vector<VEC3F> k3(totalParticles);
+#pragma omp parallel
+#pragma omp for  schedule(static)
+  for (unsigned int x = 0; x < particles.size(); x++)
+  {
+    VEC3F position = particles[x] + 0.5 * k2[x];
+    VEC3F velocity = velocityField.cubicLookup(position);
+
+    // try something higher order here
+    k3[x] = dt * velocity;
+  }
+
+  vector<VEC3F> k4(totalParticles);
+#pragma omp parallel
+#pragma omp for  schedule(static)
+  for (unsigned int x = 0; x < particles.size(); x++)
+  {
+    VEC3F position = particles[x] + k3[x];
+    VEC3F velocity = velocityField.cubicLookup(position);
+
+    // try something higher order here
+    k4[x] = dt * velocity;
+  }
+
+  vector<VEC3F> final(totalParticles);
+#pragma omp parallel
+#pragma omp for  schedule(static)
+  for (unsigned int x = 0; x < particles.size(); x++)
+  {
+    // try higher order
+    VEC3F RK4 = particles[x] + 
+                1.0 / 6.0 * (k1[x] + 2.0 * k2[x] + 2.0 * k3[x] + k4[x]); 
+
+    // if it wandered outside, delete it
+    //if (!_density.inside(RK4))
+    //  continue;
+
+    final[x] = RK4;
+  }
+
+  particles = final;
+  //updateRibbons();
+}
+
+//////////////////////////////////////////////////////////////////////
+// advect the density particles through the velocity field
+//////////////////////////////////////////////////////////////////////
+void advectParticlesRK2()
+{
+  TIMER functionTimer("Particle advection (RK2)");
+  const int totalParticles = particles.size();
+
+  int totalThreads = omp_get_max_threads();
+  vector<vector<VEC3F> > finals(totalThreads);
+
+#pragma omp parallel
+#pragma omp for  schedule(static)
+  for (int x = 0; x < totalParticles; x++)
+  {
+    //VEC3F velocity = velocityField(particles[x]);
+    VEC3F velocity = velocityField.quarticLookup(particles[x]);
+
+    // try something higher order here
+    //VEC3F euler = _densityParticles[x] + _dt * velocity;
+    VEC3F euler = particles[x] + dt * 0.5 * velocity;
+    
+    //velocity = velocityField(euler);
+    velocity = velocityField.quarticLookup(euler);
+
+    // try higher order
+    VEC3F RK2 = particles[x] + dt * velocity;
+
+    int threadID = omp_get_thread_num();
+    finals[threadID].push_back(RK2);
+  }
+
+  particles.clear();
+  for (int x = 0; x < totalThreads; x++)
+    for (unsigned int y = 0; y < finals[x].size(); y++)
+      particles.push_back(finals[x][y]);
+
+  updateRibbons();
+}
+
+//////////////////////////////////////////////////////////////////////////////
+//////////////////////////////////////////////////////////////////////////////
+void advectParticlesEuler()
+{
+  TIMER advectionTimer("Particle advection (Euler)");
+
+#pragma omp parallel
+#pragma omp for  schedule(dynamic)
+  for (unsigned int x = 0; x < particles.size(); x++)
+    particles[x] += dt * velocityField(particles[x]);
+
+  updateRibbons();
+}
+
+//////////////////////////////////////////////////////////////////////////////
+//////////////////////////////////////////////////////////////////////////////
+void addBuoyancy()
+{
+  TIMER functionTimer(__FUNCTION__);
+  forceField.clear();
+
+  for (unsigned int x = 0; x < forceField.totalCells(); x++)
+    forceField[x][1] = densityField[x] * 0.1;
+  
+  FIELD_3D xField = forceField.scalarField(0);
+  FIELD_3D yField = forceField.scalarField(1);
+  FIELD_3D zField = forceField.scalarField(2);
+
+  {
+  TIMER buoyancy("Buoyancy DCT");
+  xField.xDSTyDCTzDCT();
+  yField.xDCTyDSTzDCT();
+  zField.xDCTyDCTzDST();
+  }
+
+  VECTOR force(w.size());
+  for (int x = 0; x < xDeltaIndices.size(); x++)
+    force[x] += xProjection[x] * xField[xDeltaIndices[x]];
+
+  for (int x = 0; x < yDeltaIndices.size(); x++)
+    force[x] += yProjection[x] * yField[yDeltaIndices[x]];
+
+  for (int x = 0; x < zDeltaIndices.size(); x++)
+    force[x] += zProjection[x] * zField[zDeltaIndices[x]];
+
+  // set equal to the force (should scale by dt ...)
+  w += force * dt;
+}
+
+//////////////////////////////////////////////////////////////////////////////
+//////////////////////////////////////////////////////////////////////////////
+void splatParticles()
+{
+  densityField.clear();
+
+  for (unsigned int x = 0; x < particles.size(); x++)
+  {
+    int index = densityField.cellIndex(particles[x]);
+    densityField[index] += 0.01;
+
+    if (densityField[index] > 1.0)
+      densityField[index] = 1.0;
+  }
+}
+
+//////////////////////////////////////////////////////////////////////////////
+//////////////////////////////////////////////////////////////////////////////
+void seedParticles()
+{
+  // fire down some random particles
+  static MERSENNETWISTER twister(123456);
+  //int totalParticles = 40000;
+  //int totalParticles = 10000;
+  int totalParticles = 1000;
+  Real radius = 0.25;
+  for (int x = 0; x < totalParticles; x++)
+  {
+    VEC3F particle;
+    particle[0] = twister.rand(radius);
+    particle[1] = twister.rand(radius);
+    particle[2] = twister.rand(radius);
+    //particle -= VEC3F(radius / 2, radius / 2, radius / 2);
+    particle += VEC3F(-radius / 2, - radius / 2 - 0.375, -radius / 2);
+
+    if (particle[0] * particle[0] + particle[2] * particle[2] > (radius / 2) * (radius / 2))
+      continue;
+    //particle -= VEC3F(0.5, 0.5, 0.5);
+
+    particles.push_back(particle);
+  }
+  //ribbons.resize(totalParticles);
+  //velocityRibbons.resize(totalParticles);
+}
+/*
+{
+  // fire down some random particles
+  MERSENNETWISTER twister(123456);
+  //int totalParticles = 40000;
+  int totalParticles = 10000;
+  //int totalParticles = 1000;
+  for (int x = 0; x < totalParticles; x++)
+  {
+    VEC3F particle;
+    particle[0] = twister.rand();
+    particle[1] = twister.rand();
+    particle[2] = twister.rand();
+    particle -= VEC3F(0.5, 0.5, 0.5);
+
+    particles.push_back(particle);
+  }
+  ribbons.resize(totalParticles);
+  velocityRibbons.resize(totalParticles);
+}
+*/
+
+//////////////////////////////////////////////////////////////////////////////
+//////////////////////////////////////////////////////////////////////////////
+void runEverytime()
+{
+  stepEigenfunctions();
+  //stepEigenfunctionsExp();
+ 
+  //advectParticlesEuler(); 
+  //advectParticlesRK2(); 
+  advectParticlesRK4();
+
+  splatParticles();
+
+  addBuoyancy();
+
+  seedParticles(); 
+}
+
 //////////////////////////////////////////////////////////////////////////////
 //////////////////////////////////////////////////////////////////////////////
 int main(int argc, char *argv[])
 {
+  if (argc < 2)
+  {
+    cout << " USAGE: " << argv[0] << " *.cfg" << endl;
+    return 0;
+  }
+  SIMPLE_PARSER parser(argv[1]);
+  res = parser.getInt("res", res);
+  dim = parser.getInt("max vortex packing", dim);
+  path = parser.getString("path", path);
+  viscosity = parser.getFloat("viscosity", viscosity);
+  dt = parser.getFloat("dt", dt);
+  int method = parser.getInt("reconstruction method", 0);
+  int headless = parser.getInt("headless", 0);
+
+  cout << " Using velocity res:   " << res << endl;
+  cout << "       vortex packing: " << dim << endl;
+  cout << "       path:           " << path << endl;
+  cout << "       viscosity:      " << viscosity << endl;
+  cout << "       dt:             " << dt << endl;
+
+  switch (reconstructionMethod) {
+    case FFT_RECON:
+      cout << "       reconstruction: FFT " << endl;
+      break;
+    case MATRIX_VECTOR_RECON:
+      cout << "       reconstruction: Matrix-vector" << endl;
+      break;
+    case ANALYTIC_RECON:
+      cout << "       reconstruction: Analytic" << endl;
+      break;
+  }
+
   //debugCoeff();
 
   buildTableIXYZ(dim);
 
   char buffer[256];
-  bool success = true;
+  bool success = false;
 
   sprintf(buffer, "./data/C.dim.%i.tensor", dim);
   success = tensorC.read(buffer);
-  if (!success)
+  //if (!success)
   {
-    buildSparseAnalyticC_OMP();
-    TIMER::printTimings();
-    tensorC.write(buffer);
+    // see if a compressed version exists
+    sprintf(buffer, "./data/C.dim.%i.tensor.gz", dim);
+    success = tensorC.readGz(buffer);
+
+    //if (!success)
+    {
+      buildSparseAnalyticC_OMP();
+      TIMER::printTimings();
+      tensorC.writeGz(buffer);
+    }
   }
+
+  cout << " C has " << tensorC.size() << " entries " << endl;
 
   /*
   //printSliceC(26);
@@ -1291,19 +1687,27 @@ int main(int argc, char *argv[])
     cout << buffer << " found! " << endl;
     */
 
-  //buildVelocityBasis(buffer);
-  /*
+  velocityField = VECTOR3_FIELD_3D(res, res, res, center, lengths);
+  forceField    = VECTOR3_FIELD_3D(res, res, res, center, lengths);
+  xHat = FIELD_3D(res, res, res);
+  yHat = FIELD_3D(res, res, res);
+  zHat = FIELD_3D(res, res, res);
+
+  densityField = FIELD_3D(res, res, res, center, lengths);
+
+  computePlans();
+#if 0
+  buildVelocityBasis(buffer);
   sprintf(buffer, "./data/velocity.res.%i.dim.%i.matrix", res, dim);
   success = velocityU.read(buffer);
   if (!success)
     buildVelocityBasis(buffer);
   else
     cout << buffer << " found! " << endl;
-    */
-
-  computePlans();
-  //computeFieldFFTs();
+  computeFieldFFTs();
+#else
   computeDeltas();
+#endif
 
   w = VECTOR(ixyz.size());
   wDot = VECTOR(ixyz.size());
@@ -1312,7 +1716,9 @@ int main(int argc, char *argv[])
   impulse = 0;
   int half = impulse.xRes() / 2;
   impulse(half, half, half)[0] = 0;
-  impulse(half, half, half)[1] = 1;
+  impulse(half, half, half)[1] = 1000;
+  //impulse(half, half, half)[1] = 100000;
+  //impulse(half, half, half)[1] = 50000;
   impulse(half, half, half)[2] = 0;
   //impulse(half, half, half)[1] = 0.05;
   //impulse(half, half, half)[0] = 0.01;
@@ -1344,28 +1750,12 @@ int main(int argc, char *argv[])
   */
   
   // set equal to the force (should scale by dt ...)
-  w = force;
+  w += force * dt;
 
-  // fire down some random particles
-  MERSENNETWISTER twister(123456);
-  //int totalParticles = 40000;
-  int totalParticles = 10000;
-  //int totalParticles = 1000;
-  for (int x = 0; x < totalParticles; x++)
-  {
-    VEC3F particle;
-    //particle[0] = 0.5;
-    particle[0] = twister.rand();
-    //particle[1] = 0.5;
-    particle[1] = twister.rand();
-    //particle[2] = 0.5;
-    particle[2] = twister.rand();
-    particle -= VEC3F(0.5, 0.5, 0.5);
+  seedParticles();
 
-    particles.push_back(particle);
-  }
-  ribbons.resize(totalParticles);
-  velocityRibbons.resize(totalParticles);
+  if (headless)
+    return 0;
 
   glutInit(&argc, argv);
   glvuWindow();
