@@ -1782,6 +1782,85 @@ void buildEigenFastSparseAnalyticC_OMP()
   TIMER functionTimer(__FUNCTION__);
   int basisRank = ixyz.size();
 
+  // set up for threaded version
+  int threads = omp_get_max_threads();
+  vector<SPARSE_TENSOR3> tempC(threads);
+  for (int x = 0; x < threads; x++)
+    tempC[x].resize(basisRank, basisRank, basisRank);
+
+  vector<VEC3I> triples;
+  generateAllTriples(dim, triples);
+
+  vector<vector<int> > quads;
+  generateAllQuads(triples, quads);
+
+  eigenTensor.resize(basisRank);
+  for (int x = 0; x < basisRank; x++)
+    eigenTensor[x] = EIGEN_SPARSE(basisRank, basisRank);
+  //tensorC.clear();
+
+  vector<vector<EIGEN_SPARSE> > eigenTemp;
+  for (int x = 0; x < threads; x++)
+    eigenTemp.push_back(eigenTensor);
+
+  int size = triples.size();
+  cout << " Fast building " << size << " for C in Eigen ... " << flush;
+//#pragma omp parallel
+//#pragma omp for  schedule(dynamic)
+  for (int i = 0; i < size; i++)
+  {
+    int threadID = omp_get_thread_num();
+    for (int j = 0; j < size; j++)
+      for (int k = 0; k < size; k++)
+      {
+        VEC3I col1 = triples[i];
+        VEC3I col2 = triples[j];
+        VEC3I col3 = triples[k];
+
+        vector<int> a123(4);
+        vector<int> b123(4);
+        vector<int> c123(4);
+
+        a123[1] = col1[0]; a123[2] = col2[0]; a123[3] = col3[0];
+        b123[1] = col1[1]; b123[2] = col2[1]; b123[3] = col3[1];
+        c123[1] = col1[2]; c123[2] = col2[2]; c123[3] = col3[2];
+
+        for (int x = 0; x < 3; x++)
+          for (int y = 0; y < 3; y++)
+            for (int z = 0; z < 3; z++)
+            {
+              a123[0] = x; 
+              b123[0] = y; 
+              c123[0] = z;
+        
+              int a = reverseLookup(a123);
+              int b = reverseLookup(b123);
+              int c = reverseLookup(c123);
+              Real coef = 0; 
+              bool success = structureCoefficientAnalytic(a123, b123, c123, coef);
+              if (fabs(coef) > 1e-8)
+                //tensorC(b,a,c) = -coef;
+                eigenTemp[threadID][c].insert(b,a) = -coef;
+            }
+      }
+    cout << i << " " << flush;
+  }
+  cout << " done." << endl;
+  for (unsigned int x = 0; x < eigenTemp.size(); x++)
+    for (int y = 0; y < basisRank; y++)
+      eigenTensor[y] += eigenTemp[x][y];
+  
+  // build arrays for fast static multiplies
+  //tensorC.buildStatic();
+}
+
+//////////////////////////////////////////////////////////////////////////////
+//////////////////////////////////////////////////////////////////////////////
+void buildEigenFastSparseAnalyticC()
+{
+  TIMER functionTimer(__FUNCTION__);
+  int basisRank = ixyz.size();
+
   Eigen::initParallel();
 
   // set up for threaded version
@@ -1803,8 +1882,8 @@ void buildEigenFastSparseAnalyticC_OMP()
 
   int size = triples.size();
   cout << " Fast building " << size << " for C in Eigen ... " << flush;
-#pragma omp parallel
-#pragma omp for  schedule(dynamic)
+//#pragma omp parallel
+//#pragma omp for  schedule(dynamic)
   for (int i = 0; i < size; i++)
   {
     int threadID = omp_get_thread_num();
