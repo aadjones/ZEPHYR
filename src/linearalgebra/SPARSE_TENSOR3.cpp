@@ -89,8 +89,16 @@ void SPARSE_TENSOR3::clear()
 //////////////////////////////////////////////////////////////////////
 void SPARSE_TENSOR3::buildStatic()
 {
+  TIMER functionTimer(__FUNCTION__);
+  cout << " Building static tensor arrays ... " << flush;
+#pragma omp parallel
+#pragma omp for  schedule(dynamic)
   for (int x = 0; x < _slabs; x++)
+  {
     _data[x].buildStatic();
+    cout << x << " " << flush;
+  }
+  cout << "done. " << endl;
 }
 
 //////////////////////////////////////////////////////////////////////
@@ -242,4 +250,52 @@ SPARSE_MATRIX SPARSE_TENSOR3::modeThreeProduct(const VECTOR& x)
     result += x[slab] * _data[slab]; 
 
   return result;
+}
+
+//////////////////////////////////////////////////////////////////////
+// what is the 2-norm?
+//////////////////////////////////////////////////////////////////////
+Real SPARSE_TENSOR3::sumSq()
+{
+  Real final = 0;
+  for (int slab = 0; slab < _slabs; slab++)
+    final += _data[slab].sumSq();
+
+  return final;
+}
+
+//////////////////////////////////////////////////////////////////////
+// return a full version of this sparse tensor
+//////////////////////////////////////////////////////////////////////
+TENSOR3 SPARSE_TENSOR3::full()
+{
+  TENSOR3 final(_rows, _cols, _slabs);
+
+  for (int x = 0; x < _rows; x++)
+    for (int y = 0; y < _cols; y++)
+      for (int z = 0; z < _slabs; z++)
+        if (exists(x,y,z))
+          final(x,y,z) = (*this)(x,y,z);
+
+  return final;
+}
+
+//////////////////////////////////////////////////////////////////////
+// Print matrix to stream
+//////////////////////////////////////////////////////////////////////
+ostream& operator<<(ostream &out, SPARSE_TENSOR3& tensor)
+{
+  for (int x = 0; x < tensor.slabs(); x++)
+  {
+    // iterate through all the entries
+    map<pair<int,int>, Real>::const_iterator i;
+    const map<pair<int,int>, Real>& data = tensor.slab(x).matrix();
+    for (i = data.begin(); i != data.end(); i++)
+    {
+      const pair<int,int> index = i->first;
+      const Real value = i->second;
+      out << "(" << index.first << "," << index.second << "," << x << ") = " <<  value << endl;
+    }
+  }
+  return out;
 }

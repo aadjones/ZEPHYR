@@ -119,6 +119,9 @@ public:
   // convert to a full matrix
   MATRIX full() const;
 
+  // what is the 2-norm?
+  Real sumSq();
+
 protected:
   int _rows;
   int _cols;

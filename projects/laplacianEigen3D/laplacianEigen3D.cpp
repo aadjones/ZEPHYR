@@ -132,6 +132,95 @@ QUICKTIME_MOVIE movie;
 bool captureMovie = false;
 
 ///////////////////////////////////////////////////////////////////////
+// Generate the tripes for a single N
+///////////////////////////////////////////////////////////////////////
+void generateTriples(const int N, vector<VEC3I>& triples)
+{
+  TIMER functionTimer(__FUNCTION__);
+  VEC3I currentTriple(0, 0, 0);
+  // First, put in all the ones that have exactly one N
+  for (int i = 1; i <= N - 1; i++) 
+  {
+    currentTriple[0] = N;
+    currentTriple[1] = i;
+    currentTriple[2] = N - i;
+    triples.push_back(currentTriple);
+
+    currentTriple[0] = i;
+    currentTriple[1] = N;
+    currentTriple[2] = N - i;
+    triples.push_back(currentTriple);
+
+    currentTriple[0] = i;
+    currentTriple[1] = N - i;
+    currentTriple[2] = N;
+    triples.push_back(currentTriple);
+  }
+
+  // Finally, account for the 3 that have exactly two N's
+  currentTriple[0] = N;
+  currentTriple[1] = N;
+  currentTriple[2] = 0;
+  triples.push_back(currentTriple);
+
+  currentTriple[0] = N;
+  currentTriple[1] = 0;
+  currentTriple[2] = N;
+  triples.push_back(currentTriple);
+  
+  currentTriple[0] = 0;
+  currentTriple[1] = N;
+  currentTriple[2] = N;
+  triples.push_back(currentTriple);
+}
+
+///////////////////////////////////////////////////////////////////////
+// Generate all the triples from 1 to N
+///////////////////////////////////////////////////////////////////////
+void generateAllTriples(const int N, vector<VEC3I>& triples)
+{
+  TIMER functionTimer(__FUNCTION__);
+  // Since each triple (a, b, c) that worked for N = k also works for N = k + 1,
+  // we can just iterate through them one by one and keep pushing back the new values.
+  for (int k = 0; k <= N; k++) 
+  {
+    if (k == 0) 
+    {
+      // Base case: only the triple (0, 0, 0) works
+      VEC3I zero(0, 0, 0);
+      triples.push_back(zero);
+    }
+    else {
+      generateTriples(k, triples);
+    }
+  }
+}
+
+///////////////////////////////////////////////////////////////////////
+// Given all the triples, generate the quads
+///////////////////////////////////////////////////////////////////////
+void generateAllQuads(const vector<VEC3I>& triples, vector<vector<int> >& quads)
+{
+  for (unsigned int x = 0; x < triples.size(); x++)
+  {
+    const VEC3I& triple = triples[x];
+
+    vector<int> quad(4);
+    quad[0] = 0; 
+    quad[1] = triple[0];
+    quad[2] = triple[1];
+    quad[3] = triple[2];
+    quads.push_back(quad);
+
+    quad[0] = 1;
+    quads.push_back(quad);
+
+    quad[0] = 2;
+    quads.push_back(quad);
+  }
+}
+
+///////////////////////////////////////////////////////////////////////
 // reconstruct the velocity field using FFT
 ///////////////////////////////////////////////////////////////////////
 void reconstructSparseFFT()
@@ -637,7 +726,9 @@ bool structureCoefficientAnalytic(const vector<int>& a123, const vector<int>& b1
 
   //final *= (1.0/ 64.0) * M_PI * M_PI * M_PI;
   final *= (1.0/ 64.0);
-  final *= 1.0 / (b1 * b1 + b2 * b2 + b3 * b3);
+
+  const Real eig = (b1 * b1 + b2 * b2 + b3 * b3);
+  final *= (eig > 0.0) ? 1.0 / eig : 0;
 
   coef = final;
 
@@ -655,7 +746,7 @@ void buildSparseAnalyticC_OMP()
   long long totalEntries = (long long)basisRank * (long long)basisRank * (long long)basisRank;
 
   // set up for threaded version
-  omp_set_num_threads(1);
+  //omp_set_num_threads(1);
   int threads = omp_get_max_threads();
   vector<SPARSE_TENSOR3> tempC(threads);
   for (int x = 0; x < threads; x++)
@@ -663,6 +754,11 @@ void buildSparseAnalyticC_OMP()
   vector<long long> nonZeros(threads);
   vector<int> hits(threads);
 
+  cout << __FILE__ << " " << __FUNCTION__ << " " << __LINE__ << " : " << endl;
+  cout << __FILE__ << " " << __FUNCTION__ << " " << __LINE__ << " : " << endl;
+  cout << " ZERO CHECKING TURNED OFF " << endl;
+  cout << __FILE__ << " " << __FUNCTION__ << " " << __LINE__ << " : " << endl;
+  cout << __FILE__ << " " << __FUNCTION__ << " " << __LINE__ << " : " << endl;
 #pragma omp parallel
 #pragma omp for  schedule(dynamic)
   for (int d1 = 0; d1 < basisRank; d1++)
@@ -688,7 +784,8 @@ void buildSparseAnalyticC_OMP()
         if (success)
           hits[threadID]++;
 
-        if (fabs(coef) > 1e-8)
+        //if (fabs(coef) > 1e-8)
+        if (success)
         {
           /*
           if (tempC[threadID].exists(b,a,k))
@@ -724,6 +821,8 @@ void buildSparseAnalyticC_OMP()
   }
   cout << "done. " << endl;
 
+  cout << " Consolidating ... " << flush;
+
   // consolidate non-zero counts
   long long totalNonZeros = 0;
   for (unsigned int x = 0; x < nonZeros.size(); x++)
@@ -733,6 +832,8 @@ void buildSparseAnalyticC_OMP()
   tensorC.resize(basisRank, basisRank, basisRank);
   for (unsigned int x = 0; x < tempC.size(); x++)
     tensorC += tempC[x];
+
+  cout << " done. " << endl;
 
   Real percent = (100.0 * totalNonZeros) / (Real) totalEntries;
   cout << " Non-zeros " << totalNonZeros << " out of " << totalEntries << " (" << percent << "%)" << endl;
@@ -764,8 +865,8 @@ void buildSparseAnalyticC()
   //sparseC.clear();
   tensorC.resize(basisRank, basisRank, basisRank);
 
-#pragma omp parallel
-#pragma omp for  schedule(dynamic)
+//#pragma omp parallel
+//#pragma omp for  schedule(dynamic)
   for (int d1 = 0; d1 < basisRank; d1++)
   {
     vector<int> a123 = ixyz[d1];
@@ -786,11 +887,11 @@ void buildSparseAnalyticC()
 
         if (fabs(coef) > 1e-8)
         {
-#pragma omp critical
+//#pragma omp critical
           tensorC(b,a,k) = -coef;
 
           //sparseC[k](b,a) = coef;
-#pragma omp atomic
+//#pragma omp atomic
           nonZeros++;
         }
         totalEntries++;
@@ -1609,6 +1710,183 @@ void runEverytime()
 
 //////////////////////////////////////////////////////////////////////////////
 //////////////////////////////////////////////////////////////////////////////
+void buildFastSparseAnalyticC()
+{
+  TIMER functionTimer(__FUNCTION__);
+
+  vector<VEC3I> triples;
+  generateAllTriples(dim, triples);
+
+  vector<vector<int> > quads;
+  generateAllQuads(triples, quads);
+
+  int basisRank = ixyz.size();
+  tensorC.resize(basisRank, basisRank, basisRank);
+
+  int size = triples.size();
+  cout << " Fast building " << size << " for C ... " << flush;
+  for (int i = 0; i < size; i++)
+  {
+    for (int j = 0; j < size; j++)
+      for (int k = 0; k < size; k++)
+      {
+        VEC3I col1 = triples[i];
+        VEC3I col2 = triples[j];
+        VEC3I col3 = triples[k];
+
+        vector<int> a123(4);
+        vector<int> b123(4);
+        vector<int> c123(4);
+
+        a123[1] = col1[0]; a123[2] = col2[0]; a123[3] = col3[0];
+        b123[1] = col1[1]; b123[2] = col2[1]; b123[3] = col3[1];
+        c123[1] = col1[2]; c123[2] = col2[2]; c123[3] = col3[2];
+
+        for (int x = 0; x < 3; x++)
+          for (int y = 0; y < 3; y++)
+            for (int z = 0; z < 3; z++)
+            {
+              a123[0] = x; 
+              b123[0] = y; 
+              c123[0] = z;
+        
+              int a = reverseLookup(a123);
+              int b = reverseLookup(b123);
+              int c = reverseLookup(c123);
+              Real coef = 0; 
+              bool success = structureCoefficientAnalytic(a123, b123, c123, coef);
+              if (fabs(coef) > 1e-8)
+                tensorC(b,a,c) = -coef;
+            }
+      }
+    cout << i << " " << flush;
+  }
+  cout << " done." << endl;
+  
+  // build arrays for fast static multiplies
+  tensorC.buildStatic();
+}
+
+//////////////////////////////////////////////////////////////////////////////
+//////////////////////////////////////////////////////////////////////////////
+void printQuad(vector<int>& quad)
+{
+  cout << quad[0] << " " << quad[1] << " " << quad[2] << " " << quad[3] << endl;
+}
+
+//////////////////////////////////////////////////////////////////////////////
+//////////////////////////////////////////////////////////////////////////////
+void testTriples()
+{
+  TENSOR3 ground = tensorC.full();
+  SPARSE_TENSOR3 groundTensor = tensorC;
+
+  int basisRank = ixyz.size();
+
+  vector<VEC3I> triples;
+  generateAllTriples(dim, triples);
+
+  vector<vector<int> > quads;
+  generateAllQuads(triples, quads);
+
+  cout << " Seen " << triples.size() << " triples" << endl;
+  cout << " Seen " << quads.size() << " quads" << endl;
+  int found = 0;
+  Real diff = 0;
+  Real final = 0;
+  Real tensorSeen = 0;
+  cout << " CHECKING ALL QUADS ... " << flush;
+
+  map<int, vector<int> > seenBefore;
+
+  // peek at where the quads say nonzeros will appear
+  int size = quads.size();
+  for (int i = 0; i < size; i++)
+    for (int j = 0; j < size; j++)
+      for (int k = 0; k < size; k++)
+      {
+        int a = reverseLookup(quads[i]);
+        int b = reverseLookup(quads[j]);
+        int c = reverseLookup(quads[k]);
+
+        int seenLookup = a * basisRank * basisRank + b * basisRank + c;
+
+        if (seenBefore.find(seenLookup) == seenBefore.end())
+        {
+          vector<int> cache;
+          cache.push_back(i);
+          cache.push_back(j);
+          cache.push_back(k);
+          seenBefore[seenLookup] = cache;
+        }
+        else
+        {
+          cout << __FILE__ << " " << __FUNCTION__ << " " << __LINE__ << " : " << endl;
+          cout << __FILE__ << " " << __FUNCTION__ << " " << __LINE__ << " : " << endl;
+          cout << " SEEN THIS BEFORE " << endl;
+          cout << "   ijk now:    " << i << " " << j << " " << k << endl;
+          vector<int> cache = seenBefore[seenLookup];
+          cout << "   ijk before: "<< cache[0] << " " << cache[1] << " " << cache[2] << endl;
+          cout << " quads now: " << endl;
+          printQuad(quads[i]);
+          printQuad(quads[j]);
+          printQuad(quads[k]);
+          cout << " quads before: " << endl;
+          printQuad(quads[cache[0]]);
+          printQuad(quads[cache[1]]);
+          printQuad(quads[cache[2]]);
+
+          cout << " abc now:    " << a << " " << b << " " << c << endl;
+          cout << " abc before: " << reverseLookup(quads[cache[0]]) << " " << reverseLookup(quads[cache[1]]) << " " << reverseLookup(quads[cache[2]]) << endl;
+          cout << __FILE__ << " " << __FUNCTION__ << " " << __LINE__ << " : " << endl;
+          cout << __FILE__ << " " << __FUNCTION__ << " " << __LINE__ << " : " << endl;
+          exit(0);
+        }
+
+        Real coef = 0; 
+        bool success = structureCoefficientAnalytic(quads[i], quads[j], quads[k], coef);
+        coef *= -1;
+        final += coef * coef;
+
+
+        Real thisDiff = fabs(tensorC(b,a,c) - coef);
+
+        tensorSeen += tensorC(b,a,c) * tensorC(b,a,c);
+
+        if (thisDiff > 0)
+        {
+          cout << " final: " << tensorC(b,a,c) << endl;
+          cout << " coef: " << coef << endl;
+        }
+        diff += thisDiff;
+
+        if (!tensorC.exists(b,a,c))
+        {
+          cout << __FILE__ << " " << __FUNCTION__ << " " << __LINE__ << " : " << endl;
+          cout << __FILE__ << " " << __FUNCTION__ << " " << __LINE__ << " : " << endl;
+          cout << " NOT FOUND. " << endl;
+          cout << __FILE__ << " " << __FUNCTION__ << " " << __LINE__ << " : " << endl;
+          cout << __FILE__ << " " << __FUNCTION__ << " " << __LINE__ << " : " << endl;
+          exit(0);
+        }
+        else
+          found++;
+      }
+  cout << " DONE. " << endl;
+  cout << " FOUND: " << found << endl;
+  cout << " DIFF: " << diff << endl;
+
+  cout << " Final sum sq: " << final << endl;
+  cout << " Ground seen: " << tensorSeen << endl;
+  
+  TENSOR3 current = tensorC.full();
+
+  cout << " Ground truth: " << groundTensor << endl;
+  cout << " Current tensor: " << tensorC << endl;
+}
+
+//////////////////////////////////////////////////////////////////////////////
+//////////////////////////////////////////////////////////////////////////////
 int main(int argc, char *argv[])
 {
   if (argc < 2)
@@ -1650,23 +1928,72 @@ int main(int argc, char *argv[])
   char buffer[256];
   bool success = false;
 
+  /*
+#if 0
   sprintf(buffer, "./data/C.dim.%i.tensor", dim);
   success = tensorC.read(buffer);
-  //if (!success)
+  if (!success)
   {
     // see if a compressed version exists
     sprintf(buffer, "./data/C.dim.%i.tensor.gz", dim);
     success = tensorC.readGz(buffer);
 
-    //if (!success)
+    if (!success)
     {
       buildSparseAnalyticC_OMP();
       TIMER::printTimings();
       tensorC.writeGz(buffer);
     }
   }
-
+#else
+  cout << __FILE__ << " " << __FUNCTION__ << " " << __LINE__ << " : " << endl;
+  cout << __FILE__ << " " << __FUNCTION__ << " " << __LINE__ << " : " << endl;
+  cout << " REBULDING C EVERY TIME " << endl;
+  cout << __FILE__ << " " << __FUNCTION__ << " " << __LINE__ << " : " << endl;
+  cout << __FILE__ << " " << __FUNCTION__ << " " << __LINE__ << " : " << endl;
+  //buildSparseAnalyticC_OMP();
+  buildSparseAnalyticC();
+#endif
   cout << " C has " << tensorC.size() << " entries " << endl;
+  cout << " Ground truth tensor sum sq: " << tensorC.sumSq() << endl;
+
+  //testTriples();
+  //exit(0);
+
+  SPARSE_TENSOR3 ground = tensorC;
+  */
+
+  tensorC.clear();
+  buildFastSparseAnalyticC();
+  cout << " New tensor sum sq: " << tensorC.sumSq() << endl;
+  //exit(0);
+
+  /*
+  vector<int> entry28 = ixyz[28];
+  vector<int> entry30 = ixyz[30];
+  vector<int> entry4 = ixyz[4];
+
+  cout << " Want: " << endl;
+  printQuad(entry28);
+  printQuad(entry30);
+  printQuad(entry4);
+
+  cout << " All quads: " << endl;
+  vector<VEC3I> triples;
+  generateAllTriples(dim, triples);
+
+  vector<vector<int> > quads;
+  generateAllQuads(triples, quads);
+
+  for (int x = 0; x < quads.size(); x++)
+    printQuad(quads[x]);
+    */
+
+  //cout << " Ground: " << endl;
+  //cout << ground << endl;
+  //cout << " Current: " << endl;
+  //cout << tensorC << endl;
+  //exit(0);
 
   /*
   //printSliceC(26);

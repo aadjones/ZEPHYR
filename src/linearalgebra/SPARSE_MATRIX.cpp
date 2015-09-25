@@ -857,3 +857,17 @@ MATRIX SPARSE_MATRIX::full() const
   }
   return matrix;
 }
+
+//////////////////////////////////////////////////////////////////////
+// what is the 2-norm?
+//////////////////////////////////////////////////////////////////////
+Real SPARSE_MATRIX::sumSq()
+{
+  Real final = 0;
+
+  map<pair<int,int>, Real>::const_iterator i;
+  for (i = _matrix.begin(); i != _matrix.end(); i++)
+    final += i->second * i->second;
+
+  return final;
+}

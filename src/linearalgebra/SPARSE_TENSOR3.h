@@ -31,6 +31,7 @@
 #include <iostream>
 #include <cstdio>
 #include "SPARSE_MATRIX.h"
+#include "TENSOR3.h"
 
 using namespace std;
 
@@ -76,7 +77,14 @@ public:
   void writeGz(const string& filename) const;
   bool readGz(const string& filename);
 
+  // how many entries does it have?
   int size();
+
+  // what is the 2-norm?
+  Real sumSq();
+
+  // return a full version of this sparse tensor
+  TENSOR3 full();
 
 protected:
   // resize based on the current dimensions
@@ -88,5 +96,7 @@ protected:
 
   vector<SPARSE_MATRIX> _data;
 };
+
+ostream& operator<<(ostream &out, SPARSE_TENSOR3& tensor);
 
 #endif
