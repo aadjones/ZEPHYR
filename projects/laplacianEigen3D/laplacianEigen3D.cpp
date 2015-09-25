@@ -1782,6 +1782,8 @@ void buildEigenFastSparseAnalyticC_OMP()
   TIMER functionTimer(__FUNCTION__);
   int basisRank = ixyz.size();
 
+  Eigen::initParallel();
+
   // set up for threaded version
   int threads = omp_get_max_threads();
   vector<SPARSE_TENSOR3> tempC(threads);
@@ -1801,8 +1803,8 @@ void buildEigenFastSparseAnalyticC_OMP()
 
   int size = triples.size();
   cout << " Fast building " << size << " for C in Eigen ... " << flush;
-//#pragma omp parallel
-//#pragma omp for  schedule(dynamic)
+#pragma omp parallel
+#pragma omp for  schedule(dynamic)
   for (int i = 0; i < size; i++)
   {
     int threadID = omp_get_thread_num();
