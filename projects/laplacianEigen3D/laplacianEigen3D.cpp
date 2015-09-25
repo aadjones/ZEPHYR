@@ -131,6 +131,9 @@ QUICKTIME_MOVIE movie;
 //bool captureMovie = true;
 bool captureMovie = false;
 
+typedef SparseMatrix<Real> EIGEN_SPARSE;
+vector<EIGEN_SPARSE> eigenTensor;
+
 ///////////////////////////////////////////////////////////////////////
 // Generate the tripes for a single N
 ///////////////////////////////////////////////////////////////////////
@@ -276,6 +279,69 @@ void stepEigenfunctionsExp()
   //Real e2 = w.dot(w);
   //if (e2 > 0)
   //  w *= sqrt(e1 / e2);
+
+  for (int k = 0; k < basisRank; k++)
+  {
+    Real lambda = -(eigenvalues[k]);
+
+    //const Real viscosity = 0.0;
+    //
+    // this is the one the 2D version uses
+    //const Real viscosity = 0.1;
+    //const Real viscosity = 0.5;
+    //const Real viscosity = 1.0;
+    //const Real viscosity = 5;
+    //const Real viscosity = 10;
+
+    // diffuse
+    w[k] *= exp(lambda * dt * viscosity);
+  }
+
+  {
+  TIMER reconstructionTimer("Velocity Reconstruction");
+  //VECTOR final = velocityU * w;
+  //velocityField.unflatten(final);
+
+  reconstructSparseFFT();
+  }
+
+  frames++;
+}
+
+///////////////////////////////////////////////////////////////////////
+// step the system forward in time
+///////////////////////////////////////////////////////////////////////
+void stepEigenfunctionsEigen()
+{
+  TIMER functionTimer(__FUNCTION__);
+  int basisRank = ixyz.size();
+  Real e1 = w.dot(w);
+
+  VectorXd wEigen(basisRank);
+  for (int x = 0; x < basisRank; x++)
+    wEigen[x] = w[x];
+
+#pragma omp parallel
+#pragma omp for  schedule(dynamic)
+  for (int k = 0; k < basisRank; k++)
+  {
+    EIGEN_SPARSE& slab = eigenTensor[k];
+    //wDot[k] = w.dot(slab * w);
+
+    VectorXd product = slab * wEigen;
+    
+    wDot[k] = 0;
+    for (int x = 0; x < basisRank; x++)
+      wDot[k] += w[x] * product[x];
+    //wDot[k] = w.dot(slab * wEigen);
+  }
+
+  w += dt * wDot;
+
+  Real e2 = w.dot(w);
+
+  if (e2 > 0)
+    w *= sqrt(e1 / e2);
 
   for (int k = 0; k < basisRank; k++)
   {
@@ -1694,7 +1760,8 @@ void seedParticles()
 //////////////////////////////////////////////////////////////////////////////
 void runEverytime()
 {
-  stepEigenfunctions();
+  stepEigenfunctionsEigen();
+  //stepEigenfunctions();
   //stepEigenfunctionsExp();
  
   //advectParticlesEuler(); 
@@ -1706,6 +1773,80 @@ void runEverytime()
   addBuoyancy();
 
   seedParticles(); 
+}
+
+//////////////////////////////////////////////////////////////////////////////
+//////////////////////////////////////////////////////////////////////////////
+void buildEigenFastSparseAnalyticC_OMP()
+{
+  TIMER functionTimer(__FUNCTION__);
+  int basisRank = ixyz.size();
+
+  // set up for threaded version
+  int threads = omp_get_max_threads();
+  vector<SPARSE_TENSOR3> tempC(threads);
+  for (int x = 0; x < threads; x++)
+    tempC[x].resize(basisRank, basisRank, basisRank);
+
+  vector<VEC3I> triples;
+  generateAllTriples(dim, triples);
+
+  vector<vector<int> > quads;
+  generateAllQuads(triples, quads);
+
+  eigenTensor.resize(basisRank);
+  for (int x = 0; x < basisRank; x++)
+    eigenTensor[x] = EIGEN_SPARSE(basisRank, basisRank);
+  //tensorC.clear();
+
+  int size = triples.size();
+  cout << " Fast building " << size << " for C in Eigen ... " << flush;
+//#pragma omp parallel
+//#pragma omp for  schedule(dynamic)
+  for (int i = 0; i < size; i++)
+  {
+    int threadID = omp_get_thread_num();
+    for (int j = 0; j < size; j++)
+      for (int k = 0; k < size; k++)
+      {
+        VEC3I col1 = triples[i];
+        VEC3I col2 = triples[j];
+        VEC3I col3 = triples[k];
+
+        vector<int> a123(4);
+        vector<int> b123(4);
+        vector<int> c123(4);
+
+        a123[1] = col1[0]; a123[2] = col2[0]; a123[3] = col3[0];
+        b123[1] = col1[1]; b123[2] = col2[1]; b123[3] = col3[1];
+        c123[1] = col1[2]; c123[2] = col2[2]; c123[3] = col3[2];
+
+        for (int x = 0; x < 3; x++)
+          for (int y = 0; y < 3; y++)
+            for (int z = 0; z < 3; z++)
+            {
+              a123[0] = x; 
+              b123[0] = y; 
+              c123[0] = z;
+        
+              int a = reverseLookup(a123);
+              int b = reverseLookup(b123);
+              int c = reverseLookup(c123);
+              Real coef = 0; 
+              bool success = structureCoefficientAnalytic(a123, b123, c123, coef);
+              if (fabs(coef) > 1e-8)
+                //tensorC(b,a,c) = -coef;
+                eigenTensor[c].insert(b,a) = -coef;
+            }
+      }
+    cout << i << " " << flush;
+  }
+  cout << " done." << endl;
+  //for (unsigned int x = 0; x < tempC.size(); x++)
+  //  tensorC += tempC[x];
+  
+  // build arrays for fast static multiplies
+  //tensorC.buildStatic();
 }
 
 //////////////////////////////////////////////////////////////////////////////
@@ -2035,11 +2176,13 @@ int main(int argc, char *argv[])
   SPARSE_TENSOR3 ground = tensorC;
   */
 
-  tensorC.clear();
+  //tensorC.clear();
   //buildFastSparseAnalyticC();
-  buildFastSparseAnalyticC_OMP();
-  cout << " New tensor sum sq: " << tensorC.sumSq() << endl;
+  //buildFastSparseAnalyticC_OMP();
+  //cout << " New tensor sum sq: " << tensorC.sumSq() << endl;
   //exit(0);
+
+  buildEigenFastSparseAnalyticC_OMP();
 
   /*
   vector<int> entry28 = ixyz[28];
