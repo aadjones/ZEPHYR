@@ -26,7 +26,7 @@
 #include <iostream>
 #include <time.h>
 #include "COMPRESSION_REWRITE.h"
-
+#include "BIG_MATRIX.h"
 
 ///////////////////////////////////////////////////////
 // Globals
@@ -49,12 +49,18 @@ int numBlocks = (xPadded * yPadded * zPadded) / (BLOCK_SIZE * BLOCK_SIZE * BLOCK
 VEC3I dims(xRes, yRes, zRes);
 VEC3I g_paddedDims(xPadded, yPadded, zPadded);
 MatrixXd U(numRows, numCols);
+BIG_MATRIX Q(numRows, numCols);
 VECTOR3_FIELD_3D V(xRes, yRes, zRes);
 FIELD_3D F(xRes, yRes, zRes);
+FIELD_3D F0(xRes, yRes, zRes);
+FIELD_3D F1(xRes, yRes, zRes);
+FIELD_3D F2(xRes, yRes, zRes);
 vector<FIELD_3D> g_blocks;
 vector<VectorXd> g_blocksEigen;
 fftw_plan plan;
-// string path("../../U.preadvect.matrix");
+// string path("projects/rewriteTests/U.final.matrix");
+// string path("projects/rewriteTests/U.preadvect.matrix");
+string bigMatrixPath("scratch/Q.final.bigmatrix");
 COMPRESSION_DATA compression_data0, compression_data1, compression_data2;
 int* allData0;
 int* allData1;
@@ -90,6 +96,10 @@ void DCTTest();
 // and a block dct/idct field
 void BlockDCTTest();
 
+// compute the block dct of a passed in field
+// and write out the contents 
+void DoBlockDCTFromFile(string fieldFile, string outputFile);
+
 // check the difference between taking the SVD coordinate 
 // transform and undoing it
 void SVDTest();
@@ -104,12 +114,25 @@ void GammaSearchTest();
 // test encoding just one block
 void EncodeOneBlockTest(int blockNumber, int col, COMPRESSION_DATA* data);
 
+// visualize the preprocessing of a block using fieldViewer
+void BlockVisualizationTest(int blockNumber, int col, COMPRESSION_DATA* data);
+
+// visualize a scalar component of the entire SVD column at the indicated col
+void FullColumnVisualizationTest(int col, int component);
+
+// visualize a scalar component of an entire column of the passed in written out matrix file
+void FullColumnVisualizationFromFile(int col, const char* fileName, int component);
+
 // test the block encoding function
 void EncodeBlockTest();
 
 // test the encoding/decoding chain
 void EncodeDecodeBlockTest();
 
+// test the encoding/decoding chain with
+// quantized cached gammas
+void EncodeDecodeBlockTestNoFastPow();  
+ 
 // test the zigzag scanning and reassembly
 void ZigzagTest();
 
@@ -176,6 +199,29 @@ void GetSubmatrixTest(int startRow);
 // test the distribution of gamma values in a data set
 void GammaAnalyticsTest(COMPRESSION_DATA* data);
 
+// test the timings of the projection on blocks of different sparsity
+void ProjectSparsityTimingTest(int col, int blockNumber, int numIterations);
+
+// utility function to read a single column from a (large) binary matrix file
+void ReadColumnFromMatrix(int col, const char* fileName, VECTOR* result);
+
+// function to test ReadColumnFromMatrix
+void ReadColumnFromMatrixTest(int col);
+
+// utility function to read a single column from a big matrix file
+void ReadColumnFromBigMatrix(int col, const char* fileName, VECTOR* result);
+
+// just read the necessary data for one column from a matrix binary file
+void FullColumnVisualizationFromFile(int col, const char* fileName, int component);
+
+// same as above but from a big matrix file. works better since big matrix uses
+// column-major storage
+void FullColumnVisualizationFromBigMatrixFile(int col, const char* fileName, int component);
+
+// the naive approach, reading in the entire big matrix. mainly just checking that
+// BIGMATRIX::read is working
+void FullColumnVisualizationFromBigMatrixFileNaive(int col, const char* fileName, int component);
+
 ////////////////////////////////////////////////////////
 // Main
 ////////////////////////////////////////////////////////
@@ -185,9 +231,10 @@ int main(int argc, char* argv[])
   TIMER functionTimer(__FUNCTION__);
   InitGlobals();
 
-  int blockNumber = 0;
-  // int row = 0;
-  int col = 0;
+  // int blockNumber = 36;
+  // int blockNumber = 9436;
+  // int blockNumber = 36 + (25 * 33);
+  // int blockNumber = 4974;
 
   // EncodeOneBlockTest(blockNumber, col, &compression_data0);
 
@@ -213,28 +260,35 @@ int main(int argc, char* argv[])
 
   // GammaSearchTest();
   
-  const char* filename = "U.preadvect.component1";
-  string outStr("density1.matrix");
-  RunLengthSparseTest(&compression_data0, filename, outStr);
-
-  filename = "U.preadvect.component2";
-  outStr = "density2.matrix";
-  RunLengthSparseTest(&compression_data0, filename, outStr);
-    
-  filename = "U.final.component0";
-  outStr = "densityFinal0.matrix";
-  RunLengthSparseTest(&compression_data0, filename, outStr);
-    
-  filename = "U.final.component1";
-  outStr = "densityFinal1.matrix";
-  RunLengthSparseTest(&compression_data0, filename, outStr);
-    
-  filename = "U.final.component2";
-  outStr = "densityFinal2.matrix";
-  RunLengthSparseTest(&compression_data0, filename, outStr);
-    
   // GammaAnalyticsTest(&compression_data0);
   
+  // EncodeDecodeBlockTestNoFastPow();  
+  
+  // BlockVisualizationTest(blockNumber, col, &compression_data0); 
+  // blockNumber = 10264;
+  // BlockVisualizationTest(blockNumber, col, &compression_data0); 
+
+  // int numIterations = 1000000;
+  // ProjectSparsityTimingTest(col, blockNumber, numIterations);
+ 
+  int col = 150;
+  int component = 0; 
+  // FullColumnVisualizationTest(col, component);
+  // const char* UfinalPath = "projects/rewriteTests/U.final.matrix";
+  const char* QPath = "scratch/Q.final.bigmatrix";
+  FullColumnVisualizationFromBigMatrixFile(col, QPath, component); 
+  // FullColumnVisualizationFromBigMatrixFileNaive(col, QPath, component); 
+  // string fieldFile("Q.velocity.col0.0.field"); 
+  // FIELD_3D viewedField;
+  // viewedField.read(fieldFile);
+  // FIELDVIEW3D(viewedField);
+
+  // string fieldFile("Q.velocity.col0.0.field");
+  // string outputFile("Q.velocity.col0.0.dct.field");
+  // DoBlockDCTFromFile(fieldFile, outputFile);
+  // FIELD_3D dct;
+  // dct.read(outputFile);
+  // FIELDVIEW3D(dct);
 
   functionTimer.printTimings();
   return 0;
@@ -253,16 +307,19 @@ void InitGlobals()
   srand(time(NULL));
   VECTOR::printVertical = false;
 
-  cout << "Num blocks: " << numBlocks << endl;
-  InitCompressionData(percent, maxIterations, nBits, numBlocks, numCols);
+  // InitCompressionData(percent, maxIterations, nBits, numBlocks, numCols);
 
   // InitMatrixCompressionData();
 
   // EIGEN::read(path.c_str(), U); 
-
-  // V = VECTOR3_FIELD_3D(U.col(0), xRes, yRes, zRes);
+  // Q.read(bigMatrixPath);
+  // Q is of type BIG_MATRIX, and the column accessor is []
+  // V = VECTOR3_FIELD_3D(Q[0], xRes, yRes, zRes);
   // TransformVectorFieldSVDCompression(&V, &compression_data1);
   // F = V.scalarField(0);
+  // F0 = V.scalarField(0);
+  // F1 = V.scalarField(1);
+  // F2 = V.scalarField(2);
   // GetBlocks(F, &g_blocks);
   // UnitaryBlockDCT(1, &g_blocks);
 }
@@ -276,7 +333,6 @@ void InitCompressionData(double percent, int maxIterations, int nBits,
   compression_data0.set_percent(percent);
   compression_data0.set_maxIterations(maxIterations);
   compression_data0.set_nBits(nBits);
-  cout << "Num blocks: " << numBlocks << endl;
   compression_data0.set_numBlocks(numBlocks);
   compression_data0.set_numCols(numCols);
   compression_data0.set_dims(dims);
@@ -284,6 +340,7 @@ void InitCompressionData(double percent, int maxIterations, int nBits,
 
   // build the damping and zigzag arrays
   compression_data0.set_dampingArray();
+  compression_data0.set_dampingArrayList();
   compression_data0.set_zigzagArray();
 
   compression_data1.set_percent(percent);
@@ -296,6 +353,7 @@ void InitCompressionData(double percent, int maxIterations, int nBits,
 
   compression_data1.set_dampingArray();
   compression_data1.set_zigzagArray();
+  compression_data1.set_dampingArrayList();
 
   compression_data2.set_percent(percent);
   compression_data2.set_maxIterations(maxIterations);
@@ -307,6 +365,7 @@ void InitCompressionData(double percent, int maxIterations, int nBits,
 
   compression_data2.set_dampingArray();
   compression_data2.set_zigzagArray();
+  compression_data2.set_dampingArrayList();
 }
  
 ////////////////////////////////////////////////////////
@@ -493,7 +552,202 @@ void EncodeOneBlockTest(int blockNumber, int col, COMPRESSION_DATA* data)
   
 }
 
+////////////////////////////////////////////////////////
+// visualize a particular block after preprocess; i.e.,
+// after DCT and normalization/quantization
+////////////////////////////////////////////////////////
+void BlockVisualizationTest(int blockNumber, int col, COMPRESSION_DATA* data)
+{
+  vector<FIELD_3D> blocks;
+  GetBlocks(F0, &blocks);
+  // UnitaryBlockDCT(1, &blocks);
 
+  // PreprocessBlock(&(blocks[blockNumber]), blockNumber, col, data);
+  // dump to a viewer using the FIELD_3D macro
+  // FIELDVIEW3D(blocks[blockNumber]);
+
+  string name0("Field3DX_col_");
+  name0 += to_string(col);
+  name0 += "_block_";
+  name0 += to_string(blockNumber);
+  FIELD_3D blockX = blocks[blockNumber];
+  // blockX.write(name0.c_str()); 
+  // FIELDVIEW3D(blockX);
+  blocks.clear();
+  GetBlocks(F1, &blocks);
+  // UnitaryBlockDCT(1, &blocks);
+  string name1("Field3DY_col_");
+  name1 += to_string(col);
+  name1 += "_block_";
+  name1 += to_string(blockNumber);
+  FIELD_3D blockY = blocks[blockNumber];
+  // blockY.write(name1.c_str()); 
+  blocks.clear();
+  GetBlocks(F2, &blocks);
+  // UnitaryBlockDCT(1, &blocks);
+  string name2("Field3DZ_col_");
+  name2 += to_string(col);
+  name2 += "_block_";
+  name2 += to_string(blockNumber);
+  FIELD_3D blockZ = blocks[blockNumber];
+  // blockZ.write(name2.c_str()); 
+  VECTOR3_FIELD_3D blockVectorField(blockX.data(), blockY.data(), blockZ.data(), blockX.xRes(), blockX.yRes(), blockX.zRes()); 
+  string name("VectorField_col_");
+  name += to_string(col);
+  name += "_block_";
+  name += to_string(blockNumber);
+  blockVectorField.write(name.c_str());
+}
+
+void FullColumnVisualizationTest(int col, int component)
+{
+  VECTOR3_FIELD_3D fullColumn = VECTOR3_FIELD_3D(Q[0], xRes, yRes, zRes);
+  FIELD_3D fullColumn0, fullColumn1, fullColumn2;
+  GetScalarFields(fullColumn, &fullColumn0, &fullColumn1, &fullColumn2);
+
+  if (component == 0) {
+    FIELDVIEW3D(fullColumn0);
+  }
+
+  else if (component == 1) {
+   FIELDVIEW3D(fullColumn1);
+  }
+
+  else if (component == 2) {
+   FIELDVIEW3D(fullColumn2);
+  } 
+}
+
+// Read from a binary matrix file and put one of its columns into a VECTOR
+void ReadColumnFromMatrix(int col, const char* fileName, VECTOR* result)
+{
+  FILE* file = fopen(fileName, "rb");
+  int numRows = 0;
+  fread(&numRows, sizeof(int), 1, file);
+  int numCols = 0;
+  fread(&numCols, sizeof(int), 1, file);
+  result->resizeAndWipe(numRows);
+  // move to the first entry of the column once before the loop begins
+  fseek(file, col * sizeof(double), SEEK_CUR);
+  for (int row = 0; row < numRows; row++) {
+    fread(result->data() + row, sizeof(double), 1, file);
+    // move backward 1 since fread moved it ahead one
+    fseek(file, -1 * sizeof(double), SEEK_CUR);
+    fseek(file, numCols * sizeof(double), SEEK_CUR);
+  }
+  fclose(file);
+}
+
+void ReadColumnFromMatrixTest(int col)
+{
+  MATRIX m(3, 3);
+  m(0,0) = 1.0;
+  m(1,0) = 2.0;
+  m(2,0) = 3.0;
+  m(0,1) = 4.0;
+  m(1,1) = 5.0;
+  m(2,1) = 6.0;
+  m(0,2) = 7.0;
+  m(1,2) = 8.0;
+  m(2,2) = 9.0;
+  std::cout << "Here is the matrix m:\n" << m << std::endl;
+  
+  const char* filename = "m.matrix";
+  m.write(filename);
+  VECTOR result;
+  ReadColumnFromMatrix(col, filename, &result);  
+  cout << "Column " << col << ": " << endl;
+  cout << result << endl;
+
+}
+
+// Read from a binary big matrix file and put one of its columns into a VECTOR
+void ReadColumnFromBigMatrix(int col, const char* fileName, VECTOR* result)
+{
+  FILE* file = fopen(fileName, "rb");
+  int numRows = 0;
+  fread(&numRows, sizeof(int), 1, file);
+  cout << "numRows: " << numRows << endl;
+  int numCols = 0;
+  fread(&numCols, sizeof(int), 1, file);
+  cout << "numCols: " << numCols << endl;
+  result->resizeAndWipe(numRows);
+  // each column is headed with the number of entries as an int
+  unsigned long colSizeInBytes = sizeof(int) + numRows * sizeof(double);
+  cout << "colSizeInBytes: " << colSizeInBytes << endl;
+  // move to the first entry of the column once before the loop begins
+  fseek(file, col * colSizeInBytes, SEEK_CUR);
+  // skip the header int for number of entries
+  fseek(file, 1 * sizeof(int), SEEK_CUR);
+  // now we can read in the entire vector in one block
+  fread(result->data(), sizeof(double), numRows, file);
+  fclose(file);
+}
+
+void FullColumnVisualizationFromFile(int col, const char* fileName, int component)
+{
+  VECTOR result;
+  ReadColumnFromMatrix(col, fileName, &result);
+  VECTOR3_FIELD_3D fullColumn = VECTOR3_FIELD_3D(result, xRes, yRes, zRes);
+  FIELD_3D fullColumn0, fullColumn1, fullColumn2;
+  GetScalarFields(fullColumn, &fullColumn0, &fullColumn1, &fullColumn2);
+
+  if (component == 0) {
+    FIELDVIEW3D(fullColumn0);
+  }
+
+  else if (component == 1) {
+   FIELDVIEW3D(fullColumn1);
+  }
+
+  else if (component == 2) {
+   FIELDVIEW3D(fullColumn2);
+  } 
+}
+
+void FullColumnVisualizationFromBigMatrixFileNaive(int col, const char* fileName, int component)
+{
+  BIG_MATRIX Q;
+  Q.read(fileName);
+  VECTOR result = Q[col];
+  VECTOR3_FIELD_3D fullColumn = VECTOR3_FIELD_3D(result, xRes, yRes, zRes);
+  FIELD_3D fullColumn0, fullColumn1, fullColumn2;
+  GetScalarFields(fullColumn, &fullColumn0, &fullColumn1, &fullColumn2);
+
+  if (component == 0) {
+    FIELDVIEW3D(fullColumn0);
+  }
+
+  else if (component == 1) {
+   FIELDVIEW3D(fullColumn1);
+  }
+
+  else if (component == 2) {
+   FIELDVIEW3D(fullColumn2);
+  } 
+}
+
+void FullColumnVisualizationFromBigMatrixFile(int col, const char* fileName, int component)
+{
+  VECTOR result;
+  ReadColumnFromBigMatrix(col, fileName, &result);
+  VECTOR3_FIELD_3D fullColumn = VECTOR3_FIELD_3D(result, xRes, yRes, zRes);
+  FIELD_3D fullColumn0, fullColumn1, fullColumn2;
+  GetScalarFields(fullColumn, &fullColumn0, &fullColumn1, &fullColumn2);
+
+  if (component == 0) {
+    FIELDVIEW3D(fullColumn0);
+  }
+
+  else if (component == 1) {
+   FIELDVIEW3D(fullColumn1);
+  }
+
+  else if (component == 2) {
+   FIELDVIEW3D(fullColumn2);
+  } 
+}
+////////////////////////////////////////////////////////
 ////////////////////////////////////////////////////////
 // check the error between encoding and decoding a block
 ////////////////////////////////////////////////////////
@@ -529,6 +783,64 @@ void EncodeDecodeBlockTest()
   cout << "Accuracy was within: " << (1 - diff) << endl;
 }
 
+////////////////////////////////////////////////////////
+// check the error between encoding and decoding a block
+// using quantized cached gamma values
+////////////////////////////////////////////////////////
+void EncodeDecodeBlockTestNoFastPow()
+{
+  int col = 0;
+  int blockNumber = 1;
+ 
+  VECTOR3_FIELD_3D U0 = VECTOR3_FIELD_3D(U.col(col), xRes, yRes, zRes);
+  FIELD_3D U0Field = U0.scalarField(0);
+  vector<FIELD_3D> blocks;
+  GetBlocks(U0Field, &blocks);
+  UnitaryBlockDCT(1, &blocks);
+  INTEGER_FIELD_3D quantized(BLOCK_SIZE, BLOCK_SIZE, BLOCK_SIZE);
+  double oldEnergy = blocks[blockNumber].sumSq();
+  cout << "original block: " << endl;
+  cout << blocks[blockNumber].flattened() << endl;
+  EncodeBlock(blocks[blockNumber], blockNumber, col, &compression_data0, &quantized); 
+  cout << "DCT and damped:" << endl;
+  cout << quantized.flattened() << endl;
+  const INTEGER_FIELD_3D& zigzagArray = compression_data0.get_zigzagArray();
+  VectorXi zigzagged;
+  ZigzagFlatten(quantized, zigzagArray, &zigzagged);
+  cout << "Zigzagged: " << endl;
+  cout << EIGEN::convertInt(zigzagged) << endl;
+
+  NONZERO_ENTRIES nonZeros;
+  FIELD_3D decoded(BLOCK_SIZE, BLOCK_SIZE, BLOCK_SIZE);
+  nonZeros.clear();
+  decoded.clear();
+  INTEGER_FIELD_3D parsedDataField(BLOCK_SIZE, BLOCK_SIZE, BLOCK_SIZE);
+  parsedDataField.clear();
+  RunLengthDecodeBinaryInPlaceSparse(allData0, blockNumber, col, zigzagArray, &compression_data0, parsedDataField, nonZeros);
+  DecodeBlockWithCompressionDataSparseNoFastPow(parsedDataField, blockNumber, col, &compression_data0, decoded.data(), nonZeros);
+  
+  cout << "Unzigzagged and run length decoded: " << endl;
+  cout << decoded.flattened() << endl;
+
+
+  double* buffer = (double*) fftw_malloc(BLOCK_SIZE * BLOCK_SIZE * BLOCK_SIZE * sizeof(double));
+  int direction = -1;
+  Create_DCT_Plan(buffer, direction, &plan);
+
+  DCT_Smart_Unitary(plan, direction, buffer, &decoded);
+  cout << "newBlock after IDCT" << endl;
+  cout << decoded.flattened() << endl;
+
+  fftw_free(buffer);
+  fftw_destroy_plan(plan);
+  fftw_cleanup();
+ 
+
+  double newEnergy = decoded.sumSq();
+  double diff = abs(oldEnergy - newEnergy) / oldEnergy; 
+  cout << "Percent error from encoding and decoding: " << diff << endl;
+  cout << "Accuracy was within: " << (1 - diff) << endl;
+}
 ////////////////////////////////////////////////////////
 // ensure the zigzag scan works properly
 ////////////////////////////////////////////////////////
@@ -774,11 +1086,14 @@ void InitMatrixCompressionData()
   // ReadSVDData(filename, &compression_data0);
 
   // read all three 'allDatas' to memory
-  const char* filename = "U.preadvect.compressed.matrix0";
+  // const char* filename = "U.preadvect.compressed.matrix0";
+  const char* filename = "U.final.compressed.matrix0";
   allData0 = ReadBinaryFileToMemory(filename, &compression_data0);
-  filename = "U.preadvect.compressed.matrix1";
+  // filename = "U.preadvect.compressed.matrix1";
+  filename = "U.final.compressed.matrix1";
   allData1 = ReadBinaryFileToMemory(filename, &compression_data1);
-  filename = "U.preadvect.compressed.matrix2";
+  // filename = "U.preadvect.compressed.matrix2";
+  filename = "U.final.compressed.matrix2";
   allData2 = ReadBinaryFileToMemory(filename, &compression_data2);
 
   // call the constructor
@@ -793,13 +1108,12 @@ void InitMatrixCompressionData()
   matrix_data.init_cache();
 }
 
-
 ////////////////////////////////////////////////////////
 // test the decoding of a full vector field
 ////////////////////////////////////////////////////////
 void DecodeVectorFieldTest(int col)
 {
- 
+
   InitMatrixCompressionData();
 
   VECTOR3_FIELD_3D decoded;
@@ -992,6 +1306,25 @@ void PeeledProjectTransformTest()
 }
 
 ////////////////////////////////////////////////////////
+// test the projection timings on different blocks of
+// varying sparsity
+////////////////////////////////////////////////////////
+void ProjectSparsityTimingTest(int col, int blockNumber, int numIterations)
+{
+  cout << "Doing " << numIterations << " iterations..." << endl;
+  VECTOR3_FIELD_3D random_V(BLOCK_SIZE, BLOCK_SIZE, BLOCK_SIZE);
+  random_V.setToRandom();
+  double q = 0.0;
+  {
+    TIMER functionTimer("Project loop timing USE THIS");
+    for (int i = 0; i < numIterations; i++) {
+      PeeledCompressedProjectTransformNoSVDOneBlock(random_V, &matrix_data, col, blockNumber, &q);
+    }
+  }
+  cout << "...done!" << endl;
+  cout << "q: " << q << endl;
+}
+////////////////////////////////////////////////////////
 // test the unprojection
 ////////////////////////////////////////////////////////
 void PeeledCompressedUnprojectTest()
@@ -1144,5 +1477,30 @@ void GammaAnalyticsTest(COMPRESSION_DATA* data)
 
   allData = ReadBinaryFileToMemoryGammaTesting("U.final.component2", data);
   system("mv gammaListMatrix.matrix gammaListMatrixFinal2.matrix");
+
+}
+
+////////////////////////////////////////////////////////
+// Read in a FIELD_3D from a binary file, take its
+// block DCT, and write it out to a file
+////////////////////////////////////////////////////////
+void DoBlockDCTFromFile(string fieldFile, string outputFile)
+{
+  FIELD_3D X;
+  X.read(fieldFile);
+
+  VEC3I paddedDims(0, 0, 0);
+  GetPaddings(dims, &paddedDims);
+  dims += paddedDims;
+  FIELD_3D assimilatedTransformedF(dims[0], dims[1], dims[2]);
+
+  vector<FIELD_3D> blocks;
+  GetBlocks(X, &blocks);
+
+  UnitaryBlockDCT(1, &blocks);
+
+  AssimilateBlocks(dims, blocks, &assimilatedTransformedF);
+  assimilatedTransformedF.write(outputFile);
+  
 
 }

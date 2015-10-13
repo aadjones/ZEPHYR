@@ -273,160 +273,171 @@ MATRIX BIG_MATRIX::outOfCoreQR(const string& filenamePrefix, int& qRows, int& qC
 // do an out-of-core SVD using the ooc QR
 //////////////////////////////////////////////////////////////////////
 void BIG_MATRIX::outOfCoreSVD(const string& filenamePrefix, const string& reducedPath, const Real& discardThreshold)
-{
-  TIMER functionTimer(__FUNCTION__);
+  {
+    TIMER functionTimer(__FUNCTION__);
 
-  // do the out of core QR, assume the block files are in the
-  // scratch space
-  int qRows, qCols;
-  MATRIX R = outOfCoreQR(filenamePrefix, qRows, qCols);
+    // do the out of core QR, assume the block files are in the
+    // scratch space
+    int qRows, qCols;
+    MATRIX R = outOfCoreQR(filenamePrefix, qRows, qCols);
 
-  // do the SVD on R (can replace this with Matlab later)
-  TIMER svdTimer("SVD call");
+    // do the SVD on R (can replace this with Matlab later)
+    TIMER svdTimer("SVD call");
 #if __APPLE__
-  MATRIX U;
-  MATRIX VT;
-  VECTOR S;
+    MATRIX U;
+    MATRIX VT;
+    VECTOR S;
 
-  R.SVD(U, S, VT);
+    R.SVD(U, S, VT);
 #else
-  MATRIX U;
-  MATRIX VT;
-  VECTOR S;
-  MatrixXd eigenR(R.rows(), R.cols());
-  for (int y = 0; y < R.rows(); y++)
-    for (int x = 0; x < R.cols(); x++)
-      eigenR(x,y) = R(x,y);
+    MATRIX U;
+    MATRIX VT;
+    VECTOR S;
+    MatrixXd eigenR(R.rows(), R.cols());
+    for (int y = 0; y < R.rows(); y++)
+      for (int x = 0; x < R.cols(); x++)
+        eigenR(x,y) = R(x,y);
 
-  JacobiSVD<MatrixXd> svd(eigenR, ComputeThinU | ComputeThinV);
+    JacobiSVD<MatrixXd> svd(eigenR, ComputeThinU | ComputeThinV);
 
-  S.resizeAndWipe(svd.singularValues().size());
-  for (int x = 0; x < svd.singularValues().size(); x++)
-    S[x] = svd.singularValues()[x];
+    S.resizeAndWipe(svd.singularValues().size());
+    for (int x = 0; x < svd.singularValues().size(); x++)
+      S[x] = svd.singularValues()[x];
 
-  U.resizeAndWipe(svd.matrixU().rows(), svd.matrixU().cols());
-  for (int y = 0; y < svd.matrixU().cols(); y++)
-    for (int x = 0; x < svd.matrixU().rows(); x++)
-      U(x,y) = svd.matrixU()(x,y);
-  
-  VT.resizeAndWipe(svd.matrixV().rows(), svd.matrixV().cols());
-  for (int y = 0; y < svd.matrixV().cols(); y++)
-    for (int x = 0; x < svd.matrixV().rows(); x++)
-      VT(x,y) = svd.matrixV()(x,y);
+    U.resizeAndWipe(svd.matrixU().rows(), svd.matrixU().cols());
+    for (int y = 0; y < svd.matrixU().cols(); y++)
+      for (int x = 0; x < svd.matrixU().rows(); x++)
+        U(x,y) = svd.matrixU()(x,y);
+    
+    VT.resizeAndWipe(svd.matrixV().rows(), svd.matrixV().cols());
+    for (int y = 0; y < svd.matrixV().cols(); y++)
+      for (int x = 0; x < svd.matrixV().rows(); x++)
+        VT(x,y) = svd.matrixV()(x,y);
 #endif
+    
+    // ADJ: let's write out the singular values in order to visualize them
+    // ******************************************************************* 
+    cout << " Writing out singular values... " << endl;
+    char svdBuffer[16];
+    static int fileNumber = 0;
+    sprintf(svdBuffer, "%i", fileNumber);
+    string svdFilename = string("singularValues_") + string(svdBuffer) + string(".vector");
+    S.write(svdFilename.c_str());
+    fileNumber++;
+    cout << " Done! " << endl;
+    // ******************************************************************* 
+    // actually, give back PCA values
+    for (int x =0; x < S.size(); x++)
+      S[x] = S[x] * S[x];
 
-  // actually, give back PCA values
-  for (int x =0; x < S.size(); x++)
-    S[x] = S[x] * S[x];
+    svdTimer.stop();
 
-  svdTimer.stop();
-
-  // figure out how many columns to keep
-  int keepingColumns = 0;
-  for (int x = 0; x < S.size(); x++)
-  {
-    if (S[x] / S[0] < discardThreshold)
-      break;
-    keepingColumns++;
-  }
-  cout << " Keeping " << keepingColumns << " of " << S.size() << " columns " << endl;
-  cout << "=======================================" << endl;
-  cout << " Building U from SVD of R" << endl;
-  cout << "=======================================" << endl;
-
-  // how many blocks are there in Q?
-  int blocksQ = qCols / _blockSize;
-  if (qCols % _blockSize != 0)
-    blocksQ++;
-
-  // do the out-of-core multiply -- build a block at a time
-  int blocksU = keepingColumns / _blockSize;
-  int lastBlockSize = _blockSize;
-  if (keepingColumns % _blockSize != 0)
-  {
-    blocksU++;
-    lastBlockSize = keepingColumns % _blockSize;
-  }
- 
-  // write out the dims of the U so we can recombine it later 
-  writeDimensions("U.dims", qRows, keepingColumns); 
-
-  // get a version of the SVD's U (not the full version) with easily accessible columns
-  BIG_MATRIX bigU(U);
-
-  // go through each block in the U
-  for (int u = 0; u < blocksU; u++)
-  {
-    // get the columns of U to multiply this time
-    int uBegin = u * _blockSize;
-    int uEnd   = (u + 1) * _blockSize;
-    uEnd = (uEnd < keepingColumns) ? uEnd : keepingColumns;
-    int uTotalCols = uEnd - uBegin;
-
-    // build the current matrix block to multiply into
-    BIG_MATRIX blockFinalU(qRows, uTotalCols);
-
-    // force U to allocate all the memory
-    for (int x = 0; x < uTotalCols; x++)
-      blockFinalU[x].resizeAndWipe(qRows);
-
-    // pull in each block of Q from disk to form the final U
-    for (int q = 0; q < blocksQ; q++)
+    // figure out how many columns to keep
+    int keepingColumns = 0;
+    for (int x = 0; x < S.size(); x++)
     {
-      // read in the Q block
-      TIMER qRead("SVD reading in Q");
-      char buffer[256];
-      sprintf(buffer, "%i", q);
-      string qBlockFilename = _scratchPath + string(buffer) + string(".block");
-      BIG_MATRIX qColumns;
-      // indent the reads for output readability
-      cout << "  ";
-      qColumns.read(qBlockFilename);
-      qRead.stop();
+      if (S[x] / S[0] < discardThreshold)
+        break;
+      keepingColumns++;
+    }
+    cout << " Keeping " << keepingColumns << " of " << S.size() << " columns " << endl;
+    cout << "=======================================" << endl;
+    cout << " Building U from SVD of R" << endl;
+    cout << "=======================================" << endl;
 
-      // which columns of Q are we looking at?
-      int qBegin = q * _blockSize;
-      int qEnd = (q + 1) * _blockSize;
-      qEnd = (qEnd < qCols) ? qEnd : qCols;
-      int qTotalCols = qEnd - qBegin;
+    // how many blocks are there in Q?
+    int blocksQ = qCols / _blockSize;
+    if (qCols % _blockSize != 0)
+      blocksQ++;
 
-      // for each column in the just pulled in Q block
-      TIMER uMultiply("SVD Q times U");
-      cout << "    Multiplying block " << q << " of Q to form U, " << qTotalCols << " columns total " << endl;
-      cout << "      Computing column ... " << flush;
-      for (int qCol = 0; qCol < qTotalCols; qCol++)
+    // do the out-of-core multiply -- build a block at a time
+    int blocksU = keepingColumns / _blockSize;
+    int lastBlockSize = _blockSize;
+    if (keepingColumns % _blockSize != 0)
+    {
+      blocksU++;
+      lastBlockSize = keepingColumns % _blockSize;
+    }
+   
+    // write out the dims of the U so we can recombine it later 
+    writeDimensions("U.dims", qRows, keepingColumns); 
+
+    // get a version of the SVD's U (not the full version) with easily accessible columns
+    BIG_MATRIX bigU(U);
+
+    // go through each block in the U
+    for (int u = 0; u < blocksU; u++)
+    {
+      // get the columns of U to multiply this time
+      int uBegin = u * _blockSize;
+      int uEnd   = (u + 1) * _blockSize;
+      uEnd = (uEnd < keepingColumns) ? uEnd : keepingColumns;
+      int uTotalCols = uEnd - uBegin;
+
+      // build the current matrix block to multiply into
+      BIG_MATRIX blockFinalU(qRows, uTotalCols);
+
+      // force U to allocate all the memory
+      for (int x = 0; x < uTotalCols; x++)
+        blockFinalU[x].resizeAndWipe(qRows);
+
+      // pull in each block of Q from disk to form the final U
+      for (int q = 0; q < blocksQ; q++)
       {
-        cout << qCol << " " << flush;
+        // read in the Q block
+        TIMER qRead("SVD reading in Q");
+        char buffer[256];
+        sprintf(buffer, "%i", q);
+        string qBlockFilename = _scratchPath + string(buffer) + string(".block");
+        BIG_MATRIX qColumns;
+        // indent the reads for output readability
+        cout << "  ";
+        qColumns.read(qBlockFilename);
+        qRead.stop();
 
-        // use it to add the appropriate U column
-        // should be able to parallelize this?
+        // which columns of Q are we looking at?
+        int qBegin = q * _blockSize;
+        int qEnd = (q + 1) * _blockSize;
+        qEnd = (qEnd < qCols) ? qEnd : qCols;
+        int qTotalCols = qEnd - qBegin;
+
+        // for each column in the just pulled in Q block
+        TIMER uMultiply("SVD Q times U");
+        cout << "    Multiplying block " << q << " of Q to form U, " << qTotalCols << " columns total " << endl;
+        cout << "      Computing column ... " << flush;
+        for (int qCol = 0; qCol < qTotalCols; qCol++)
+        {
+          cout << qCol << " " << flush;
+
+          // use it to add the appropriate U column
+          // should be able to parallelize this?
 #pragma omp parallel
 #pragma omp for  schedule(static)
-        for (int uCol = 0; uCol < uTotalCols; uCol++)
-        {
-          // extract the scalar from u
-          Real uEntry = bigU[uBegin + uCol][qBegin + qCol];
-          
-          // scale the column of Q and add it to the final U
-          blockFinalU[uCol].axpy(uEntry, qColumns[qCol]);
+          for (int uCol = 0; uCol < uTotalCols; uCol++)
+          {
+            // extract the scalar from u
+            Real uEntry = bigU[uBegin + uCol][qBegin + qCol];
+            
+            // scale the column of Q and add it to the final U
+            blockFinalU[uCol].axpy(uEntry, qColumns[qCol]);
+          }
         }
+        cout << " done. " << endl;
+
+        uMultiply.stop();
       }
-      cout << " done. " << endl;
 
-      uMultiply.stop();
+      // write the new U to disk
+      TIMER uWrite("SVD U write");
+      char buffer[256];
+      sprintf(buffer, "%i", u);
+      string uBlockFilename = _scratchPath + string(buffer) + string(".U.block");
+      blockFinalU.write(uBlockFilename);
+      uWrite.stop();
+      
+      TIMER::printTimings();
     }
-
-    // write the new U to disk
-    TIMER uWrite("SVD U write");
-    char buffer[256];
-    sprintf(buffer, "%i", u);
-    string uBlockFilename = _scratchPath + string(buffer) + string(".U.block");
-    blockFinalU.write(uBlockFilename);
-    uWrite.stop();
-    
-    TIMER::printTimings();
   }
-}
 
 //////////////////////////////////////////////////////////////////////
 // read in columns from a stream

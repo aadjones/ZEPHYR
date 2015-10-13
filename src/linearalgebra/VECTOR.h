@@ -81,6 +81,10 @@ public:
   // resize the vector and wipe to zero
   void resizeAndWipe(int size);
 
+  // max and min entry
+  Real max();
+  Real min();
+
   // overloaded operators
   VECTOR& operator=(const VECTOR& m);
   VECTOR& operator=(vector<Real> m);
@@ -96,6 +100,7 @@ public:
   
   // dot product
   Real operator*(const VECTOR& vector) const;
+
 
   // raw data pointer
   Real* data() { return _vector; };

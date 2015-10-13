@@ -48,8 +48,10 @@ using std::string;
 ////////////////////////////////////////////////////////
 
 // set the damping matrix and compute the number of blocks
-void PreprocessEncoder(COMPRESSION_DATA* data0, COMPRESSION_DATA* data1, COMPRESSION_DATA* data2, int maxIterations);
+void PreprocessEncoder(COMPRESSION_DATA* data0, COMPRESSION_DATA* data1, COMPRESSION_DATA* data2, int maxIterations, const char* filename);
 
+// rescale the singular values to use for damping
+void PreprocessSingularValues(const char* filename, double threshold); 
 ////////////////////////////////////////////////////////
 // Main
 ////////////////////////////////////////////////////////
@@ -109,9 +111,13 @@ int main(int argc, char* argv[]) {
   string preAdvectPath = reducedPath + string("U.preadvect.matrix");
   string finalPath = reducedPath + string("U.final.matrix");
   // string preprojectPath = reducedPath + string("U.preproject.matrix");
- 
+  // string preAdvectPath("scratch/Q.preadvect.bigmatrix");
+  // string finalPath("scratch/Q.final.bigmatrix");
+
   EIGEN::read(preAdvectPath, U_preadvect);
   EIGEN::read(finalPath, U_final);
+  // EIGEN::readBig(preAdvectPath, U_preadvect);
+  // EIGEN::readBig(finalPath, U_final);
   if (usingIOP) {
     // EIGEN::read(preprojectPath, U_preproject);
   }
@@ -130,10 +136,13 @@ int main(int argc, char* argv[]) {
   }
 
   // compute some additional parameters for compression data
+  const char* preadvectSingularFilename = "singularValues_preadvect.vector";
   PreprocessEncoder(&preadvect_compression_data0, &preadvect_compression_data1, &preadvect_compression_data2, 
-      maxIterations);
+      maxIterations, preadvectSingularFilename);
+  const char* finalSingularFilename = "singularValues_final.vector";
   PreprocessEncoder(&final_compression_data0, &final_compression_data1, &final_compression_data2,
-      maxIterations);
+      maxIterations, finalSingularFilename);
+
   if (usingIOP) {
     // PreprocessEncoder(preproject_compression_data);
   }
@@ -143,6 +152,9 @@ int main(int argc, char* argv[]) {
   string preadvectFilename = reducedPath + string("U.preadvect.component");
   string finalFilename = reducedPath + string("U.final.component");
   // string preprojectFilename = reducedPath + string("U.preproject.component");
+
+  // string preadvectFilename = reducedPath + string("Q.preadvect.component");
+  // string finalFilename = reducedPath = string("Q.final.component");
 
   // write out the compressed matrix files
 
@@ -154,13 +166,13 @@ int main(int argc, char* argv[]) {
       &final_compression_data1, &final_compression_data2);
   }
 
-  else {
-    CompressAndWriteMatrixComponents(preadvectFilename.c_str(), U_preadvect, &preadvect_compression_data0,
-      &preadvect_compression_data1, &preadvect_compression_data2);
-  
-    CompressAndWriteMatrixComponents(finalFilename.c_str(), U_final, &final_compression_data0, 
-      &final_compression_data1, &final_compression_data2);
-  }
+    else {
+      CompressAndWriteMatrixComponents(preadvectFilename.c_str(), U_preadvect, &preadvect_compression_data0,
+        &preadvect_compression_data1, &preadvect_compression_data2);
+    
+      CompressAndWriteMatrixComponents(finalFilename.c_str(), U_final, &final_compression_data0, 
+        &final_compression_data1, &final_compression_data2);
+    }
   
   if (usingIOP) {
     // for (int component = 0; component < 3; component++) {
@@ -175,7 +187,7 @@ int main(int argc, char* argv[]) {
   return 0;
 }
 
-void PreprocessEncoder(COMPRESSION_DATA* data0, COMPRESSION_DATA* data1, COMPRESSION_DATA* data2, int maxIterations)
+void PreprocessEncoder(COMPRESSION_DATA* data0, COMPRESSION_DATA* data1, COMPRESSION_DATA* data2, int maxIterations, const char* filename)
 {
   // set integer rounding 'to nearest' 
   fesetround(FE_TONEAREST);
@@ -211,8 +223,37 @@ void PreprocessEncoder(COMPRESSION_DATA* data0, COMPRESSION_DATA* data1, COMPRES
   data1->set_maxIterations(maxIterations);
   data2->set_maxIterations(maxIterations);
   
+  double threshold = 0.99;
+  PreprocessSingularValues(filename, threshold);
+
+  // set the singular values
+  data0->set_singularValues(filename);
+  data1->set_singularValues(filename);
+  data2->set_singularValues(filename);
 }
 
+void PreprocessSingularValues(const char* filename, double threshold)
+{
+  VECTOR singularValues;
+  singularValues.read(filename);
+  for (int i = 0; i < singularValues.size(); i++) {
+    singularValues[i] = log(singularValues[i]);
+  }
+  double min = singularValues.min();
+  for (int i = 0; i < singularValues.size(); i++) {
+    singularValues[i] -= min;
+  }
+  double s0inv = 1.0 / singularValues[0];
+  singularValues *= s0inv;
+
+  for (int i = 0; i < singularValues.size(); i++) {
+    singularValues[i] *= (1 - threshold);
+    singularValues[i] += threshold;
+  }
+
+  singularValues.write(filename);
+  printf("Wrote out rescaled singular values!\n");
+}
    
 
 

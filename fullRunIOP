@@ -1,10 +1,11 @@
 #!/bin/bash
 
-./bin/fluidIOP3D ./cfg/stam.64.iop.cfg
-./bin/svdOutOfCoreMultiple ./cfg/stam.64.iop.cfg
-./bin/cubatureGeneratorStamStaged ./cfg/stam.64.iop.cfg
+#./bin/fluidIOP3D ./cfg/stam.64.iop.cfg | tee fluidIOP.txt
+#./bin/svdOutOfCoreMultiple ./cfg/stam.64.iop.cfg | tee svd.txt
+./bin/cubatureGeneratorStamStaged ./cfg/stam.64.iop.fastPow.cfg | tee cubatureDCT.txt
+./bin/reducedIOP3D ./cfg/stam.64.iop.fastPow.cfg | tee reducedDCT.txt
 
-./bin/buildProducts ./cfg/stam.64.iop.cfg
-./bin/compressMatrices ./cfg/stam.64.iop.cfg | tee compressionIOPTimings.txt
-./bin/reducedCompressedIOP3D ./cfg/stam.64.iop.cfg | tee reducedCompressedIOPTimings.txt
+#./bin/buildProducts ./cfg/stam.64.iop.cfg
+#./bin/compressMatrices ./cfg/stam.64.iop.cfg | tee compressionIOPTimings.txt
+#./bin/reducedCompressedIOP3D ./cfg/stam.64.iop.cfg | tee reducedCompressedIOPTimings.txt
 

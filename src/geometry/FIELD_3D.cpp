@@ -2417,6 +2417,8 @@ void FIELD_3D::setToRandom()
 ///////////////////////////////////////////////////////////////////////
 void FIELD_3D::toFastPower(double power) 
 {
+  // DEBUG
+  // printf(" Calling toFastPower! ");
   TIMER functionTimer(__FUNCTION__);
   for (int index = 0; index < _totalCells; index++) {
     _data[index] = fastPow(_data[index], power);

@@ -143,6 +143,12 @@ int main(int argc, char *argv[])
   if (usingIOP)
     pcaFilenames.push_back(reducedPath + string("pca.iop.vector"));
 
+  // **************************************************  
+  // ADJ: modifying this to isolate just the Q matrices and avoid the SVD
+  // Temporarily, we only need that for "U.final.matrix" and "U.preadvect.matrix"
+
+  // This block commented out was TK's original code
+ 
   for (unsigned int x = 0; x < filenamePrefixes.size(); x++)
   {
     BIG_MATRIX::outOfCoreSVD(filenamePrefixes[x], reducedPath, discardThreshold);
@@ -157,6 +163,14 @@ int main(int argc, char *argv[])
 
     verifyResults(filenamePrefixes[x], finalFilenames[x]);
   }
+  
+
+  // ADJ: These three lines are the added code
+  /*
+  int qRows = 0;
+  int qCols = 0;
+  BIG_MATRIX::outOfCoreQR(snapshotPath + string("velocity.preadvect.matrix"), qRows, qCols);
+  */
 
   return EXIT_SUCCESS;
 }

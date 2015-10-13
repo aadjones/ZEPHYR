@@ -222,6 +222,9 @@ void DecodeBlockWithCompressionDataSparse(const INTEGER_FIELD_3D& intBlock,
   int blockNumber, int col, COMPRESSION_DATA* data, Real* decoded, const NONZERO_ENTRIES& nonZeros); 
 void DecodeBlockWithCompressionDataSparseStackless();
 
+void DecodeBlockWithCompressionDataSparseNoFastPow(const INTEGER_FIELD_3D& intBlock, 
+  int blockNumber, int col, COMPRESSION_DATA* data, Real* decoded, const NONZERO_ENTRIES& nonZeros);
+ 
 // flattens an INTEGER_FIELD_3D through a zig-zag scan
 // into a VectorXi. Since the scan always follows the same order,
 // we precompute the zigzag scan array, pass it
@@ -350,6 +353,9 @@ void DecodeMatrix(MATRIX_COMPRESSION_DATA* data, MatrixXd* decoded);
 // large dot product
 double GetDotProductSum(const vector<VectorXd>& Vlist, const vector<VectorXd>& Wlist); 
  
+// compute the sparse dot product between two vectors 
+double GetDotProductSumSparseOneBlock(const VectorXd& V, const VectorXd& W, const NONZERO_ENTRIES& nonZeros); 
+
 // helper function for frequency domain projection. transforms 
 // V first by the SVD and then DCT. fills up the three vectors
 // with the three components.
@@ -375,6 +381,11 @@ void PeeledCompressedProjectTransform(const VECTOR3_FIELD_3D& V,
 // projection, implemented in the frequency domain. assumes no SVD!
 void PeeledCompressedProjectTransformNoSVD(const VECTOR3_FIELD_3D& V, 
     MATRIX_COMPRESSION_DATA* U_data, VectorXd* q);
+
+// projection, implemented in the frequency domain. assumes no SVD!
+// JUST ONE BLOCK
+void PeeledCompressedProjectTransformNoSVDOneBlock(const VECTOR3_FIELD_3D& V, 
+    MATRIX_COMPRESSION_DATA* U_data, int col, int blockNumber, double* q);
 
 // set zeros at the places where we have artificially padded
 void SetZeroPadding(vector<VectorXd>* blocks, COMPRESSION_DATA* data);

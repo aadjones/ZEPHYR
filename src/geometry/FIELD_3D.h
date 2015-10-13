@@ -478,7 +478,7 @@ public:
   static inline double fastPow(double a, double b) 
   {
     // DEBUG only!!
-    // puts(" Calling fastPow! ");
+    // printf(" Calling fastPow! ");
     union {
       double d;
       int x[2];
